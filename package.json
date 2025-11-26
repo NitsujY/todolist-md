@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prod": "npm run build && npm run preview"
   },
   "dependencies": {
     "lucide-react": "^0.554.0",
