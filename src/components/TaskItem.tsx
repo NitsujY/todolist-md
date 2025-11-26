@@ -10,7 +10,7 @@ import type { Task } from '../lib/MarkdownParser';
 interface TaskItemProps {
   task: Task;
   onToggle: (id: string) => void;
-  onUpdate?: (id: string, newText: string) => void;
+  onUpdate?: (id: string, newText: string) => Promise<string | undefined> | void;
   onAddNext?: (afterId: string) => void;
   showCompleted: boolean;
   autoFocus?: boolean;
@@ -79,18 +79,26 @@ export function TaskItem({ task, onToggle, onUpdate, onAddNext, showCompleted, a
     }
   }, [task.completed, showCompleted]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  // Sync local state with prop when prop changes
+  if (task.text !== editText && !isEditing) {
+    setEditText(task.text);
+  }
+
+  const handleKeyDown = async (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       if (e.shiftKey) {
         // Allow default behavior (newline)
         return;
       }
       e.preventDefault(); // Prevent newline
+      
+      let currentId = task.id;
       if (editText.trim() !== task.text) {
-        onUpdate?.(task.id, editText);
+        const newId = await onUpdate?.(task.id, editText);
+        if (newId) currentId = newId;
       }
       setIsEditing(false);
-      onAddNext?.(task.id);
+      onAddNext?.(currentId);
     } else if (e.key === 'Escape') {
       setIsEditing(false);
       setEditText(task.text);

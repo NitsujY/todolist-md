@@ -20,7 +20,7 @@ interface TodoState {
   loadTodos: () => Promise<void>;
   toggleTask: (taskId: string) => Promise<void>;
   addTask: (text: string) => Promise<void>;
-  updateTaskText: (taskId: string, newText: string) => Promise<void>;
+  updateTaskText: (taskId: string, newText: string) => Promise<string | undefined>;
   insertTaskAfter: (taskId: string, text: string) => Promise<void>;
   reorderTasks: (activeId: string, overId: string) => Promise<void>;
   updateMarkdown: (newMarkdown: string) => Promise<void>;
@@ -121,16 +121,24 @@ export const useTodoStore = create<TodoState>()(
   },
 
   updateTaskText: async (taskId, newText) => {
-    const { markdown, storage, currentFile, isFolderMode } = get();
+    const { markdown, storage, currentFile, isFolderMode, tasks: oldTasks } = get();
+    const index = oldTasks.findIndex(t => t.id === taskId);
+
     const newMarkdown = updateTaskTextInMarkdown(markdown, taskId, newText);
+    const newTasks = parseTasks(newMarkdown);
     
-    set({ markdown: newMarkdown, tasks: parseTasks(newMarkdown) });
+    set({ markdown: newMarkdown, tasks: newTasks });
     
     if (isFolderMode) {
       await storage.write(currentFile, newMarkdown);
     } else {
       await storage.write('todo.md', newMarkdown);
     }
+
+    if (index !== -1 && newTasks[index]) {
+      return newTasks[index].id;
+    }
+    return undefined;
   },
 
   insertTaskAfter: async (taskId, text) => {
