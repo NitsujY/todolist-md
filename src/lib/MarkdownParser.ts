@@ -155,3 +155,212 @@ export const addTaskToMarkdown = (markdown: string, taskText: string): string =>
 
   return processor.stringify(tree);
 };
+
+export const updateTaskTextInMarkdown = (markdown: string, taskId: string, newText: string): string => {
+  const processor = createProcessor();
+  const tree = processor.parse(markdown) as Root;
+  
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const visit = (node: any) => {
+    if (node.type === 'listItem') {
+      let isTask = false;
+      let text = '';
+      
+      if (typeof node.checked === 'boolean') {
+        isTask = true;
+      }
+
+      if (node.children && node.children.length > 0) {
+        const p = node.children[0];
+        if (p.type === 'paragraph' && p.children && p.children.length > 0) {
+           // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           text = p.children.map((c: any) => c.value || '').join('');
+        }
+      }
+
+      if (!isTask && text) {
+        const match = text.match(/^\[([ xX]?)\]\s+(.*)/);
+        if (match) {
+          isTask = true;
+          text = match[2];
+        }
+      }
+
+      if (isTask) {
+        const id = `${node.position?.start.line}-${text.substring(0, 10)}`;
+        if (id === taskId) {
+          // Update text
+          if (node.children && node.children.length > 0) {
+            const p = node.children[0];
+            if (p.type === 'paragraph') {
+              // Replace children with new text node
+              p.children = [{ type: 'text', value: newText }];
+            }
+          }
+        }
+      }
+    }
+    if (node.children) {
+      node.children.forEach(visit);
+    }
+  };
+
+  visit(tree);
+  return processor.stringify(tree);
+};
+
+export const insertTaskAfterInMarkdown = (markdown: string, targetTaskId: string, newTaskText: string): string => {
+  const processor = createProcessor();
+  const tree = processor.parse(markdown) as Root;
+  
+  const newTaskNode: ListItem = {
+    type: 'listItem',
+    checked: false,
+    spread: false,
+    children: [{
+      type: 'paragraph',
+      children: [{ type: 'text', value: newTaskText }]
+    }]
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const visit = (node: any) => {
+    if (node.type === 'list' && node.children) {
+      // Iterate through children to find the target task
+      for (let i = 0; i < node.children.length; i++) {
+        const child = node.children[i];
+        if (child.type === 'listItem') {
+          let isTask = false;
+          let text = '';
+          
+          if (typeof child.checked === 'boolean') {
+            isTask = true;
+          }
+
+          if (child.children && child.children.length > 0) {
+            const p = child.children[0];
+            if (p.type === 'paragraph' && p.children && p.children.length > 0) {
+               // eslint-disable-next-line @typescript-eslint/no-explicit-any
+               text = p.children.map((c: any) => c.value || '').join('');
+            }
+          }
+
+          if (!isTask && text) {
+            const match = text.match(/^\[([ xX]?)\]\s+(.*)/);
+            if (match) {
+              isTask = true;
+              text = match[2];
+            }
+          }
+
+          if (isTask) {
+            const id = `${child.position?.start.line}-${text.substring(0, 10)}`;
+            if (id === targetTaskId) {
+              // Found the target task, insert new task after it
+              node.children.splice(i + 1, 0, newTaskNode);
+              return true; // Stop visiting
+            }
+          }
+        }
+      }
+    }
+    
+    if (node.children) {
+      for (const child of node.children) {
+        if (visit(child)) return true;
+      }
+    }
+    return false;
+  };
+
+  visit(tree);
+  return processor.stringify(tree);
+};
+
+export const reorderTaskInMarkdown = (markdown: string, activeId: string, overId: string): string => {
+  const processor = createProcessor();
+  const tree = processor.parse(markdown) as Root;
+  
+  let activeNode: ListItem | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let activeParent: any = null;
+  let activeIndex = -1;
+  
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let overParent: any = null;
+  let overIndex = -1;
+
+  // First pass: find nodes and their parents
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const findNodes = (node: any) => {
+    if (node.type === 'list' && node.children) {
+      for (let i = 0; i < node.children.length; i++) {
+        const child = node.children[i];
+        if (child.type === 'listItem') {
+          let isTask = false;
+          let text = '';
+          
+          if (typeof child.checked === 'boolean') {
+            isTask = true;
+          }
+
+          if (child.children && child.children.length > 0) {
+            const p = child.children[0];
+            if (p.type === 'paragraph' && p.children && p.children.length > 0) {
+               // eslint-disable-next-line @typescript-eslint/no-explicit-any
+               text = p.children.map((c: any) => c.value || '').join('');
+            }
+          }
+
+          if (!isTask && text) {
+            const match = text.match(/^\[([ xX]?)\]\s+(.*)/);
+            if (match) {
+              isTask = true;
+              text = match[2];
+            }
+          }
+
+          if (isTask) {
+            const id = `${child.position?.start.line}-${text.substring(0, 10)}`;
+            if (id === activeId) {
+              activeNode = child;
+              activeParent = node;
+              activeIndex = i;
+            }
+            if (id === overId) {
+              overParent = node;
+              overIndex = i;
+            }
+          }
+        }
+      }
+    }
+    
+    if (node.children) {
+      node.children.forEach(findNodes);
+    }
+  };
+
+  findNodes(tree);
+
+  if (activeNode && activeParent && overParent && activeIndex !== -1 && overIndex !== -1) {
+    // Remove from old position
+    activeParent.children.splice(activeIndex, 1);
+    
+    // If parents are different, we need to adjust index if we removed from same list before insertion point
+    // But for now assuming single list reordering
+    if (activeParent === overParent) {
+      if (activeIndex < overIndex) {
+        overIndex--; // Adjust for removal
+      }
+    }
+    
+    // Insert at new position (after the over node? or replace? usually dnd is "place before" or "place after")
+    // dnd-kit usually implies "swap" or "insert at index". 
+    // If we drop "over" an item, we usually want to be in that position.
+    // Let's insert AT the overIndex.
+    overParent.children.splice(overIndex, 0, activeNode);
+  }
+
+  return processor.stringify(tree);
+};

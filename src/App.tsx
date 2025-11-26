@@ -1,9 +1,25 @@
 import { useEffect, useState } from 'react';
+import { useStore } from 'zustand';
 import { useTodoStore } from './store/useTodoStore';
 import { pluginRegistry } from './plugins/pluginEngine';
-import { Settings, FileText, Plus, Cloud, RefreshCw, ChevronDown, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save } from 'lucide-react';
+import { Settings, FileText, Plus, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2 } from 'lucide-react';
 import { ThemePlugin } from './plugins/ThemePlugin';
 import { TaskItem } from './components/TaskItem';
+import {
+  DndContext, 
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+} from '@dnd-kit/core';
+import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 
 function App() {
   const { 
@@ -14,17 +30,58 @@ function App() {
     toggleTask, 
     addTask, 
     setStorage,
-    updateMarkdown 
+    updateMarkdown,
+    openFileOrFolder,
+    selectFile,
+    fileList,
+    currentFile,
+    isFolderMode,
+    updateTaskText,
+    renameFile,
+    reorderTasks,
+    insertTaskAfter
   } = useTodoStore();
+
+  // Access temporal store for undo/redo
+  const { undo, redo } = useStore(useTodoStore.temporal, (state) => state);
 
   const [newTaskText, setNewTaskText] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [activeStorage, setActiveStorage] = useState<'local' | 'cloud' | 'fs'>('local');
   const [isEditingRaw, setIsEditingRaw] = useState(false);
   const [rawMarkdown, setRawMarkdown] = useState('');
-  const [showCompleted, setShowCompleted] = useState(true);
+  const [showCompleted, setShowCompleted] = useState(false);
   const [, setPluginUpdate] = useState(0); // Force re-render for plugins
   const [currentTheme, setCurrentTheme] = useState<'light' | 'dark' | 'auto'>('auto');
+  const [showSidebar, setShowSidebar] = useState(true);
+
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const [targetFocusId, setTargetFocusId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // Keyboard shortcuts for Undo/Redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
 
   useEffect(() => {
     loadTodos();
@@ -46,15 +103,35 @@ function App() {
 
     // Register Theme Plugin
     pluginRegistry.register(new ThemePlugin(), true); // System plugin
-  }, []);
+  }, [loadTodos]);
 
   useEffect(() => {
     setRawMarkdown(markdown);
   }, [markdown]);
 
-  const handleStorageChange = (type: 'local' | 'cloud' | 'fs') => {
-    setActiveStorage(type);
-    setStorage(type);
+  useEffect(() => {
+    const handleFocus = () => {
+      if (activeStorage === 'fs' || activeStorage === 'local') {
+        loadTodos();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [activeStorage, loadTodos]);
+
+  const handleStorageChange = async (type: 'local' | 'cloud' | 'fs') => {
+    if (type === 'fs') {
+      // For FS, we need to ask if they want file or folder
+      // But for now, let's default to folder as requested, or ask?
+      // The user said "I guess for local file, I should be able to select a folder"
+      // Let's try to open folder first
+      await openFileOrFolder('folder');
+      setActiveStorage('fs');
+    } else {
+      setActiveStorage(type);
+      setStorage(type);
+    }
+    
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
@@ -96,141 +173,239 @@ function App() {
     }
   };
 
+  const handleRenameFile = async (oldName: string) => {
+    const newName = prompt('Enter new file name:', oldName);
+    if (newName && newName !== oldName) {
+      await renameFile(oldName, newName);
+    }
+  };
+
   const handleSetTheme = (theme: 'light' | 'dark' | 'auto') => {
     setCurrentTheme(theme);
-    if (theme === 'light') (pluginRegistry as any).actions.get('setThemeLight')?.();
-    if (theme === 'dark') (pluginRegistry as any).actions.get('setThemeDark')?.();
-    if (theme === 'auto') (pluginRegistry as any).actions.get('setThemeAuto')?.();
+    if (theme === 'light') pluginRegistry.actions.get('setThemeLight')?.();
+    if (theme === 'dark') pluginRegistry.actions.get('setThemeDark')?.();
+    if (theme === 'auto') pluginRegistry.actions.get('setThemeAuto')?.();
   };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    if (over && active.id !== over.id) {
+      reorderTasks(active.id as string, over.id as string);
+    }
+    setActiveId(null);
+  };
+
+  const handleAddNext = (id: string) => {
+    insertTaskAfter(id, '');
+    setFocusId(id);
+  };
+
+  useEffect(() => {
+    if (focusId) {
+      const index = tasks.findIndex(t => t.id === focusId);
+      if (index !== -1 && index < tasks.length - 1) {
+        const nextTask = tasks[index + 1];
+        setTargetFocusId(nextTask.id);
+        setFocusId(null);
+      }
+    }
+  }, [tasks, focusId]);
 
   return (
     <div className="flex flex-col h-screen bg-base-200 font-sans overflow-hidden">
       
       {/* Top Navigation Bar */}
-      <div className="navbar bg-base-100 shadow-sm z-50 px-4 border-b border-base-300">
+      <div className="navbar bg-base-100 shadow-sm z-50 px-4 border-b border-base-300 h-14 min-h-0">
+        <div className="flex-none">
+          {isFolderMode && (
+            <button onClick={() => setShowSidebar(!showSidebar)} className="btn btn-ghost btn-square btn-sm mr-2">
+              <Menu size={20} />
+            </button>
+          )}
+        </div>
         <div className="flex-1">
-          <a className="btn btn-ghost text-xl text-primary gap-2 font-bold tracking-tight">
-            <FileText size={24} className="text-primary" />
+          <a className="btn btn-ghost btn-sm text-lg text-primary gap-2 font-bold tracking-tight">
+            <FileText size={20} className="text-primary" />
             TodoMD
           </a>
         </div>
-        <div className="flex-none gap-2">
-          {/* Storage Selector */}
-          <div className="dropdown dropdown-end">
-            <div tabIndex={0} role="button" className="btn btn-sm btn-ghost m-1 font-normal">
-              {activeStorage === 'local' && <FileText size={16} />}
-              {activeStorage === 'cloud' && <Cloud size={16} />}
-              {activeStorage === 'fs' && <FolderOpen size={16} />}
-              <span className="hidden sm:inline">
-                {activeStorage === 'local' ? 'Local' : activeStorage === 'cloud' ? 'Cloud' : 'File System'}
-              </span>
-              <ChevronDown size={14} />
-            </div>
-            <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
-              <li><a onClick={() => handleStorageChange('local')} className={activeStorage === 'local' ? 'active' : ''}><FileText size={16} /> Local Storage</a></li>
-              <li><a onClick={() => handleStorageChange('cloud')} className={activeStorage === 'cloud' ? 'active' : ''}><Cloud size={16} /> Mock Cloud</a></li>
-              <li><a onClick={() => handleStorageChange('fs')} className={activeStorage === 'fs' ? 'active' : ''}><FolderOpen size={16} /> File System</a></li>
-            </ul>
-          </div>
+        <div className="flex-none gap-1">
+          <div className="w-px h-4 bg-base-300 mx-1"></div>
 
-          <div className="divider divider-horizontal mx-0 h-6 self-center"></div>
-
-          <button onClick={() => loadTodos()} className="btn btn-ghost btn-circle btn-sm" title="Refresh">
-            <RefreshCw size={18} />
+          <button onClick={() => loadTodos()} className="btn btn-ghost btn-square btn-sm" title="Refresh">
+            <RefreshCw size={16} />
           </button>
 
           <button 
             onClick={() => setIsEditingRaw(!isEditingRaw)}
-            className={`btn btn-sm ${isEditingRaw ? 'btn-primary' : 'btn-ghost'}`}
+            className={`btn btn-square btn-sm ${isEditingRaw ? 'btn-primary text-primary-content' : 'btn-ghost'}`}
+            title={isEditingRaw ? 'View List' : 'Edit Markdown'}
           >
-            {isEditingRaw ? 'View List' : 'Edit MD'}
+            {isEditingRaw ? <List size={18} /> : <Code size={18} />}
           </button>
 
-          <button onClick={() => setShowSettings(true)} className="btn btn-ghost btn-circle btn-sm" title="Settings">
+          <button onClick={() => setShowSettings(true)} className="btn btn-ghost btn-square btn-sm" title="Settings">
             <Settings size={18} />
           </button>
         </div>
       </div>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-hidden w-full relative p-4 lg:p-8">
-        <div className="h-full max-w-3xl mx-auto flex flex-col">
-          
-          {/* Header & Controls */}
-          <div className="flex justify-between items-end mb-6 px-2">
-            <h1 className="text-3xl font-bold text-base-content">My Tasks</h1>
-            <button 
-              onClick={() => setShowCompleted(!showCompleted)}
-              className="btn btn-xs btn-ghost gap-1 text-base-content/60 hover:text-primary"
-            >
-              {showCompleted ? <Eye size={14} /> : <EyeOff size={14} />}
-              {showCompleted ? 'Hide Completed' : 'Show Completed'}
-            </button>
-          </div>
-
-          {isLoading ? (
-            <div className="flex flex-col items-center justify-center h-64 text-base-content/50">
-              <span className="loading loading-spinner loading-lg text-primary"></span>
-              <span className="mt-4">Loading tasks...</span>
+      {/* Main Content Area */}
+      <div className="flex flex-1 overflow-hidden relative">
+        
+        {/* Sidebar */}
+        {isFolderMode && showSidebar && (
+          <aside className="w-64 bg-base-100 border-r border-base-300 flex flex-col overflow-hidden transition-all duration-300">
+            <div className="p-4 font-bold text-sm text-base-content/50 uppercase tracking-wider flex justify-between items-center">
+              <span>Files</span>
+              <button onClick={() => openFileOrFolder('folder')} className="btn btn-ghost btn-xs btn-square" title="Open Folder">
+                <FolderOpen size={14} />
+              </button>
             </div>
-          ) : isEditingRaw ? (
-            <div className="h-full flex flex-col card bg-base-100 shadow-xl overflow-hidden border border-base-300">
-              <div className="card-body p-0 flex-1 flex flex-col">
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {fileList.map(file => (
+                <div key={file} className="group flex items-center gap-1 pr-2 rounded-lg hover:bg-base-200 transition-colors">
+                  <button
+                    onClick={() => selectFile(file)}
+                    className={`flex-1 text-left px-3 py-2 text-sm flex items-center gap-2 truncate ${currentFile === file ? 'text-primary font-medium' : 'text-base-content/70'}`}
+                  >
+                    <File size={14} />
+                    <span className="truncate">{file}</span>
+                  </button>
+                  <button 
+                    onClick={() => handleRenameFile(file)}
+                    className="btn btn-ghost btn-xs btn-square opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Rename"
+                  >
+                    <Edit2 size={12} />
+                  </button>
+                </div>
+              ))}
+              {fileList.length === 0 && (
+                <div className="text-center p-4 text-base-content/40 text-sm">No markdown files found</div>
+              )}
+            </div>
+          </aside>
+        )}
+
+        {/* Main Task View */}
+        <main className="flex-1 overflow-hidden w-full relative p-0 sm:p-4 bg-base-200/50">
+          <div className="h-full max-w-5xl mx-auto flex flex-col bg-base-100 sm:rounded-xl sm:shadow-sm sm:border border-base-300 overflow-hidden">
+            
+            {/* Header & Controls */}
+            <div className="flex justify-between items-center p-4 border-b border-base-200 bg-base-50/50">
+              <h1 className="text-xl font-bold text-base-content truncate pr-4">
+                {isFolderMode ? currentFile : 'My Tasks'}
+              </h1>
+              <button 
+                onClick={() => setShowCompleted(!showCompleted)}
+                className="btn btn-xs btn-ghost gap-1.5 text-base-content/60 hover:text-primary font-normal flex-shrink-0"
+              >
+                {showCompleted ? <Eye size={14} /> : <EyeOff size={14} />}
+                {showCompleted ? 'Hide Done' : 'Show Done'}
+              </button>
+            </div>
+
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center flex-1 text-base-content/50">
+                <span className="loading loading-spinner loading-lg text-primary"></span>
+                <span className="mt-4 text-sm">Loading tasks...</span>
+              </div>
+            ) : isEditingRaw ? (
+              <div className="flex-1 flex flex-col overflow-hidden">
                 <textarea 
-                  className="textarea textarea-ghost flex-1 w-full p-4 font-mono text-sm resize-none focus:outline-none"
+                  className="textarea textarea-ghost flex-1 w-full p-6 font-mono text-sm resize-none focus:outline-none leading-relaxed"
                   value={rawMarkdown}
                   onChange={(e) => setRawMarkdown(e.target.value)}
                   spellCheck={false}
                 />
-                <div className="p-4 border-t border-base-200 flex justify-end bg-base-100">
+                <div className="p-3 border-t border-base-200 flex justify-end bg-base-50">
                   <button onClick={handleSaveRaw} className="btn btn-primary btn-sm gap-2">
                     <Save size={16} /> Save Changes
                   </button>
                 </div>
               </div>
-            </div>
-          ) : (
-            <div className="flex flex-col h-full bg-base-100 rounded-2xl shadow-sm border border-base-300 overflow-hidden">
-              {/* Task List */}
-              <div className="flex-1 overflow-y-auto">
-                {tasks.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-base-content/40">
-                    <Package size={48} className="mb-2 opacity-20" />
-                    <p>No tasks found</p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col">
-                    {tasks.map(task => (
-                      <TaskItem 
-                        key={task.id} 
-                        task={task} 
-                        onToggle={toggleTask} 
-                        showCompleted={showCompleted}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
+            ) : (
+              <div className="flex flex-col flex-1 overflow-hidden relative">
+                {/* Task List */}
+                <div className="flex-1 overflow-y-auto">
+                  {tasks.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-base-content/40">
+                      <Package size={48} className="mb-2 opacity-20" />
+                      <p>No tasks found</p>
+                    </div>
+                  ) : (
+                    <DndContext 
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragStart={handleDragStart}
+                      onDragEnd={handleDragEnd}
+                    >
+                      <SortableContext 
+                        items={tasks.map(t => t.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        <div className="flex flex-col divide-y divide-base-200">
+                          {tasks.map(task => (
+                            <TaskItem 
+                              key={task.id} 
+                              task={task} 
+                              onToggle={toggleTask} 
+                              onUpdate={updateTaskText}
+                              onAddNext={handleAddNext}
+                              showCompleted={showCompleted}
+                              autoFocus={task.id === targetFocusId}
+                            />
+                          ))}
+                        </div>
+                      </SortableContext>
+                      <DragOverlay>
+                        {activeId ? (
+                          <div className="p-4 bg-base-100 border border-base-300 rounded shadow-lg opacity-90 flex items-start gap-3">
+                             <div className="mt-1 text-base-content/30">
+                               <div className="w-5 h-5 border-2 border-base-300 rounded-md" />
+                             </div>
+                             <div className="flex-1 min-w-0 text-sm leading-relaxed">
+                               {tasks.find(t => t.id === activeId)?.text}
+                             </div>
+                          </div>
+                        ) : null}
+                      </DragOverlay>
+                    </DndContext>
+                  )}
+                </div>
 
-              {/* Add Task Input */}
-              <div className="p-4 bg-base-50 border-t border-base-200">
-                <form onSubmit={handleAddTask} className="flex gap-2">
-                  <input 
-                    type="text" 
-                    value={newTaskText}
-                    onChange={(e) => setNewTaskText(e.target.value)}
-                    placeholder="Add a new task..."
-                    className="input input-ghost w-full focus:bg-base-100 transition-colors"
-                  />
-                  <button type="submit" className="btn btn-circle btn-primary btn-sm">
-                    <Plus size={20} />
-                  </button>
-                </form>
+                {/* Add Task Input - Integrated Style */}
+                <div className="border-t border-base-200 bg-base-100 p-0">
+                  <form onSubmit={handleAddTask} className="flex items-center group focus-within:bg-base-50 transition-colors">
+                    <div className="pl-4 pr-3 text-base-content/30 group-focus-within:text-primary transition-colors">
+                      <Plus size={24} />
+                    </div>
+                    <input 
+                      type="text" 
+                      value={newTaskText}
+                      onChange={(e) => setNewTaskText(e.target.value)}
+                      placeholder="Add a new task..."
+                      className="flex-1 py-4 bg-transparent border-none outline-none text-lg placeholder:text-base-content/30"
+                    />
+                    <button 
+                      type="submit" 
+                      className={`mr-4 btn btn-circle btn-sm btn-primary transition-all duration-200 ${newTaskText.trim() ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none'}`}
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </form>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      </main>
+            )}
+          </div>
+        </main>
+      </div>
 
       {/* Settings Modal */}
       {showSettings && (
@@ -243,6 +418,33 @@ function App() {
             
             <div className="space-y-6">
               
+              {/* Storage Section */}
+              <div>
+                <h4 className="text-sm font-semibold text-base-content/70 uppercase tracking-wider mb-3">Storage Location</h4>
+                <div className="flex flex-col gap-2">
+                  <button 
+                    onClick={() => handleStorageChange('local')} 
+                    className={`btn btn-sm justify-start ${activeStorage === 'local' ? 'btn-active btn-primary' : 'btn-ghost'}`}
+                  >
+                    <HardDrive size={16} /> Browser Storage
+                  </button>
+                  <button 
+                    onClick={() => handleStorageChange('fs')} 
+                    className={`btn btn-sm justify-start ${activeStorage === 'fs' ? 'btn-active btn-primary' : 'btn-ghost'}`}
+                  >
+                    <FolderOpen size={16} /> Local Folder
+                  </button>
+                  <button 
+                    onClick={() => handleStorageChange('cloud')} 
+                    className={`btn btn-sm justify-start ${activeStorage === 'cloud' ? 'btn-active btn-primary' : 'btn-ghost'}`}
+                  >
+                    <Cloud size={16} /> Cloud (Mock)
+                  </button>
+                </div>
+              </div>
+
+              <div className="divider my-2"></div>
+
               {/* Theme Section */}
               <div>
                 <h4 className="text-sm font-semibold text-base-content/70 uppercase tracking-wider mb-3">Appearance</h4>
