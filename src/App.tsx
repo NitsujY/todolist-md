@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from 'zustand';
 import { useTodoStore } from './store/useTodoStore';
 import { pluginRegistry } from './plugins/pluginEngine';
-import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading } from 'lucide-react';
+import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading, Plus } from 'lucide-react';
 import { ThemePlugin } from './plugins/ThemePlugin';
 import { DueDatePlugin } from './plugins/DueDatePlugin';
 import { TaskItem } from './components/TaskItem';
@@ -41,7 +41,12 @@ function App() {
     updateTaskDescription,
     renameFile,
     reorderTasks,
-    insertTaskAfter
+    insertTaskAfter,
+    createFile,
+    restoreSession,
+    requiresPermission,
+    restorableName,
+    grantPermission
   } = useTodoStore();
 
   // Access temporal store for undo/redo
@@ -85,7 +90,7 @@ function App() {
   }, [undo, redo]);
 
   useEffect(() => {
-    loadTodos();
+    restoreSession();
     
     // Initialize theme state
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'auto';
@@ -106,7 +111,7 @@ function App() {
     pluginRegistry.register(new ThemePlugin(), true); // System plugin
     // Register Due Date Plugin
     pluginRegistry.register(new DueDatePlugin(), true); // System plugin
-  }, [loadTodos]);
+  }, [loadTodos, restoreSession]);
 
   useEffect(() => {
     setRawMarkdown(markdown);
@@ -168,6 +173,13 @@ function App() {
     }
   };
 
+  const handleCreateFile = async () => {
+    const filename = prompt('Enter filename for new list:', 'new-list.md');
+    if (filename) {
+      await createFile(filename);
+    }
+  };
+
   const handleRenameFile = async (oldName: string) => {
     const newName = prompt('Enter new file name:', oldName);
     if (newName && newName !== oldName) {
@@ -214,6 +226,21 @@ function App() {
   return (
     <div className="flex flex-col h-screen bg-base-200 font-sans overflow-hidden">
       
+      {requiresPermission && (
+        <div className="bg-warning text-warning-content px-4 py-2 text-sm flex items-center justify-between shadow-md z-[60]">
+          <div className="flex items-center gap-2">
+            <HardDrive size={16} />
+            <span className="font-medium">Resume working in "{restorableName}"?</span>
+          </div>
+          <button 
+            onClick={() => grantPermission()} 
+            className="btn btn-sm btn-ghost bg-warning-content/10 hover:bg-warning-content/20 border-0 text-warning-content"
+          >
+            Allow Access
+          </button>
+        </div>
+      )}
+
       {/* Top Navigation Bar */}
       <div className="navbar bg-base-100 shadow-sm z-50 px-4 border-b border-base-300 h-14 min-h-0">
         <div className="flex-none">
@@ -258,11 +285,23 @@ function App() {
           <aside className="w-64 bg-base-100 border-r border-base-300 flex flex-col overflow-hidden transition-all duration-300">
             <div className="p-4 font-bold text-sm text-base-content/50 uppercase tracking-wider flex justify-between items-center">
               <span>Files</span>
-              <button onClick={() => openFileOrFolder('folder')} className="btn btn-ghost btn-xs btn-square" title="Open Folder">
-                <FolderOpen size={14} />
-              </button>
+              <div className="flex gap-1">
+                <button onClick={handleCreateFile} className="btn btn-ghost btn-xs btn-square" title="New File">
+                  <Plus size={14} />
+                </button>
+                <button onClick={() => openFileOrFolder('folder')} className="btn btn-ghost btn-xs btn-square" title="Open Folder">
+                  <FolderOpen size={14} />
+                </button>
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              <button 
+                onClick={handleCreateFile}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-base-content/60 hover:text-primary hover:bg-base-200 rounded-lg transition-colors mb-2 border border-dashed border-base-300"
+              >
+                <Plus size={14} />
+                <span>New File...</span>
+              </button>
               {fileList.map(file => (
                 <div key={file} className="group flex items-center gap-1 pr-2 rounded-lg hover:bg-base-200 transition-colors">
                   <button
@@ -342,8 +381,20 @@ function App() {
                 <div className="flex-1 overflow-y-auto">
                   {tasks.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-base-content/40">
-                      <Package size={48} className="mb-2 opacity-20" />
-                      <p>No tasks found</p>
+                      {isFolderMode && fileList.length === 0 ? (
+                        <>
+                          <FolderOpen size={48} className="mb-2 opacity-20" />
+                          <p className="mb-4">This folder is empty</p>
+                          <button onClick={handleCreateFile} className="btn btn-primary gap-2">
+                            <Plus size={16} /> Create New File
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <Package size={48} className="mb-2 opacity-20" />
+                          <p>No tasks found</p>
+                        </>
+                      )}
                     </div>
                   ) : (
                     <DndContext 

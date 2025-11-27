@@ -182,7 +182,15 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
 
   // Helper to clean text for display (remove plugin syntax like due:YYYY-MM-DD)
   const getDisplayText = (text: string) => {
-    return text.replace(/due:\d{4}-\d{2}-\d{2}/g, '').trim();
+    const processed = text.replace(/due:\d{4}-\d{2}-\d{2}/g, '').trim();
+    
+    // Auto-linkify domains without protocol (e.g. google.com)
+    // Matches common TLDs, avoids existing links or protocols
+    const urlRegex = /(^|\s)(?!https?:\/\/)(?!\[)((?:www\.|[\w-]+\.)+(?:com|org|net|io|gov|edu|co|me|app|dev|xyz))(?=\s|$)/gi;
+    
+    return processed.replace(urlRegex, (_match, prefix, url) => {
+      return `${prefix}[${url}](https://${url})`;
+    });
   };
 
   if (!isVisible) return null;
@@ -323,7 +331,22 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
               onClick={() => setIsEditing(true)}
               className={`flex-1 break-words text-lg cursor-text select-none prose prose-sm max-w-none min-h-[1.5em] ${task.completed ? 'line-through text-base-content/30' : 'text-base-content'}`}
             >
-              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{ p: ({children}) => <span className="m-0 p-0">{children}</span> }}>
+              <ReactMarkdown 
+                remarkPlugins={[remarkGfm, remarkBreaks]} 
+                components={{ 
+                  p: ({children}) => <span className="m-0 p-0">{children}</span>,
+                  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                  a: ({node, ...props}) => (
+                    <a 
+                      {...props} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="text-primary hover:underline cursor-pointer relative z-10"
+                      onClick={(e) => e.stopPropagation()} 
+                    />
+                  )
+                }}
+              >
                 {getDisplayText(task.text)}
               </ReactMarkdown>
             </div>
@@ -368,7 +391,21 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
                 onClick={() => setIsEditingDescription(true)}
                 className="text-sm text-base-content/70 prose prose-sm max-w-none cursor-text border-l-2 border-base-300 pl-3 py-1"
               >
-                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                <ReactMarkdown 
+                  remarkPlugins={[remarkGfm, remarkBreaks]}
+                  components={{
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    a: ({node, ...props}) => (
+                      <a 
+                        {...props} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-primary hover:underline cursor-pointer"
+                        onClick={(e) => e.stopPropagation()} 
+                      />
+                    )
+                  }}
+                >
                   {task.description || ''}
                 </ReactMarkdown>
               </div>
