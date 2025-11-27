@@ -9,6 +9,7 @@ export interface Task {
   text: string;
   completed: boolean;
   type?: 'task' | 'header' | 'empty';
+  description?: string;
 }
 
 const createProcessor = () => unified()
@@ -87,11 +88,31 @@ export const parseTasks = (markdown: string): Task[] => {
       // Generate a stable-ish ID based on content and position (for demo purposes)
       const id = `${node.position?.start.line}-${text.substring(0, 10)}`;
       
+      // Check for description (blockquote)
+      let description = '';
+      if (node.children && node.children.length > 1) {
+        // Look for blockquote in children
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const blockquote = node.children.find((c: any) => c.type === 'blockquote');
+        if (blockquote && blockquote.children) {
+          // Extract text from blockquote
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          description = blockquote.children.map((p: any) => {
+            if (p.type === 'paragraph' && p.children) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              return p.children.map((c: any) => c.value || '').join('');
+            }
+            return '';
+          }).join('\n');
+        }
+      }
+
       tasks.push({
         id,
         text,
         completed: checked,
-        type: 'task'
+        type: 'task',
+        description: description || undefined
       });
     }
     
@@ -691,5 +712,75 @@ export const reorderTaskInMarkdown = (markdown: string, activeId: string, overId
     }
   }
 
+  return processor.stringify(tree);
+};
+
+export const updateTaskDescriptionInMarkdown = (markdown: string, taskId: string, description: string): string => {
+  const processor = createProcessor();
+  const tree = processor.parse(markdown) as Root;
+  
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const visit = (node: any) => {
+    if (node.type === 'listItem') {
+      let isTask = false;
+      let text = '';
+      
+      if (typeof node.checked === 'boolean') {
+        isTask = true;
+      }
+
+      if (node.children && node.children.length > 0) {
+        const p = node.children[0];
+        if (p.type === 'paragraph' && p.children && p.children.length > 0) {
+           // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           text = p.children.map((c: any) => c.value || '').join('');
+        }
+      }
+
+      if (!isTask && text) {
+        const match = text.match(/^\[([ xX]?)\]\s+(.*)/);
+        if (match) {
+          isTask = true;
+          text = match[2];
+        }
+      }
+
+      if (isTask) {
+        const id = `${node.position?.start.line}-${text.substring(0, 10)}`;
+        if (id === taskId) {
+          // Find existing blockquote
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const blockquoteIndex = node.children.findIndex((c: any) => c.type === 'blockquote');
+          
+          if (description) {
+            const newBlockquote = {
+              type: 'blockquote',
+              children: description.split('\n').map(line => ({
+                type: 'paragraph',
+                children: [{ type: 'text', value: line }]
+              }))
+            };
+
+            if (blockquoteIndex !== -1) {
+              node.children[blockquoteIndex] = newBlockquote;
+            } else {
+              // Insert after paragraph
+              node.children.splice(1, 0, newBlockquote);
+            }
+          } else {
+            // Remove description
+            if (blockquoteIndex !== -1) {
+              node.children.splice(blockquoteIndex, 1);
+            }
+          }
+        }
+      }
+    }
+    if (node.children) {
+      node.children.forEach(visit);
+    }
+  };
+
+  visit(tree);
   return processor.stringify(tree);
 };
