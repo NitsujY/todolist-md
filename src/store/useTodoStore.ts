@@ -4,7 +4,7 @@ import type { StorageProvider } from '../adapters/StorageProvider';
 import { LocalStorageAdapter } from '../adapters/LocalStorageAdapter';
 import { MockCloudAdapter } from '../adapters/MockCloudAdapter';
 import { FileSystemAdapter } from '../adapters/FileSystemAdapter';
-import { parseTasks, toggleTaskInMarkdown, addTaskToMarkdown, updateTaskTextInMarkdown, insertTaskAfterInMarkdown, reorderTaskInMarkdown, type Task } from '../lib/MarkdownParser';
+import { parseTasks, toggleTaskInMarkdown, addTaskToMarkdown, updateTaskTextInMarkdown, insertTaskAfterInMarkdown, reorderTaskInMarkdown, deleteTaskInMarkdown, type Task } from '../lib/MarkdownParser';
 
 interface TodoState {
   markdown: string;
@@ -21,6 +21,7 @@ interface TodoState {
   toggleTask: (taskId: string) => Promise<void>;
   addTask: (text: string) => Promise<void>;
   updateTaskText: (taskId: string, newText: string) => Promise<string | undefined>;
+  deleteTask: (taskId: string) => Promise<void>;
   insertTaskAfter: (taskId: string, text: string) => Promise<void>;
   reorderTasks: (activeId: string, overId: string) => Promise<void>;
   updateMarkdown: (newMarkdown: string) => Promise<void>;
@@ -139,6 +140,19 @@ export const useTodoStore = create<TodoState>()(
       return newTasks[index].id;
     }
     return undefined;
+  },
+
+  deleteTask: async (taskId) => {
+    const { markdown, storage, currentFile, isFolderMode } = get();
+    const newMarkdown = deleteTaskInMarkdown(markdown, taskId);
+    
+    set({ markdown: newMarkdown, tasks: parseTasks(newMarkdown) });
+    
+    if (isFolderMode) {
+      await storage.write(currentFile, newMarkdown);
+    } else {
+      await storage.write('todo.md', newMarkdown);
+    }
   },
 
   insertTaskAfter: async (taskId, text) => {

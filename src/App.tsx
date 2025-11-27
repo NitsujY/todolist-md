@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { useStore } from 'zustand';
 import { useTodoStore } from './store/useTodoStore';
 import { pluginRegistry } from './plugins/pluginEngine';
-import { Settings, FileText, Plus, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2 } from 'lucide-react';
+import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading } from 'lucide-react';
 import { ThemePlugin } from './plugins/ThemePlugin';
+import { DueDatePlugin } from './plugins/DueDatePlugin';
 import { TaskItem } from './components/TaskItem';
 import {
   DndContext, 
@@ -28,9 +29,9 @@ function App() {
     isLoading, 
     loadTodos, 
     toggleTask, 
-    addTask, 
-    setStorage,
+    deleteTask,
     updateMarkdown,
+    setStorage,
     openFileOrFolder,
     selectFile,
     fileList,
@@ -45,7 +46,6 @@ function App() {
   // Access temporal store for undo/redo
   const { undo, redo } = useStore(useTodoStore.temporal, (state) => state);
 
-  const [newTaskText, setNewTaskText] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [activeStorage, setActiveStorage] = useState<'local' | 'cloud' | 'fs'>('local');
   const [isEditingRaw, setIsEditingRaw] = useState(false);
@@ -103,6 +103,8 @@ function App() {
 
     // Register Theme Plugin
     pluginRegistry.register(new ThemePlugin(), true); // System plugin
+    // Register Due Date Plugin
+    pluginRegistry.register(new DueDatePlugin(), true); // System plugin
   }, [loadTodos]);
 
   useEffect(() => {
@@ -134,14 +136,6 @@ function App() {
     
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
-    }
-  };
-
-  const handleAddTask = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newTaskText.trim()) {
-      addTask(newTaskText);
-      setNewTaskText('');
     }
   };
 
@@ -299,9 +293,20 @@ function App() {
             
             {/* Header & Controls */}
             <div className="flex justify-between items-center p-4 border-b border-base-200 bg-base-50/50">
-              <h1 className="text-xl font-bold text-base-content truncate pr-4">
-                {isFolderMode ? currentFile : 'My Tasks'}
-              </h1>
+              <div className="flex items-center gap-3 overflow-hidden">
+                <h1 className="text-xl font-bold text-base-content truncate">
+                  {isFolderMode ? currentFile : 'My Tasks'}
+                </h1>
+                <button
+                  onClick={() => {
+                    updateMarkdown(markdown + '\n\n# New Section\n');
+                  }}
+                  className="btn btn-ghost btn-xs btn-circle text-base-content/40 hover:text-primary tooltip tooltip-right"
+                  data-tip="Add Section"
+                >
+                  <Heading size={16} />
+                </button>
+              </div>
               <button 
                 onClick={() => setShowCompleted(!showCompleted)}
                 className="btn btn-xs btn-ghost gap-1.5 text-base-content/60 hover:text-primary font-normal flex-shrink-0"
@@ -350,7 +355,7 @@ function App() {
                         items={tasks.map(t => t.id)}
                         strategy={verticalListSortingStrategy}
                       >
-                        <div className="flex flex-col divide-y divide-base-200">
+                        <div className="flex flex-col divide-y divide-base-200 pb-20">
                           {tasks.map(task => (
                             <TaskItem 
                               key={task.id} 
@@ -358,6 +363,7 @@ function App() {
                               onToggle={toggleTask} 
                               onUpdate={updateTaskText}
                               onAddNext={handleAddNext}
+                              onDelete={deleteTask}
                               showCompleted={showCompleted}
                               autoFocus={task.id === targetFocusId}
                             />
@@ -378,28 +384,6 @@ function App() {
                       </DragOverlay>
                     </DndContext>
                   )}
-                </div>
-
-                {/* Add Task Input - Integrated Style */}
-                <div className="border-t border-base-200 bg-base-100 p-0">
-                  <form onSubmit={handleAddTask} className="flex items-center group focus-within:bg-base-50 transition-colors">
-                    <div className="pl-4 pr-3 text-base-content/30 group-focus-within:text-primary transition-colors">
-                      <Plus size={24} />
-                    </div>
-                    <input 
-                      type="text" 
-                      value={newTaskText}
-                      onChange={(e) => setNewTaskText(e.target.value)}
-                      placeholder="Add a new task..."
-                      className="flex-1 py-4 bg-transparent border-none outline-none text-lg placeholder:text-base-content/30"
-                    />
-                    <button 
-                      type="submit" 
-                      className={`mr-4 btn btn-circle btn-sm btn-primary transition-all duration-200 ${newTaskText.trim() ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none'}`}
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </form>
                 </div>
               </div>
             )}
