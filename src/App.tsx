@@ -38,6 +38,7 @@ function App() {
     currentFile,
     isFolderMode,
     updateTaskText,
+    updateTaskDescription,
     renameFile,
     reorderTasks,
     insertTaskAfter
@@ -362,6 +363,7 @@ function App() {
                               task={task} 
                               onToggle={toggleTask} 
                               onUpdate={updateTaskText}
+                              onUpdateDescription={updateTaskDescription}
                               onAddNext={handleAddNext}
                               onDelete={deleteTask}
                               showCompleted={showCompleted}
