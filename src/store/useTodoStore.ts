@@ -323,8 +323,9 @@ export const useTodoStore = create<TodoState>()(
     {
       partialize: (state) => ({ 
         markdown: state.markdown,
+        tasks: state.tasks,
         compactMode: state.compactMode
-      }), // Only track markdown history and compact mode
+      }),
       limit: 100
     }
   )

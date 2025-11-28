@@ -63,11 +63,18 @@ function App() {
   const [showCompleted, setShowCompleted] = useState(false);
   const [, setPluginUpdate] = useState(0); // Force re-render for plugins
   const [currentTheme, setCurrentTheme] = useState<'light' | 'dark' | 'auto'>('auto');
-  const [showSidebar, setShowSidebar] = useState(true);
+  const [showSidebar, setShowSidebar] = useState(() => {
+    const saved = localStorage.getItem('sidebar-collapsed');
+    return saved ? JSON.parse(saved) : true;
+  });
   const [sidebarWidth, setSidebarWidth] = useState(256);
   const [isResizing, setIsResizing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('sidebar-collapsed', JSON.stringify(showSidebar));
+  }, [showSidebar]);
 
   const startResizing = useCallback(() => {
     setIsResizing(true);
@@ -430,24 +437,27 @@ function App() {
                     </button>
                   </>
                 )}
-
+              </div>
+              
+              <div className="flex items-center gap-1">
                 <button
                   onClick={() => {
                     updateMarkdown(markdown + '\n\n# New Section\n');
                   }}
-                  className="btn btn-ghost btn-xs btn-circle text-base-content/40 hover:text-primary tooltip tooltip-right"
-                  data-tip="Add Section"
+                  className="btn btn-ghost btn-xs btn-square text-base-content/60 hover:text-primary"
+                  title="Add Section"
                 >
                   <Heading size={18} />
                 </button>
+
+                <button 
+                  onClick={() => setShowCompleted(!showCompleted)}
+                  className="btn btn-xs btn-ghost btn-square text-base-content/60 hover:text-primary"
+                  title={showCompleted ? 'Hide Done' : 'Show Done'}
+                >
+                  {showCompleted ? <Eye size={18} /> : <EyeOff size={18} />}
+                </button>
               </div>
-              <button 
-                onClick={() => setShowCompleted(!showCompleted)}
-                className="btn btn-xs btn-ghost gap-1.5 text-base-content/60 hover:text-primary font-normal flex-shrink-0"
-              >
-                {showCompleted ? <Eye size={14} /> : <EyeOff size={14} />}
-                {showCompleted ? 'Hide Done' : 'Show Done'}
-              </button>
             </div>
 
             {isLoading ? (

@@ -36,7 +36,29 @@ A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (
 
 ## Features
 
-- **Task Management**: Add, toggle, and view tasks.
-- **Markdown Editor**: Edit the raw Markdown directly.
-- **Storage Switching**: Switch between Local Storage and a Mock Cloud adapter.
-- **Plugin System**: Example "PriorityHighlighter" plugin included.
+- **Markdown-First**: Your data is just Markdown. Edit it as a list or as raw text.
+- **Local File System Access**: Open and edit local files and folders directly from your browser (Chromium-based browsers).
+- **Drag & Drop**: Reorder tasks intuitively.
+- **Undo/Redo**: Mistakes are fine with full history support.
+- **Search**: Quickly find tasks across your list.
+- **Customizable UI**:
+    - **Themes**: Light, Dark, and System preference.
+    - **Compact Mode**: For when you want to see more.
+    - **Font Size**: Adjustable text size.
+- **Plugin System**: Extensible architecture (includes Due Date and Priority Highlighter plugins).
+- **Storage Options**:
+    - **Local Storage**: Quick start, data stays in browser.
+    - **File System**: Edit real files on your disk.
+    - **Cloud**: (Mock) Architecture ready for cloud backends.
+
+## Markdown Syntax Guide
+
+The app parses standard Markdown to generate the task list. Here is how it works:
+
+- **Tasks**: Use standard Markdown task lists.
+    - `- [ ] Task to do` -> Open Task
+    - `- [x] Completed task` -> Completed Task
+- **Sections**: Use Markdown headings to create sections.
+    - `# Section Name` or `## Section Name`
+- **Descriptions**: Use blockquotes immediately after a task to add a description.
+    - `> This is a note about the task`
