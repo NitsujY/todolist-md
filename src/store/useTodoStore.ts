@@ -14,8 +14,12 @@ interface TodoState {
   fileList: string[];
   currentFile: string;
   isFolderMode: boolean;
+  compactMode: boolean;
+  fontSize: 'small' | 'normal' | 'large' | 'xl';
   
   // Actions
+  setFontSize: (size: 'small' | 'normal' | 'large' | 'xl') => void;
+  setCompactMode: (compact: boolean) => void;
   setStorage: (adapterName: 'local' | 'cloud' | 'fs') => void;
   loadTodos: () => Promise<void>;
   toggleTask: (taskId: string) => Promise<void>;
@@ -52,8 +56,14 @@ export const useTodoStore = create<TodoState>()(
   fileList: [],
   currentFile: 'todo.md',
   isFolderMode: false,
+  compactMode: true,
+  fontSize: 'normal',
   requiresPermission: false,
   restorableName: '',
+
+  setFontSize: (size) => set({ fontSize: size }),
+
+  setCompactMode: (compact) => set({ compactMode: compact }),
 
   setStorage: (adapterName) => {
     set({ storage: adapters[adapterName] });
@@ -309,7 +319,13 @@ export const useTodoStore = create<TodoState>()(
       }
     }
   },
-}), {
-  partialize: (state) => ({ markdown: state.markdown }), // Only track markdown history
-  limit: 100
-}));
+    }),
+    {
+      partialize: (state) => ({ 
+        markdown: state.markdown,
+        compactMode: state.compactMode
+      }), // Only track markdown history and compact mode
+      limit: 100
+    }
+  )
+);
