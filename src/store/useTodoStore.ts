@@ -16,8 +16,10 @@ interface TodoState {
   isFolderMode: boolean;
   compactMode: boolean;
   fontSize: 'small' | 'normal' | 'large' | 'xl';
+  activeTag: string | null;
   
   // Actions
+  setActiveTag: (tag: string | null) => void;
   setFontSize: (size: 'small' | 'normal' | 'large' | 'xl') => void;
   setCompactMode: (compact: boolean) => void;
   setStorage: (adapterName: 'local' | 'cloud' | 'fs') => void;
@@ -60,6 +62,9 @@ export const useTodoStore = create<TodoState>()(
   fontSize: 'normal',
   requiresPermission: false,
   restorableName: '',
+  activeTag: null,
+
+  setActiveTag: (tag) => set({ activeTag: tag }),
 
   setFontSize: (size) => set({ fontSize: size }),
 
@@ -100,7 +105,7 @@ export const useTodoStore = create<TodoState>()(
   },
 
   selectFile: async (filename) => {
-    set({ currentFile: filename, isLoading: true });
+    set({ currentFile: filename, isLoading: true, activeTag: null });
     localStorage.setItem('lastOpenedFile', filename);
     const { storage } = get();
     const content = await storage.read(filename);
@@ -110,7 +115,7 @@ export const useTodoStore = create<TodoState>()(
   },
 
   loadTodos: async () => {
-    set({ isLoading: true });
+    set({ isLoading: true, activeTag: null });
     const { storage, currentFile } = get();
     const content = await storage.read(currentFile);
     const markdown = content || '# My Todo List\n\n- [ ] First task';
@@ -323,8 +328,9 @@ export const useTodoStore = create<TodoState>()(
     {
       partialize: (state) => ({ 
         markdown: state.markdown,
+        tasks: state.tasks,
         compactMode: state.compactMode
-      }), // Only track markdown history and compact mode
+      }),
       limit: 100
     }
   )

@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useStore } from 'zustand';
 import { useTodoStore } from './store/useTodoStore';
 import { pluginRegistry } from './plugins/pluginEngine';
-import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading, Plus, Search, X } from 'lucide-react';
+import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading, Plus, Search, X, Tag } from 'lucide-react';
 import { ThemePlugin } from './plugins/ThemePlugin';
 import { DueDatePlugin } from './plugins/DueDatePlugin';
 import { TaskItem } from './components/TaskItem';
@@ -50,7 +50,9 @@ function App() {
     compactMode,
     setCompactMode,
     fontSize,
-    setFontSize
+    setFontSize,
+    activeTag,
+    setActiveTag
   } = useTodoStore();
 
   // Access temporal store for undo/redo
@@ -63,11 +65,18 @@ function App() {
   const [showCompleted, setShowCompleted] = useState(false);
   const [, setPluginUpdate] = useState(0); // Force re-render for plugins
   const [currentTheme, setCurrentTheme] = useState<'light' | 'dark' | 'auto'>('auto');
-  const [showSidebar, setShowSidebar] = useState(true);
+  const [showSidebar, setShowSidebar] = useState(() => {
+    const saved = localStorage.getItem('sidebar-collapsed');
+    return saved ? JSON.parse(saved) : true;
+  });
   const [sidebarWidth, setSidebarWidth] = useState(256);
   const [isResizing, setIsResizing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('sidebar-collapsed', JSON.stringify(showSidebar));
+  }, [showSidebar]);
 
   const startResizing = useCallback(() => {
     setIsResizing(true);
@@ -261,6 +270,7 @@ function App() {
   }, [tasks, focusId]);
 
   const filteredTasks = tasks.filter(t => {
+    if (activeTag && (!t.tags || !t.tags.includes(activeTag))) return false;
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return (
@@ -268,6 +278,9 @@ function App() {
       (t.description && t.description.toLowerCase().includes(query))
     );
   });
+
+  // Calculate unique tags
+  const allTags = Array.from(new Set(tasks.flatMap(t => t.tags || []))).sort();
 
   return (
     <div className="flex flex-col h-screen bg-base-200 font-sans overflow-hidden">
@@ -379,6 +392,35 @@ function App() {
                 <div className="text-center p-4 text-base-content/40 text-sm">No markdown files found</div>
               )}
             </div>
+
+            {/* Tags Section */}
+            {allTags.length > 0 && (
+              <>
+                <div className="p-4 pt-2 font-bold text-sm text-base-content/50 uppercase tracking-wider flex justify-between items-center border-t border-base-200 mt-2">
+                  <span>Tags</span>
+                  {activeTag && (
+                    <button onClick={() => setActiveTag(null)} className="btn btn-ghost btn-xs text-xs font-normal normal-case opacity-50 hover:opacity-100">
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <div className="flex-1 overflow-y-auto p-2 space-y-1 min-h-[100px]">
+                  {allTags.map(tag => (
+                    <button
+                      key={tag}
+                      onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${activeTag === tag ? 'bg-primary/10 text-primary font-medium' : 'text-base-content/70 hover:bg-base-200'}`}
+                    >
+                      <Tag size={14} />
+                      <span className="truncate">#{tag}</span>
+                      <span className="ml-auto text-xs opacity-50">
+                        {tasks.filter(t => t.tags?.includes(tag)).length}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </aside>
         )}
 
@@ -389,13 +431,19 @@ function App() {
             {/* Header & Controls */}
             <div className={`flex justify-between items-center border-b border-base-200 bg-base-50/50 ${compactMode ? 'p-2 h-[56px]' : 'p-4 h-[72px]'}`}>
               <div className="flex items-center gap-3 overflow-hidden flex-1 mr-4">
+                <h1 className="text-xl font-bold text-base-content truncate flex-shrink-0 max-w-[200px] sm:max-w-md">
+                  {isFolderMode ? currentFile : 'My Tasks'}
+                </h1>
+              </div>
+              
+              <div className="flex items-center gap-1">
                 {isSearchOpen ? (
-                  <div className="relative flex-1 max-w-md animate-in fade-in slide-in-from-left-2 duration-200">
+                  <div className="relative w-48 sm:w-64 animate-in fade-in slide-in-from-right-2 duration-200 mr-1">
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40" />
                     <input 
                       autoFocus
                       type="text" 
-                      placeholder="Search tasks..." 
+                      placeholder="Search..." 
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       onKeyDown={(e) => {
@@ -403,6 +451,9 @@ function App() {
                           setSearchQuery('');
                           setIsSearchOpen(false);
                         }
+                      }}
+                      onBlur={() => {
+                        if (!searchQuery) setIsSearchOpen(false);
                       }}
                       className="input input-sm input-bordered w-full pl-9 pr-8 bg-base-100 focus:outline-none focus:border-primary/50"
                     />
@@ -417,37 +468,32 @@ function App() {
                     </button>
                   </div>
                 ) : (
-                  <>
-                    <h1 className="text-xl font-bold text-base-content truncate flex-shrink-0 max-w-[200px]">
-                      {isFolderMode ? currentFile : 'My Tasks'}
-                    </h1>
-                    <button 
-                      onClick={() => setIsSearchOpen(true)}
-                      className="btn btn-ghost btn-xs btn-circle text-base-content/40 hover:text-primary"
-                      title="Search"
-                    >
-                      <Search size={18} />
-                    </button>
-                  </>
+                  <button 
+                    onClick={() => setIsSearchOpen(true)}
+                    className="btn btn-ghost btn-xs btn-square text-base-content/60 hover:text-primary"
+                    title="Search"
+                  >
+                    <Search size={18} />
+                  </button>
                 )}
-
                 <button
                   onClick={() => {
                     updateMarkdown(markdown + '\n\n# New Section\n');
                   }}
-                  className="btn btn-ghost btn-xs btn-circle text-base-content/40 hover:text-primary tooltip tooltip-right"
-                  data-tip="Add Section"
+                  className="btn btn-ghost btn-xs btn-square text-base-content/60 hover:text-primary"
+                  title="Add Section"
                 >
                   <Heading size={18} />
                 </button>
+
+                <button 
+                  onClick={() => setShowCompleted(!showCompleted)}
+                  className="btn btn-xs btn-ghost btn-square text-base-content/60 hover:text-primary"
+                  title={showCompleted ? 'Hide Done' : 'Show Done'}
+                >
+                  {showCompleted ? <Eye size={18} /> : <EyeOff size={18} />}
+                </button>
               </div>
-              <button 
-                onClick={() => setShowCompleted(!showCompleted)}
-                className="btn btn-xs btn-ghost gap-1.5 text-base-content/60 hover:text-primary font-normal flex-shrink-0"
-              >
-                {showCompleted ? <Eye size={14} /> : <EyeOff size={14} />}
-                {showCompleted ? 'Hide Done' : 'Show Done'}
-              </button>
             </div>
 
             {isLoading ? (
