@@ -16,3 +16,5 @@
 - [x] Launch the Project
 
 - [x] Ensure Documentation is Complete
+
+- [ ] Always keep the README.md up to date with the latest features and changes.

@@ -10,6 +10,7 @@ export interface Task {
   completed: boolean;
   type?: 'task' | 'header' | 'empty';
   description?: string;
+  tags?: string[];
 }
 
 const createProcessor = () => unified()
@@ -79,7 +80,8 @@ export const parseTasks = (markdown: string): Task[] => {
           id,
           text: '',
           completed: false,
-          type: 'empty'
+          type: 'empty',
+          tags: []
         });
       }
     }
@@ -88,6 +90,14 @@ export const parseTasks = (markdown: string): Task[] => {
       // Generate a stable-ish ID based on content and position (for demo purposes)
       const id = `${node.position?.start.line}-${text.substring(0, 10)}`;
       
+      // Extract tags: matches #tag but not \#tag
+      const tags: string[] = [];
+      const tagRegex = /(?<!\\)#([a-zA-Z0-9_]+)/g;
+      let match;
+      while ((match = tagRegex.exec(text)) !== null) {
+        tags.push(match[1]);
+      }
+
       // Check for description (blockquote)
       let description = '';
       if (node.children && node.children.length > 1) {
@@ -112,7 +122,8 @@ export const parseTasks = (markdown: string): Task[] => {
         text,
         completed: checked,
         type: 'task',
-        description: description || undefined
+        description: description || undefined,
+        tags
       });
     }
     

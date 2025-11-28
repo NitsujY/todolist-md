@@ -190,8 +190,15 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
 
   // Helper to clean text for display (remove plugin syntax like due:YYYY-MM-DD)
   const getDisplayText = (text: string) => {
-    const processed = text.replace(/due:\d{4}-\d{2}-\d{2}/g, '').trim();
+    let processed = text.replace(/due:\d{4}-\d{2}-\d{2}/g, '').trim();
     
+    // Tag processing: Replace #tag with link format for custom rendering
+    // But ignore \#tag (escaped)
+    processed = processed.replace(/(?<!\\)#([a-zA-Z0-9_]+)/g, '[#$1](tag:$1)');
+    
+    // Unescape \# to #
+    processed = processed.replace(/\\#/g, '#');
+
     // Auto-linkify domains without protocol (e.g. google.com)
     // Matches common TLDs, avoids existing links or protocols
     const urlRegex = /(^|\s)(?!https?:\/\/)(?!\[)((?:www\.|[\w-]+\.)+(?:com|org|net|io|gov|edu|co|me|app|dev|xyz))(?=\s|$)/gi;
@@ -368,15 +375,26 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
                 components={{ 
                   p: ({children}) => <span className="m-0 p-0">{children}</span>,
                   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                  a: ({node, ...props}) => (
-                    <a 
-                      {...props} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
-                      className="text-primary hover:underline cursor-pointer relative z-10"
-                      onClick={(e) => e.stopPropagation()} 
-                    />
-                  )
+                  a: ({node, ...props}) => {
+                    const href = props.href || '';
+                    if (href.startsWith('tag:')) {
+                      const tag = href.replace('tag:', '');
+                      return (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary mx-0.5 select-none">
+                          #{tag}
+                        </span>
+                      );
+                    }
+                    return (
+                      <a 
+                        {...props} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-primary hover:underline cursor-pointer relative z-10"
+                        onClick={(e) => e.stopPropagation()} 
+                      />
+                    );
+                  }
                 }}
               >
                 {getDisplayText(task.text)}

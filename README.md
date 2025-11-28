@@ -1,6 +1,6 @@
 # Serverless, Plugin-First Markdown Todo App
 
-A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (SPA) using Markdown as the data source.
+A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (SPA) using Markdown as the data source. **This app is designed to work primarily with local files or remote markdown sources, giving you full control over your data without relying on a proprietary database.**
 
 ## Tech Stack
 
@@ -62,3 +62,6 @@ The app parses standard Markdown to generate the task list. Here is how it works
     - `# Section Name` or `## Section Name`
 - **Descriptions**: Use blockquotes immediately after a task to add a description.
     - `> This is a note about the task`
+- **Tags**: Use hash symbols to tag tasks.
+    - `- [ ] Buy milk #groceries #urgent`
+    - Use `\#` to escape a hash symbol if you don't want a tag (e.g. `\#1`).
