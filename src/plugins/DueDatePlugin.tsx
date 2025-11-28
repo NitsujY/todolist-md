@@ -4,6 +4,7 @@ import type { Plugin, PluginAPI } from './pluginEngine';
 export class DueDatePlugin implements Plugin {
   name = 'DueDate';
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onInit(_api: PluginAPI) {
     // No actions needed for now
   }

@@ -129,6 +129,7 @@ export const toggleTaskInMarkdown = (markdown: string, taskId: string): string =
   const processor = createProcessor();
   const tree = processor.parse(markdown) as Root;
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const visit = (node: any) => {
     if (node.type === 'listItem') {
       let isTask = false;
@@ -141,6 +142,7 @@ export const toggleTaskInMarkdown = (markdown: string, taskId: string): string =
       if (node.children && node.children.length > 0) {
         const p = node.children[0];
         if (p.type === 'paragraph' && p.children && p.children.length > 0) {
+           // eslint-disable-next-line @typescript-eslint/no-explicit-any
            text = p.children.map((c: any) => c.value || '').join('');
         }
       }

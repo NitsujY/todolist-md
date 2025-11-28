@@ -17,10 +17,15 @@ interface TaskItemProps {
   onDelete?: (id: string) => void;
   showCompleted: boolean;
   autoFocus?: boolean;
+  compact?: boolean;
+  fontSize?: 'small' | 'normal' | 'large' | 'xl';
 }
 
-export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddNext, onDelete, showCompleted, autoFocus }: TaskItemProps) {
-  const [isVisible, setIsVisible] = useState(true);
+export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddNext, onDelete, showCompleted, autoFocus, compact, fontSize = 'normal' }: TaskItemProps) {
+  const [isVisible, setIsVisible] = useState(() => {
+    if (task.completed && !showCompleted) return false;
+    return true;
+  });
   const [isAnimating, setIsAnimating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(task.text);
@@ -71,6 +76,9 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
 
   useEffect(() => {
     if (task.completed && !showCompleted) {
+      // If already hidden (initial render case handled by useState), don't animate
+      if (!isVisible) return;
+
       // Start exit animation
       const timer = setTimeout(() => {
         setIsAnimating(true);
@@ -182,7 +190,36 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
 
   // Helper to clean text for display (remove plugin syntax like due:YYYY-MM-DD)
   const getDisplayText = (text: string) => {
-    return text.replace(/due:\d{4}-\d{2}-\d{2}/g, '').trim();
+    const processed = text.replace(/due:\d{4}-\d{2}-\d{2}/g, '').trim();
+    
+    // Auto-linkify domains without protocol (e.g. google.com)
+    // Matches common TLDs, avoids existing links or protocols
+    const urlRegex = /(^|\s)(?!https?:\/\/)(?!\[)((?:www\.|[\w-]+\.)+(?:com|org|net|io|gov|edu|co|me|app|dev|xyz))(?=\s|$)/gi;
+    
+    return processed.replace(urlRegex, (_match, prefix, url) => {
+      return `${prefix}[${url}](https://${url})`;
+    });
+  };
+
+  // Helper to get font size class
+  const getFontSizeClass = () => {
+    switch (fontSize) {
+      case 'small': return 'text-xs';
+      case 'normal': return 'text-sm';
+      case 'large': return 'text-base';
+      case 'xl': return 'text-lg';
+      default: return 'text-base';
+    }
+  };
+
+  const getHeaderFontSizeClass = () => {
+    switch (fontSize) {
+      case 'small': return 'text-sm';
+      case 'normal': return 'text-base';
+      case 'large': return 'text-lg';
+      case 'xl': return 'text-xl';
+      default: return 'text-lg';
+    }
   };
 
   if (!isVisible) return null;
@@ -193,7 +230,8 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
         ref={setNodeRef}
         style={style}
         className={`
-          group flex items-center gap-3 p-3 pt-6 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
+          group flex items-center gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
+          ${compact ? 'p-1 pt-2' : 'p-3 pt-6'}
           ${isDragging ? 'opacity-50 bg-base-200' : ''}
         `}
       >
@@ -207,12 +245,12 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
             onChange={(e) => setEditText(e.target.value)}
             onKeyDown={handleKeyDown}
             onBlur={handleBlur}
-            className="flex-1 bg-transparent border-none outline-none text-xl font-bold text-base-content p-0"
+            className={`flex-1 bg-transparent border-none outline-none font-bold text-base-content p-0 ${getHeaderFontSizeClass()}`}
           />
         ) : (
           <h2 
             onClick={() => setIsEditing(true)}
-            className="text-xl font-bold text-base-content flex-1 cursor-text"
+            className={`font-bold text-base-content flex-1 cursor-text ${getHeaderFontSizeClass()}`}
           >
             {getDisplayText(task.text)}
           </h2>
@@ -235,7 +273,8 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
         style={style}
         onClick={() => setIsEditing(true)}
         className={`
-          group flex items-center gap-3 p-2 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
+          group flex items-center gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
+          ${compact ? 'p-0.5' : 'p-2'}
           ${isDragging ? 'opacity-50 bg-base-200' : ''}
         `}
       >
@@ -254,7 +293,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
             onKeyDown={handleKeyDown}
             onBlur={handleBlur}
             rows={1}
-            className="flex-1 bg-transparent border-none outline-none text-base-content font-medium p-0 resize-none overflow-hidden leading-normal"
+            className={`flex-1 bg-transparent border-none outline-none text-base-content font-medium p-0 resize-none overflow-hidden leading-normal ${getFontSizeClass()}`}
             autoFocus
           />
         ) : (
@@ -269,7 +308,8 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
       ref={setNodeRef}
       style={style}
       className={`
-        group flex items-center gap-3 p-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
+        group flex items-center gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
+        ${compact ? 'p-1' : 'p-3'}
         ${isAnimating ? 'opacity-0 -translate-y-4 max-h-0 overflow-hidden py-0 border-none' : 'opacity-100 max-h-24'}
         ${isDragging ? 'opacity-50 bg-base-200' : ''}
       `}
@@ -300,7 +340,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
                 onKeyDown={handleKeyDown}
                 onBlur={handleBlur}
                 rows={1}
-                className="flex-1 bg-transparent border-none outline-none text-base-content font-medium p-0 resize-none overflow-hidden leading-normal w-full"
+                className={`flex-1 bg-transparent border-none outline-none text-base-content font-medium p-0 resize-none overflow-hidden leading-normal w-full ${getFontSizeClass()}`}
               />
               {/* Action Bar */}
               <div className="flex gap-2 mt-2">
@@ -321,9 +361,24 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
           ) : (
             <div 
               onClick={() => setIsEditing(true)}
-              className={`flex-1 break-words text-lg cursor-text select-none prose prose-sm max-w-none min-h-[1.5em] ${task.completed ? 'line-through text-base-content/30' : 'text-base-content'}`}
+              className={`flex-1 break-words cursor-text select-none prose prose-sm max-w-none min-h-[1.5em] ${task.completed ? 'line-through text-base-content/30' : 'text-base-content'} ${compact ? 'leading-snug' : ''} ${getFontSizeClass()}`}
             >
-              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{ p: ({children}) => <span className="m-0 p-0">{children}</span> }}>
+              <ReactMarkdown 
+                remarkPlugins={[remarkGfm, remarkBreaks]} 
+                components={{ 
+                  p: ({children}) => <span className="m-0 p-0">{children}</span>,
+                  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                  a: ({node, ...props}) => (
+                    <a 
+                      {...props} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="text-primary hover:underline cursor-pointer relative z-10"
+                      onClick={(e) => e.stopPropagation()} 
+                    />
+                  )
+                }}
+              >
                 {getDisplayText(task.text)}
               </ReactMarkdown>
             </div>
@@ -368,7 +423,21 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
                 onClick={() => setIsEditingDescription(true)}
                 className="text-sm text-base-content/70 prose prose-sm max-w-none cursor-text border-l-2 border-base-300 pl-3 py-1"
               >
-                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                <ReactMarkdown 
+                  remarkPlugins={[remarkGfm, remarkBreaks]}
+                  components={{
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    a: ({node, ...props}) => (
+                      <a 
+                        {...props} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-primary hover:underline cursor-pointer"
+                        onClick={(e) => e.stopPropagation()} 
+                      />
+                    )
+                  }}
+                >
                   {task.description || ''}
                 </ReactMarkdown>
               </div>

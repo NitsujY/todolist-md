@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useStore } from 'zustand';
 import { useTodoStore } from './store/useTodoStore';
 import { pluginRegistry } from './plugins/pluginEngine';
-import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading } from 'lucide-react';
+import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading, Plus, Search, X } from 'lucide-react';
 import { ThemePlugin } from './plugins/ThemePlugin';
 import { DueDatePlugin } from './plugins/DueDatePlugin';
 import { TaskItem } from './components/TaskItem';
@@ -41,7 +41,16 @@ function App() {
     updateTaskDescription,
     renameFile,
     reorderTasks,
-    insertTaskAfter
+    insertTaskAfter,
+    createFile,
+    restoreSession,
+    requiresPermission,
+    restorableName,
+    grantPermission,
+    compactMode,
+    setCompactMode,
+    fontSize,
+    setFontSize
   } = useTodoStore();
 
   // Access temporal store for undo/redo
@@ -55,6 +64,39 @@ function App() {
   const [, setPluginUpdate] = useState(0); // Force re-render for plugins
   const [currentTheme, setCurrentTheme] = useState<'light' | 'dark' | 'auto'>('auto');
   const [showSidebar, setShowSidebar] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useState(256);
+  const [isResizing, setIsResizing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  const startResizing = useCallback(() => {
+    setIsResizing(true);
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  const resize = useCallback(
+    (mouseMoveEvent: MouseEvent) => {
+      if (isResizing) {
+        const newWidth = mouseMoveEvent.clientX;
+        if (newWidth >= 200 && newWidth <= 600) {
+          setSidebarWidth(newWidth);
+        }
+      }
+    },
+    [isResizing]
+  );
+
+  useEffect(() => {
+    window.addEventListener("mousemove", resize);
+    window.addEventListener("mouseup", stopResizing);
+    return () => {
+      window.removeEventListener("mousemove", resize);
+      window.removeEventListener("mouseup", stopResizing);
+    };
+  }, [resize, stopResizing]);
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -85,7 +127,7 @@ function App() {
   }, [undo, redo]);
 
   useEffect(() => {
-    loadTodos();
+    restoreSession();
     
     // Initialize theme state
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'auto';
@@ -106,7 +148,7 @@ function App() {
     pluginRegistry.register(new ThemePlugin(), true); // System plugin
     // Register Due Date Plugin
     pluginRegistry.register(new DueDatePlugin(), true); // System plugin
-  }, [loadTodos]);
+  }, [loadTodos, restoreSession]);
 
   useEffect(() => {
     setRawMarkdown(markdown);
@@ -168,6 +210,13 @@ function App() {
     }
   };
 
+  const handleCreateFile = async () => {
+    const filename = prompt('Enter filename for new list:', 'new-list.md');
+    if (filename) {
+      await createFile(filename);
+    }
+  };
+
   const handleRenameFile = async (oldName: string) => {
     const newName = prompt('Enter new file name:', oldName);
     if (newName && newName !== oldName) {
@@ -211,9 +260,33 @@ function App() {
     }
   }, [tasks, focusId]);
 
+  const filteredTasks = tasks.filter(t => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      t.text.toLowerCase().includes(query) || 
+      (t.description && t.description.toLowerCase().includes(query))
+    );
+  });
+
   return (
     <div className="flex flex-col h-screen bg-base-200 font-sans overflow-hidden">
       
+      {requiresPermission && (
+        <div className="bg-warning text-warning-content px-4 py-2 text-sm flex items-center justify-between shadow-md z-[60]">
+          <div className="flex items-center gap-2">
+            <HardDrive size={16} />
+            <span className="font-medium">Resume working in "{restorableName}"?</span>
+          </div>
+          <button 
+            onClick={() => grantPermission()} 
+            className="btn btn-sm btn-ghost bg-warning-content/10 hover:bg-warning-content/20 border-0 text-warning-content"
+          >
+            Allow Access
+          </button>
+        </div>
+      )}
+
       {/* Top Navigation Bar */}
       <div className="navbar bg-base-100 shadow-sm z-50 px-4 border-b border-base-300 h-14 min-h-0">
         <div className="flex-none">
@@ -255,14 +328,35 @@ function App() {
         
         {/* Sidebar */}
         {isFolderMode && showSidebar && (
-          <aside className="w-64 bg-base-100 border-r border-base-300 flex flex-col overflow-hidden transition-all duration-300">
+          <aside 
+            style={{ width: sidebarWidth }}
+            className="bg-base-100 border-r border-base-300 flex flex-col overflow-hidden relative group/sidebar flex-shrink-0"
+          >
+            {/* Resizer Handle */}
+            <div
+              className="absolute right-0 top-0 w-1 h-full cursor-col-resize hover:bg-primary/50 active:bg-primary z-50 transition-colors"
+              onMouseDown={startResizing}
+            />
+
             <div className="p-4 font-bold text-sm text-base-content/50 uppercase tracking-wider flex justify-between items-center">
               <span>Files</span>
-              <button onClick={() => openFileOrFolder('folder')} className="btn btn-ghost btn-xs btn-square" title="Open Folder">
-                <FolderOpen size={14} />
-              </button>
+              <div className="flex gap-1">
+                <button onClick={handleCreateFile} className="btn btn-ghost btn-xs btn-square" title="New File">
+                  <Plus size={14} />
+                </button>
+                <button onClick={() => openFileOrFolder('folder')} className="btn btn-ghost btn-xs btn-square" title="Open Folder">
+                  <FolderOpen size={14} />
+                </button>
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              <button 
+                onClick={handleCreateFile}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-base-content/60 hover:text-primary hover:bg-base-200 rounded-lg transition-colors mb-2 border border-dashed border-base-300"
+              >
+                <Plus size={14} />
+                <span>New File...</span>
+              </button>
               {fileList.map(file => (
                 <div key={file} className="group flex items-center gap-1 pr-2 rounded-lg hover:bg-base-200 transition-colors">
                   <button
@@ -289,15 +383,54 @@ function App() {
         )}
 
         {/* Main Task View */}
-        <main className="flex-1 overflow-hidden w-full relative p-0 sm:p-4 bg-base-200/50">
+        <main className={`flex-1 overflow-hidden w-full relative p-0 ${compactMode ? 'sm:p-2' : 'sm:p-4'} bg-base-200/50`}>
           <div className="h-full max-w-5xl mx-auto flex flex-col bg-base-100 sm:rounded-xl sm:shadow-sm sm:border border-base-300 overflow-hidden">
             
             {/* Header & Controls */}
-            <div className="flex justify-between items-center p-4 border-b border-base-200 bg-base-50/50">
-              <div className="flex items-center gap-3 overflow-hidden">
-                <h1 className="text-xl font-bold text-base-content truncate">
-                  {isFolderMode ? currentFile : 'My Tasks'}
-                </h1>
+            <div className={`flex justify-between items-center border-b border-base-200 bg-base-50/50 ${compactMode ? 'p-2 h-[56px]' : 'p-4 h-[72px]'}`}>
+              <div className="flex items-center gap-3 overflow-hidden flex-1 mr-4">
+                {isSearchOpen ? (
+                  <div className="relative flex-1 max-w-md animate-in fade-in slide-in-from-left-2 duration-200">
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40" />
+                    <input 
+                      autoFocus
+                      type="text" 
+                      placeholder="Search tasks..." 
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          setSearchQuery('');
+                          setIsSearchOpen(false);
+                        }
+                      }}
+                      className="input input-sm input-bordered w-full pl-9 pr-8 bg-base-100 focus:outline-none focus:border-primary/50"
+                    />
+                    <button 
+                      onClick={() => {
+                        setSearchQuery('');
+                        setIsSearchOpen(false);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 btn btn-ghost btn-xs btn-circle text-base-content/40 hover:text-base-content"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <h1 className="text-xl font-bold text-base-content truncate flex-shrink-0 max-w-[200px]">
+                      {isFolderMode ? currentFile : 'My Tasks'}
+                    </h1>
+                    <button 
+                      onClick={() => setIsSearchOpen(true)}
+                      className="btn btn-ghost btn-xs btn-circle text-base-content/40 hover:text-primary"
+                      title="Search"
+                    >
+                      <Search size={18} />
+                    </button>
+                  </>
+                )}
+
                 <button
                   onClick={() => {
                     updateMarkdown(markdown + '\n\n# New Section\n');
@@ -305,7 +438,7 @@ function App() {
                   className="btn btn-ghost btn-xs btn-circle text-base-content/40 hover:text-primary tooltip tooltip-right"
                   data-tip="Add Section"
                 >
-                  <Heading size={16} />
+                  <Heading size={18} />
                 </button>
               </div>
               <button 
@@ -340,10 +473,32 @@ function App() {
               <div className="flex flex-col flex-1 overflow-hidden relative">
                 {/* Task List */}
                 <div className="flex-1 overflow-y-auto">
-                  {tasks.length === 0 ? (
+                  {filteredTasks.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-base-content/40">
-                      <Package size={48} className="mb-2 opacity-20" />
-                      <p>No tasks found</p>
+                      {tasks.length === 0 ? (
+                        isFolderMode && fileList.length === 0 ? (
+                          <>
+                            <FolderOpen size={48} className="mb-2 opacity-20" />
+                            <p className="mb-4">This folder is empty</p>
+                            <button onClick={handleCreateFile} className="btn btn-primary gap-2">
+                              <Plus size={16} /> Create New File
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <Package size={48} className="mb-2 opacity-20" />
+                            <p>No tasks found</p>
+                          </>
+                        )
+                      ) : (
+                        <>
+                          <Search size={48} className="mb-2 opacity-20" />
+                          <p>No matching tasks found</p>
+                          <button onClick={() => setSearchQuery('')} className="btn btn-ghost btn-sm mt-2">
+                            Clear Search
+                          </button>
+                        </>
+                      )}
                     </div>
                   ) : (
                     <DndContext 
@@ -353,11 +508,11 @@ function App() {
                       onDragEnd={handleDragEnd}
                     >
                       <SortableContext 
-                        items={tasks.map(t => t.id)}
+                        items={filteredTasks.map(t => t.id)}
                         strategy={verticalListSortingStrategy}
                       >
                         <div className="flex flex-col divide-y divide-base-200 pb-20">
-                          {tasks.map(task => (
+                          {filteredTasks.map(task => (
                             <TaskItem 
                               key={task.id} 
                               task={task} 
@@ -368,6 +523,8 @@ function App() {
                               onDelete={deleteTask}
                               showCompleted={showCompleted}
                               autoFocus={task.id === targetFocusId}
+                              compact={compactMode}
+                              fontSize={fontSize}
                             />
                           ))}
                         </div>
@@ -426,6 +583,13 @@ function App() {
                   >
                     <Cloud size={16} /> Cloud (Mock)
                   </button>
+                  <button 
+                    disabled
+                    className="btn btn-sm justify-start btn-ghost opacity-50 cursor-not-allowed"
+                    title="Requires Google API Configuration"
+                  >
+                    <Cloud size={16} /> Google Drive (Coming Soon)
+                  </button>
                 </div>
               </div>
 
@@ -453,6 +617,44 @@ function App() {
                   >
                     Auto
                   </button>
+                </div>
+
+                <div className="mt-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-medium">Font Size</span>
+                    <span className="text-xs text-base-content/50 capitalize">{fontSize}</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="0" 
+                    max="3" 
+                    value={fontSize === 'small' ? 0 : fontSize === 'normal' ? 1 : fontSize === 'large' ? 2 : 3} 
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      const sizes: ('small' | 'normal' | 'large' | 'xl')[] = ['small', 'normal', 'large', 'xl'];
+                      setFontSize(sizes[val]);
+                    }}
+                    className="range range-primary range-xs" 
+                    step="1" 
+                  />
+                  <div className="w-full flex justify-between text-xs px-2 mt-1 text-base-content/50">
+                    <span>S</span>
+                    <span>M</span>
+                    <span>L</span>
+                    <span>XL</span>
+                  </div>
+                </div>
+                
+                <div className="form-control mt-4">
+                  <label className="label cursor-pointer justify-start gap-3">
+                    <input 
+                      type="checkbox" 
+                      className="toggle toggle-primary toggle-sm" 
+                      checked={compactMode} 
+                      onChange={(e) => setCompactMode(e.target.checked)}
+                    />
+                    <span className="label-text font-medium">Compact Mode</span>
+                  </label>
                 </div>
               </div>
 

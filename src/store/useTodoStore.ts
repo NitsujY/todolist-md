@@ -14,8 +14,12 @@ interface TodoState {
   fileList: string[];
   currentFile: string;
   isFolderMode: boolean;
+  compactMode: boolean;
+  fontSize: 'small' | 'normal' | 'large' | 'xl';
   
   // Actions
+  setFontSize: (size: 'small' | 'normal' | 'large' | 'xl') => void;
+  setCompactMode: (compact: boolean) => void;
   setStorage: (adapterName: 'local' | 'cloud' | 'fs') => void;
   loadTodos: () => Promise<void>;
   toggleTask: (taskId: string) => Promise<void>;
@@ -29,6 +33,11 @@ interface TodoState {
   openFileOrFolder: (type: 'file' | 'folder') => Promise<void>;
   selectFile: (filename: string) => Promise<void>;
   renameFile: (oldName: string, newName: string) => Promise<void>;
+  createFile: (filename: string) => Promise<void>;
+  restoreSession: () => Promise<void>;
+  grantPermission: () => Promise<void>;
+  requiresPermission: boolean;
+  restorableName: string;
 }
 
 const adapters = {
@@ -47,6 +56,14 @@ export const useTodoStore = create<TodoState>()(
   fileList: [],
   currentFile: 'todo.md',
   isFolderMode: false,
+  compactMode: true,
+  fontSize: 'normal',
+  requiresPermission: false,
+  restorableName: '',
+
+  setFontSize: (size) => set({ fontSize: size }),
+
+  setCompactMode: (compact) => set({ compactMode: compact }),
 
   setStorage: (adapterName) => {
     set({ storage: adapters[adapterName] });
@@ -84,6 +101,7 @@ export const useTodoStore = create<TodoState>()(
 
   selectFile: async (filename) => {
     set({ currentFile: filename, isLoading: true });
+    localStorage.setItem('lastOpenedFile', filename);
     const { storage } = get();
     const content = await storage.read(filename);
     const markdown = content || '';
@@ -219,8 +237,95 @@ export const useTodoStore = create<TodoState>()(
         set({ currentFile: newName });
       }
     }
-  }
-}), {
-  partialize: (state) => ({ markdown: state.markdown }), // Only track markdown history
-  limit: 100
-}));
+  },
+
+  createFile: async (filename) => {
+    const { storage, isFolderMode } = get();
+    if (!isFolderMode) return;
+    
+    // Ensure extension
+    if (!filename.endsWith('.md')) {
+      filename += '.md';
+    }
+    
+    await storage.write(filename, '# New List\n\n- [ ] New task');
+    const files = await storage.list('');
+    set({ fileList: files });
+    get().selectFile(filename);
+  },
+  restoreSession: async () => {
+    const fsAdapter = adapters.fs;
+    const mode = await fsAdapter.restore();
+    
+    if (mode) {
+      const status = await fsAdapter.checkPermissionStatus();
+      
+      if (status === 'granted') {
+        set({ storage: fsAdapter, isFolderMode: mode === 'folder' });
+        if (mode === 'folder') {
+          try {
+            const files = await fsAdapter.list('');
+            set({ fileList: files });
+            
+            const lastFile = localStorage.getItem('lastOpenedFile');
+            if (lastFile && files.includes(lastFile)) {
+              get().selectFile(lastFile);
+            } else if (files.length > 0) {
+              get().selectFile(files[0]);
+            } else {
+              set({ markdown: '', tasks: [] });
+            }
+          } catch (e) {
+            console.error('Failed to restore folder session', e);
+          }
+        } else {
+          get().loadTodos();
+        }
+      } else {
+        // Need permission
+        set({ 
+          requiresPermission: true, 
+          restorableName: fsAdapter.getHandleName(),
+          storage: fsAdapter, // Set storage so we can use it later
+          isFolderMode: mode === 'folder'
+        });
+      }
+    } else {
+      get().loadTodos();
+    }
+  },
+
+  grantPermission: async () => {
+    const { storage, isFolderMode } = get();
+    if (storage instanceof FileSystemAdapter) {
+      const granted = await storage.requestPermissionAccess();
+      if (granted) {
+        set({ requiresPermission: false });
+        if (isFolderMode) {
+          const files = await storage.list('');
+          set({ fileList: files });
+          
+          const lastFile = localStorage.getItem('lastOpenedFile');
+          if (lastFile && files.includes(lastFile)) {
+            get().selectFile(lastFile);
+          } else if (files.length > 0) {
+            get().selectFile(files[0]);
+          } else {
+            set({ markdown: '', tasks: [] });
+          }
+        } else {
+          get().loadTodos();
+        }
+      }
+    }
+  },
+    }),
+    {
+      partialize: (state) => ({ 
+        markdown: state.markdown,
+        compactMode: state.compactMode
+      }), // Only track markdown history and compact mode
+      limit: 100
+    }
+  )
+);
