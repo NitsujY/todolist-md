@@ -5,6 +5,7 @@ import { pluginRegistry } from './plugins/pluginEngine';
 import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading, Plus, Search, X, Tag } from 'lucide-react';
 import { ThemePlugin } from './plugins/ThemePlugin';
 import { DueDatePlugin } from './plugins/DueDatePlugin';
+import { GamifyPlugin } from './plugins/gamify-plugin/GamifyPlugin';
 import { TaskItem } from './components/TaskItem';
 import {
   DndContext, 
@@ -98,6 +99,42 @@ function App() {
     [isResizing]
   );
 
+  return (
+    <DndContext 
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <div className={`min-h-screen bg-base-100 text-base-content font-sans transition-colors duration-300 ${fontSize}`}>
+        {/* Sidebar */}
+        <div 
+          className={`fixed inset-y-0 left-0 z-30 bg-base-200 border-r border-base-300 transform transition-transform duration-300 ease-in-out ${
+            showSidebar ? 'translate-x-0' : '-translate-x-full'
+          }`}
+          style={{ width: sidebarWidth }}
+        >
+          <div className="flex flex-col h-full">
+            <div className="p-4 border-b border-base-300 flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-xl text-primary">
+                <FileText className="w-6 h-6" />
+                <span>TodoMD</span>
+              </div>
+              <button onClick={() => setShowSidebar(false)} className="btn btn-ghost btn-sm btn-square md:hidden">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              {/* Plugin Dashboards */}
+              {pluginRegistry.getDashboards().map((dashboard, i) => (
+                <div key={i} className="mb-6">
+                  {dashboard}
+                </div>
+              ))}
+
+              {/* Storage Selection */}
+
   useEffect(() => {
     window.addEventListener("mousemove", resize);
     window.addEventListener("mouseup", stopResizing);
@@ -157,6 +194,8 @@ function App() {
     pluginRegistry.register(new ThemePlugin(), true); // System plugin
     // Register Due Date Plugin
     pluginRegistry.register(new DueDatePlugin(), true); // System plugin
+    // Register Gamify Plugin
+    pluginRegistry.register(new GamifyPlugin(), true);
   }, [loadTodos, restoreSession]);
 
   useEffect(() => {

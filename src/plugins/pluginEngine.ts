@@ -6,6 +6,8 @@ export interface Plugin {
   onInit?: (api: PluginAPI) => void;
   onTaskRender?: (task: Task) => ReactNode; // Returns extra UI to render next to task
   transformMarkdown?: (markdown: string) => string;
+  onTaskComplete?: (task: Task) => void;
+  renderDashboard?: () => ReactNode;
 }
 
 export interface PluginMetadata {
@@ -81,6 +83,20 @@ class PluginRegistry {
       .reduce((md, meta) => {
         return meta.instance.transformMarkdown ? meta.instance.transformMarkdown(md) : md;
       }, markdown);
+  }
+
+  notifyTaskComplete(task: Task) {
+    this.plugins.forEach(meta => {
+      if (meta.enabled && meta.instance.onTaskComplete) {
+        meta.instance.onTaskComplete(task);
+      }
+    });
+  }
+
+  getDashboards(): ReactNode[] {
+    return Array.from(this.plugins.values())
+      .filter(meta => meta.enabled && meta.instance.renderDashboard)
+      .map(meta => meta.instance.renderDashboard!());
   }
 }
 

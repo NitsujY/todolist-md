@@ -5,6 +5,7 @@ import { LocalStorageAdapter } from '../adapters/LocalStorageAdapter';
 import { MockCloudAdapter } from '../adapters/MockCloudAdapter';
 import { FileSystemAdapter } from '../adapters/FileSystemAdapter';
 import { parseTasks, toggleTaskInMarkdown, addTaskToMarkdown, updateTaskTextInMarkdown, insertTaskAfterInMarkdown, reorderTaskInMarkdown, deleteTaskInMarkdown, updateTaskDescriptionInMarkdown, type Task } from '../lib/MarkdownParser';
+import { pluginRegistry } from '../plugins/pluginEngine';
 
 interface TodoState {
   markdown: string;
