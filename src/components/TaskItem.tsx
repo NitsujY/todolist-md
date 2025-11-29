@@ -237,7 +237,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
         ref={setNodeRef}
         style={style}
         className={`
-          group flex items-center gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
+          task-item group flex items-center gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
           ${compact ? 'p-1 pt-2' : 'p-3 pt-6'}
           ${isDragging ? 'opacity-50 bg-base-200' : ''}
         `}
@@ -280,7 +280,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
         style={style}
         onClick={() => setIsEditing(true)}
         className={`
-          group flex items-center gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
+          task-item group flex items-center gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
           ${compact ? 'p-0.5' : 'p-2'}
           ${isDragging ? 'opacity-50 bg-base-200' : ''}
         `}
@@ -315,7 +315,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
       ref={setNodeRef}
       style={style}
       className={`
-        group flex items-center gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
+        task-item group flex items-center gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
         ${compact ? 'p-1' : 'p-3'}
         ${isAnimating ? 'opacity-0 -translate-y-4 max-h-0 overflow-hidden py-0 border-none' : 'opacity-100 max-h-24'}
         ${isDragging ? 'opacity-50 bg-base-200' : ''}

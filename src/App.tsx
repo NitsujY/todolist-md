@@ -5,6 +5,8 @@ import { pluginRegistry } from './plugins/pluginEngine';
 import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading, Plus, Search, X, Tag } from 'lucide-react';
 import { ThemePlugin } from './plugins/ThemePlugin';
 import { DueDatePlugin } from './plugins/DueDatePlugin';
+import { GamifyPlugin } from './plugins/gamify-plugin/GamifyPlugin';
+import { FocusModePlugin } from './plugins/FocusModePlugin';
 import { TaskItem } from './components/TaskItem';
 import {
   DndContext, 
@@ -90,7 +92,10 @@ function App() {
     (mouseMoveEvent: MouseEvent) => {
       if (isResizing) {
         const newWidth = mouseMoveEvent.clientX;
-        if (newWidth >= 200 && newWidth <= 600) {
+        if (newWidth < 150) {
+          setShowSidebar(false);
+          setIsResizing(false);
+        } else if (newWidth >= 200 && newWidth <= 600) {
           setSidebarWidth(newWidth);
         }
       }
@@ -157,6 +162,18 @@ function App() {
     pluginRegistry.register(new ThemePlugin(), true); // System plugin
     // Register Due Date Plugin
     pluginRegistry.register(new DueDatePlugin(), true); // System plugin
+    
+    // Register Focus Mode Plugin
+    pluginRegistry.register(new FocusModePlugin(), false);
+
+    // Register Gamify Plugin (Conditional)
+    if (import.meta.env.VITE_ENABLE_GAMIFY !== 'false') {
+      const gamifyPlugin = new GamifyPlugin();
+      pluginRegistry.register(gamifyPlugin, false); // false = not system plugin
+    }
+    
+    // Force re-render to show plugins
+    setPluginUpdate(prev => prev + 1);
   }, [loadTodos, restoreSession]);
 
   useEffect(() => {
@@ -185,10 +202,7 @@ function App() {
       setActiveStorage(type);
       setStorage(type);
     }
-    
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
-    }
+    (document.activeElement as HTMLElement)?.blur();
   };
 
   const handleSaveRaw = () => {
@@ -351,15 +365,26 @@ function App() {
               onMouseDown={startResizing}
             />
 
+            {/* Plugin Dashboards */}
+            {pluginRegistry.getDashboards().length > 0 && (
+              <div className="p-4 pb-0 space-y-4">
+                {pluginRegistry.getDashboards().map((dashboard, i) => (
+                  <div key={i}>{dashboard}</div>
+                ))}
+              </div>
+            )}
+
             <div className="p-4 font-bold text-sm text-base-content/50 uppercase tracking-wider flex justify-between items-center">
               <span>Files</span>
               <div className="flex gap-1">
                 <button onClick={handleCreateFile} className="btn btn-ghost btn-xs btn-square" title="New File">
                   <Plus size={14} />
                 </button>
-                <button onClick={() => openFileOrFolder('folder')} className="btn btn-ghost btn-xs btn-square" title="Open Folder">
-                  <FolderOpen size={14} />
-                </button>
+                {'showDirectoryPicker' in window && (
+                  <button onClick={() => openFileOrFolder('folder')} className="btn btn-ghost btn-xs btn-square" title="Open Folder">
+                    <FolderOpen size={14} />
+                  </button>
+                )}
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
@@ -493,6 +518,9 @@ function App() {
                 >
                   {showCompleted ? <Eye size={18} /> : <EyeOff size={18} />}
                 </button>
+
+                {/* Plugin Header Buttons */}
+                {pluginRegistry.renderHeaderButtons()}
               </div>
             </div>
 

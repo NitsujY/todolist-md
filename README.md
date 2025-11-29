@@ -41,11 +41,12 @@ A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (
 - **Drag & Drop**: Reorder tasks intuitively.
 - **Undo/Redo**: Mistakes are fine with full history support.
 - **Search**: Quickly find tasks across your list.
+- **Focus Mode**: Dim distractions and focus on one task at a time (via Plugin).
 - **Customizable UI**:
     - **Themes**: Light, Dark, and System preference.
     - **Compact Mode**: For when you want to see more.
     - **Font Size**: Adjustable text size.
-- **Plugin System**: Extensible architecture (includes Due Date and Priority Highlighter plugins).
+- **Plugin System**: Extensible architecture (includes Due Date, Focus Mode, and Priority Highlighter plugins).
 - **Storage Options**:
     - **Local Storage**: Quick start, data stays in browser.
     - **File System**: Edit real files on your disk.
