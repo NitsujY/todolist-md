@@ -6,6 +6,7 @@ import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, 
 import { ThemePlugin } from './plugins/ThemePlugin';
 import { DueDatePlugin } from './plugins/DueDatePlugin';
 import { GamifyPlugin } from './plugins/gamify-plugin/GamifyPlugin';
+import { FocusModePlugin } from './plugins/FocusModePlugin';
 import { TaskItem } from './components/TaskItem';
 import {
   DndContext, 
@@ -162,11 +163,17 @@ function App() {
     // Register Due Date Plugin
     pluginRegistry.register(new DueDatePlugin(), true); // System plugin
     
+    // Register Focus Mode Plugin
+    pluginRegistry.register(new FocusModePlugin(), false);
+
     // Register Gamify Plugin (Conditional)
     if (import.meta.env.VITE_ENABLE_GAMIFY !== 'false') {
       const gamifyPlugin = new GamifyPlugin();
       pluginRegistry.register(gamifyPlugin, false); // false = not system plugin
     }
+    
+    // Force re-render to show plugins
+    setPluginUpdate(prev => prev + 1);
   }, [loadTodos, restoreSession]);
 
   useEffect(() => {
@@ -511,6 +518,9 @@ function App() {
                 >
                   {showCompleted ? <Eye size={18} /> : <EyeOff size={18} />}
                 </button>
+
+                {/* Plugin Header Buttons */}
+                {pluginRegistry.renderHeaderButtons()}
               </div>
             </div>
 

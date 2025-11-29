@@ -8,6 +8,7 @@ export interface Plugin {
   transformMarkdown?: (markdown: string) => string;
   onTaskComplete?: (task: Task) => void;
   renderDashboard?: () => ReactNode;
+  renderHeaderButton?: () => ReactNode;
   onEnable?: () => void;
   onDisable?: () => void;
   defaultEnabled?: boolean;
@@ -95,6 +96,13 @@ class PluginRegistry {
     return Array.from(this.plugins.values())
       .filter(meta => meta.enabled)
       .map(meta => meta.instance.onTaskRender ? meta.instance.onTaskRender(task) : null)
+      .filter(Boolean);
+  }
+
+  renderHeaderButtons(): ReactNode[] {
+    return Array.from(this.plugins.values())
+      .filter(meta => meta.enabled)
+      .map(meta => meta.instance.renderHeaderButton ? meta.instance.renderHeaderButton() : null)
       .filter(Boolean);
   }
 
