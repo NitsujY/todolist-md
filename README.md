@@ -38,7 +38,8 @@ A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (
 
 - **Markdown-First**: Your data is just Markdown. Edit it as a list or as raw text.
 - **Local File System Access**: Open and edit local files and folders directly from your browser (Chromium-based browsers).
-- **Drag & Drop**: Reorder tasks intuitively.
+- **Nested Lists**: Support for subtasks and hierarchical organization.
+- **Drag & Drop**: Reorder tasks and subtasks intuitively. Moving a parent task moves all its children.
 - **Undo/Redo**: Mistakes are fine with full history support.
 - **Search**: Quickly find tasks across your list.
 - **Focus Mode**: Dim distractions and focus on one task at a time (via Plugin).
