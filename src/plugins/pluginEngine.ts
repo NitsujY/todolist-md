@@ -6,6 +6,12 @@ export interface Plugin {
   onInit?: (api: PluginAPI) => void;
   onTaskRender?: (task: Task) => ReactNode; // Returns extra UI to render next to task
   transformMarkdown?: (markdown: string) => string;
+  onTaskComplete?: (task: Task) => void;
+  renderDashboard?: () => ReactNode;
+  renderHeaderButton?: () => ReactNode;
+  onEnable?: () => void;
+  onDisable?: () => void;
+  defaultEnabled?: boolean;
 }
 
 export interface PluginMetadata {
@@ -29,9 +35,15 @@ class PluginRegistry {
       return;
     }
     
+    // Load persisted state
+    const savedState = localStorage.getItem(`plugin-enabled-${plugin.name}`);
+    const isEnabled = savedState !== null 
+      ? JSON.parse(savedState) 
+      : (plugin.defaultEnabled ?? true);
+
     this.plugins.set(plugin.name, {
       name: plugin.name,
-      enabled: true,
+      enabled: isEnabled,
       isSystem,
       instance: plugin
     });
@@ -44,6 +56,12 @@ class PluginRegistry {
         }
       });
     }
+    
+    // If plugin is enabled by default (or system), trigger onEnable
+    if (this.plugins.get(plugin.name)?.enabled && plugin.onEnable) {
+      plugin.onEnable();
+    }
+
     console.log(`[PluginRegistry] Plugin registered: ${plugin.name}`);
   }
 
@@ -51,7 +69,13 @@ class PluginRegistry {
     const meta = this.plugins.get(name);
     if (meta && !meta.isSystem) {
       meta.enabled = !meta.enabled;
-      // Force re-render in React by returning a new Map or triggering a listener (simplified here)
+      localStorage.setItem(`plugin-enabled-${name}`, JSON.stringify(meta.enabled));
+      
+      if (meta.enabled && meta.instance.onEnable) {
+        meta.instance.onEnable();
+      } else if (!meta.enabled && meta.instance.onDisable) {
+        meta.instance.onDisable();
+      }
     }
   }
 
@@ -75,12 +99,33 @@ class PluginRegistry {
       .filter(Boolean);
   }
 
+  renderHeaderButtons(): ReactNode[] {
+    return Array.from(this.plugins.values())
+      .filter(meta => meta.enabled)
+      .map(meta => meta.instance.renderHeaderButton ? meta.instance.renderHeaderButton() : null)
+      .filter(Boolean);
+  }
+
   runMarkdownTransformers(markdown: string): string {
     return Array.from(this.plugins.values())
       .filter(meta => meta.enabled)
       .reduce((md, meta) => {
         return meta.instance.transformMarkdown ? meta.instance.transformMarkdown(md) : md;
       }, markdown);
+  }
+
+  notifyTaskComplete(task: Task) {
+    this.plugins.forEach(meta => {
+      if (meta.enabled && meta.instance.onTaskComplete) {
+        meta.instance.onTaskComplete(task);
+      }
+    });
+  }
+
+  getDashboards(): ReactNode[] {
+    return Array.from(this.plugins.values())
+      .filter(meta => meta.enabled && meta.instance.renderDashboard)
+      .map(meta => meta.instance.renderDashboard!());
   }
 }
 
