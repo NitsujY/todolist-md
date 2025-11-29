@@ -5,7 +5,6 @@ import { pluginRegistry } from './plugins/pluginEngine';
 import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading, Plus, Search, X, Tag } from 'lucide-react';
 import { ThemePlugin } from './plugins/ThemePlugin';
 import { DueDatePlugin } from './plugins/DueDatePlugin';
-import { GamifyPlugin } from './plugins/gamify-plugin/GamifyPlugin';
 import { FocusModePlugin } from './plugins/FocusModePlugin';
 import { TaskItem } from './components/TaskItem';
 import {
@@ -168,8 +167,16 @@ function App() {
 
     // Register Gamify Plugin (Conditional)
     if (import.meta.env.VITE_ENABLE_GAMIFY !== 'false') {
-      const gamifyPlugin = new GamifyPlugin();
-      pluginRegistry.register(gamifyPlugin, false); // false = not system plugin
+      // Use glob import to make it optional at build time
+      const modules = import.meta.glob('./plugins/gamify-plugin/GamifyPlugin.tsx');
+      for (const path in modules) {
+        modules[path]().then((mod: any) => {
+          if (mod.GamifyPlugin) {
+            pluginRegistry.register(new mod.GamifyPlugin(), false);
+            setPluginUpdate(prev => prev + 1);
+          }
+        });
+      }
     }
     
     // Force re-render to show plugins

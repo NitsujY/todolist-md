@@ -1,7 +1,6 @@
 import type { Plugin, PluginAPI } from './pluginEngine';
 import { Zap } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { createRoot } from 'react-dom/client';
 
 // Helper component for the button to manage state
 const FocusButton = ({ plugin }: { plugin: FocusModePlugin }) => {
@@ -116,12 +115,5 @@ export class FocusModePlugin implements Plugin {
     this.styleElement = document.createElement('style');
     this.styleElement.textContent = css;
     document.head.appendChild(this.styleElement);
-  }
-
-  private removeStyles() {
-    if (this.styleElement) {
-      this.styleElement.remove();
-      this.styleElement = null;
-    }
   }
 }
