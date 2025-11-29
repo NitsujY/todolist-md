@@ -5,7 +5,7 @@ import { LocalStorageAdapter } from '../adapters/LocalStorageAdapter';
 import { MockCloudAdapter } from '../adapters/MockCloudAdapter';
 import { FileSystemAdapter } from '../adapters/FileSystemAdapter';
 import { GoogleDriveAdapter, type GoogleDriveConfig } from '../adapters/GoogleDriveAdapter';
-import { parseTasks, toggleTaskInMarkdown, addTaskToMarkdown, updateTaskTextInMarkdown, insertTaskAfterInMarkdown, reorderTaskInMarkdown, deleteTaskInMarkdown, updateTaskDescriptionInMarkdown, type Task } from '../lib/MarkdownParser';
+import { parseTasks, toggleTaskInMarkdown, addTaskToMarkdown, updateTaskTextInMarkdown, insertTaskAfterInMarkdown, reorderTaskInMarkdown, deleteTaskInMarkdown, updateTaskDescriptionInMarkdown, nestTaskInMarkdown, type Task } from '../lib/MarkdownParser';
 // import { pluginRegistry } from '../plugins/pluginEngine';
 
 interface TodoState {
@@ -34,6 +34,7 @@ interface TodoState {
   deleteTask: (taskId: string) => Promise<void>;
   insertTaskAfter: (taskId: string, text: string) => Promise<void>;
   reorderTasks: (activeId: string, overId: string) => Promise<void>;
+  nestTask: (activeId: string, overId: string) => Promise<void>;
   updateMarkdown: (newMarkdown: string) => Promise<void>;
   openFileOrFolder: (type: 'file' | 'folder') => Promise<boolean>;
   selectFile: (filename: string) => Promise<void>;
@@ -226,6 +227,19 @@ export const useTodoStore = create<TodoState>()(
   reorderTasks: async (activeId, overId) => {
     const { markdown, storage, currentFile, isFolderMode } = get();
     const newMarkdown = reorderTaskInMarkdown(markdown, activeId, overId);
+    
+    set({ markdown: newMarkdown, tasks: parseTasks(newMarkdown) });
+    
+    if (isFolderMode) {
+      await storage.write(currentFile, newMarkdown);
+    } else {
+      await storage.write('todo.md', newMarkdown);
+    }
+  },
+
+  nestTask: async (activeId, overId) => {
+    const { markdown, storage, currentFile, isFolderMode } = get();
+    const newMarkdown = nestTaskInMarkdown(markdown, activeId, overId);
     
     set({ markdown: newMarkdown, tasks: parseTasks(newMarkdown) });
     

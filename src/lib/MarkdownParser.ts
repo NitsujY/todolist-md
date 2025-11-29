@@ -941,6 +941,113 @@ export const reorderTaskInMarkdown = (markdown: string, activeId: string, overId
   return processor.stringify(tree);
 };
 
+export const nestTaskInMarkdown = (markdown: string, activeId: string, overId: string): string => {
+  const processor = createProcessor();
+  const tree = processor.parse(markdown) as Root;
+  
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let activeNode: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let activeParent: any = null;
+  let activeIndex = -1;
+  
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let overNode: any = null;
+
+  // Helper to identify nodes
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const identifyNode = (node: any): string | null => {
+    if (node.type === 'heading') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const text = node.children.map((c: any) => c.value || '').join('');
+      return `${node.position?.start.line}-header-${text.substring(0, 10)}`;
+    }
+    
+    if (node.type === 'listItem') {
+      let isTask = false;
+      let text = '';
+      
+      if (typeof node.checked === 'boolean') {
+        isTask = true;
+      }
+
+      if (node.children && node.children.length > 0) {
+        const p = node.children[0];
+        if (p.type === 'paragraph' && p.children && p.children.length > 0) {
+           // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           text = p.children.map((c: any) => c.value || '').join('');
+        }
+      }
+
+      if (!isTask && text) {
+        const match = text.match(/^\[([ xX]?)\]\s+(.*)/);
+        if (match) {
+          isTask = true;
+          text = match[2];
+        }
+      }
+
+      if (!isTask && !text) {
+        return `${node.position?.start.line}-empty`;
+      }
+
+      if (isTask) {
+        return `${node.position?.start.line}-${text.substring(0, 10)}`;
+      }
+    }
+    return null;
+  };
+
+  // Find nodes
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const findNodes = (node: any) => {
+    if (node.children) {
+      for (let i = 0; i < node.children.length; i++) {
+        const child = node.children[i];
+        const id = identifyNode(child);
+        
+        if (id === activeId) {
+          activeNode = child;
+          activeParent = node;
+          activeIndex = i;
+        }
+        if (id === overId) {
+          overNode = child;
+        }
+        
+        // Recurse
+        findNodes(child);
+      }
+    }
+  };
+
+  findNodes(tree);
+
+  if (activeNode && activeParent && overNode && overNode.type === 'listItem') {
+    // Remove from old position
+    activeParent.children.splice(activeIndex, 1);
+
+    // Add to new position (overNode's children)
+    // Check if overNode has a list child
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const listChild = overNode.children.find((c: any) => c.type === 'list');
+    
+    if (listChild) {
+      listChild.children.push(activeNode);
+    } else {
+      // Create new list
+      overNode.children.push({
+        type: 'list',
+        ordered: false,
+        spread: false,
+        children: [activeNode]
+      });
+    }
+  }
+
+  return processor.stringify(tree);
+};
+
 export const updateTaskDescriptionInMarkdown = (markdown: string, taskId: string, description: string): string => {
   const processor = createProcessor();
   const tree = processor.parse(markdown) as Root;

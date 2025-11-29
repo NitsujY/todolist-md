@@ -281,10 +281,16 @@ function App() {
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
+    const { active, over, delta } = event;
     
     if (over && active.id !== over.id) {
-      reorderTasks(active.id as string, over.id as string);
+      // Check for nesting (indentation)
+      // If delta.x is positive (moved right) significantly (> 30px)
+      if (delta.x > 30) {
+        useTodoStore.getState().nestTask(active.id as string, over.id as string);
+      } else {
+        reorderTasks(active.id as string, over.id as string);
+      }
     }
     setActiveId(null);
   };
