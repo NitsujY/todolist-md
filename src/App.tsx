@@ -91,49 +91,16 @@ function App() {
     (mouseMoveEvent: MouseEvent) => {
       if (isResizing) {
         const newWidth = mouseMoveEvent.clientX;
-        if (newWidth >= 200 && newWidth <= 600) {
+        if (newWidth < 150) {
+          setShowSidebar(false);
+          setIsResizing(false);
+        } else if (newWidth >= 200 && newWidth <= 600) {
           setSidebarWidth(newWidth);
         }
       }
     },
     [isResizing]
   );
-
-  return (
-    <DndContext 
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
-      <div className={`min-h-screen bg-base-100 text-base-content font-sans transition-colors duration-300 ${fontSize}`}>
-        {/* Sidebar */}
-        <div 
-          className={`fixed inset-y-0 left-0 z-30 bg-base-200 border-r border-base-300 transform transition-transform duration-300 ease-in-out ${
-            showSidebar ? 'translate-x-0' : '-translate-x-full'
-          }`}
-          style={{ width: sidebarWidth }}
-        >
-          <div className="flex flex-col h-full">
-            <div className="p-4 border-b border-base-300 flex items-center justify-between">
-              <div className="flex items-center gap-2 font-bold text-xl text-primary">
-                <FileText className="w-6 h-6" />
-                <span>TodoMD</span>
-              </div>
-              <button onClick={() => setShowSidebar(false)} className="btn btn-ghost btn-sm btn-square md:hidden">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-6">
-              {/* Plugin Dashboards */}
-              {pluginRegistry.getDashboards().map((dashboard, i) => (
-                <div key={i} className="mb-6">
-                  {dashboard}
-                </div>
-              ))}
-
-              {/* Storage Selection */}
 
   useEffect(() => {
     window.addEventListener("mousemove", resize);
@@ -194,8 +161,12 @@ function App() {
     pluginRegistry.register(new ThemePlugin(), true); // System plugin
     // Register Due Date Plugin
     pluginRegistry.register(new DueDatePlugin(), true); // System plugin
-    // Register Gamify Plugin
-    pluginRegistry.register(new GamifyPlugin(), true);
+    
+    // Register Gamify Plugin (Conditional)
+    if (import.meta.env.VITE_ENABLE_GAMIFY !== 'false') {
+      const gamifyPlugin = new GamifyPlugin();
+      pluginRegistry.register(gamifyPlugin, false); // false = not system plugin
+    }
   }, [loadTodos, restoreSession]);
 
   useEffect(() => {
@@ -224,10 +195,7 @@ function App() {
       setActiveStorage(type);
       setStorage(type);
     }
-    
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
-    }
+    (document.activeElement as HTMLElement)?.blur();
   };
 
   const handleSaveRaw = () => {
@@ -390,15 +358,26 @@ function App() {
               onMouseDown={startResizing}
             />
 
+            {/* Plugin Dashboards */}
+            {pluginRegistry.getDashboards().length > 0 && (
+              <div className="p-4 pb-0 space-y-4">
+                {pluginRegistry.getDashboards().map((dashboard, i) => (
+                  <div key={i}>{dashboard}</div>
+                ))}
+              </div>
+            )}
+
             <div className="p-4 font-bold text-sm text-base-content/50 uppercase tracking-wider flex justify-between items-center">
               <span>Files</span>
               <div className="flex gap-1">
                 <button onClick={handleCreateFile} className="btn btn-ghost btn-xs btn-square" title="New File">
                   <Plus size={14} />
                 </button>
-                <button onClick={() => openFileOrFolder('folder')} className="btn btn-ghost btn-xs btn-square" title="Open Folder">
-                  <FolderOpen size={14} />
-                </button>
+                {'showDirectoryPicker' in window && (
+                  <button onClick={() => openFileOrFolder('folder')} className="btn btn-ghost btn-xs btn-square" title="Open Folder">
+                    <FolderOpen size={14} />
+                  </button>
+                )}
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
