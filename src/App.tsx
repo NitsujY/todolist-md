@@ -22,6 +22,7 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
+  arrayMove,
 } from '@dnd-kit/sortable';
 
 function App() {
@@ -83,6 +84,7 @@ function App() {
   const [isResizing, setIsResizing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0);
 
   useEffect(() => {
     localStorage.setItem('sidebar-collapsed', JSON.stringify(showSidebar));
@@ -278,21 +280,47 @@ function App() {
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
+    setDragOffset(0);
+  };
+
+  const handleDragMove = (event: any) => {
+    setDragOffset(event.delta.x);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over, delta } = event;
     
-    if (over && active.id !== over.id) {
+    if (over) {
       // Check for nesting (indentation)
-      // If delta.x is positive (moved right) significantly (> 30px)
-      if (delta.x > 30) {
-        useTodoStore.getState().nestTask(active.id as string, over.id as string);
-      } else {
+      // If delta.x is positive (moved right) significantly (> 15px)
+      if (delta.x > 15) {
+        // Find the new index where the item would land
+        const activeIndex = tasks.findIndex(t => t.id === active.id);
+        const overIndex = tasks.findIndex(t => t.id === over.id);
+        
+        // Calculate the hypothetical new list order
+        const newTasks = arrayMove(tasks, activeIndex, overIndex);
+        
+        // The item is now at 'overIndex' in 'newTasks'.
+        // The candidate parent is the item immediately preceding it.
+        if (overIndex > 0) {
+          const parentCandidate = newTasks[overIndex - 1];
+          // Prevent nesting under itself (impossible by definition but good to check)
+          if (parentCandidate.id !== active.id) {
+             useTodoStore.getState().nestTask(active.id as string, parentCandidate.id);
+             setActiveId(null);
+             setDragOffset(0);
+             return;
+          }
+        }
+      }
+      
+      if (active.id !== over.id) {
         reorderTasks(active.id as string, over.id as string);
       }
     }
     setActiveId(null);
+    setDragOffset(0);
   };
 
   const handleAddNext = (id: string) => {
@@ -607,6 +635,7 @@ function App() {
                       sensors={sensors}
                       collisionDetection={closestCenter}
                       onDragStart={handleDragStart}
+                      onDragMove={handleDragMove}
                       onDragEnd={handleDragEnd}
                     >
                       <SortableContext 
@@ -633,7 +662,13 @@ function App() {
                       </SortableContext>
                       <DragOverlay>
                         {activeId ? (
-                          <div className="p-4 bg-base-100 border border-base-300 rounded shadow-lg opacity-90 flex items-start gap-3">
+                          <div 
+                            className="p-4 bg-base-100 border border-base-300 rounded shadow-lg opacity-90 flex items-start gap-3"
+                            style={{
+                              marginLeft: dragOffset > 15 ? '24px' : '0',
+                              borderLeft: dragOffset > 15 ? '4px solid var(--color-primary)' : '1px solid var(--color-base-300)'
+                            }}
+                          >
                              <div className="mt-1 text-base-content/30">
                                <div className="w-5 h-5 border-2 border-base-300 rounded-md" />
                              </div>
