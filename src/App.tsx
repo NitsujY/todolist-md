@@ -7,6 +7,7 @@ import { ThemePlugin } from './plugins/ThemePlugin';
 import { DueDatePlugin } from './plugins/DueDatePlugin';
 import { FocusModePlugin } from './plugins/FocusModePlugin';
 import { TaskItem } from './components/TaskItem';
+import type { GoogleDriveConfig } from './adapters/GoogleDriveAdapter';
 import {
   DndContext, 
   closestCenter,
@@ -60,7 +61,15 @@ function App() {
   const { undo, redo } = useStore(useTodoStore.temporal, (state) => state);
 
   const [showSettings, setShowSettings] = useState(false);
-  const [activeStorage, setActiveStorage] = useState<'local' | 'cloud' | 'fs'>('local');
+  const [showGoogleConfig, setShowGoogleConfig] = useState(false);
+  const [googleConfig, setGoogleConfig] = useState<GoogleDriveConfig>(() => {
+    const saved = localStorage.getItem('google-drive-config');
+    return saved ? JSON.parse(saved) : {
+      clientId: '',
+      apiKey: ''
+    };
+  });
+  const [activeStorage, setActiveStorage] = useState<'local' | 'cloud' | 'fs' | 'google'>('local');
   const [isEditingRaw, setIsEditingRaw] = useState(false);
   const [rawMarkdown, setRawMarkdown] = useState('');
   const [showCompleted, setShowCompleted] = useState(false);
@@ -186,25 +195,47 @@ function App() {
   useEffect(() => {
     setRawMarkdown(markdown);
   }, [markdown]);
-
-  useEffect(() => {
-    const handleFocus = () => {
-      if (activeStorage === 'fs' || activeStorage === 'local') {
-        loadTodos();
-      }
-    };
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [activeStorage, loadTodos]);
-
-  const handleStorageChange = async (type: 'local' | 'cloud' | 'fs') => {
+  const handleStorageChange = async (type: 'local' | 'cloud' | 'fs' | 'google') => {
     if (type === 'fs') {
       // For FS, we need to ask if they want file or folder
       // But for now, let's default to folder as requested, or ask?
       // The user said "I guess for local file, I should be able to select a folder"
       // Let's try to open folder first
-      await openFileOrFolder('folder');
-      setActiveStorage('fs');
+      const success = await openFileOrFolder('folder');
+      if (success) {
+        setActiveStorage('fs');
+      }
+    } else if (type === 'google') {
+      const config = localStorage.getItem('google-drive-config');
+      if (!config) {
+        setShowGoogleConfig(true);
+        return;
+      }
+      setActiveStorage('google');
+      setStorage('google');
+    } else {
+      setActiveStorage(type);
+      setStorage(type);
+    }
+    (document.activeElement as HTMLElement)?.blur();
+  };
+
+  const handleGoogleSave = async () => {
+    await useTodoStore.getState().setGoogleDriveConfig(googleConfig);
+    setActiveStorage('google');
+    setShowGoogleConfig(false);
+    setShowSettings(false);
+  };  const handleGitHubSave = async () => {
+    await useTodoStore.getState().setGitHubConfig(githubConfig);
+    setActiveStorage('github');
+    setShowGitHubConfig(false);
+    setShowSettings(false);
+  };  // The user said "I guess for local file, I should be able to select a folder"
+      // Let's try to open folder first
+      const success = await openFileOrFolder('folder');
+      if (success) {
+        setActiveStorage('fs');
+      }
     } else {
       setActiveStorage(type);
       setStorage(type);
@@ -664,26 +695,34 @@ function App() {
                   >
                     <Cloud size={16} /> Cloud (Mock)
                   </button>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => handleStorageChange('github')} 
+                      className={`btn btn-sm justify-start flex-1 ${activeStorage === 'github' ? 'btn-active btn-primary' : 'btn-ghost'}`}
+                    >
                   <button 
-                    disabled
-                    className="btn btn-sm justify-start btn-ghost opacity-50 cursor-not-allowed"
-                    title="Requires Google API Configuration"
+                    onClick={() => handleStorageChange('cloud')} 
+                    className={`btn btn-sm justify-start ${activeStorage === 'cloud' ? 'btn-active btn-primary' : 'btn-ghost'}`}
                   >
-                    <Cloud size={16} /> Google Drive (Coming Soon)
+                    <Cloud size={16} /> Cloud (Mock)
                   </button>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => handleStorageChange('google')} 
+                      className={`btn btn-sm justify-start flex-1 ${activeStorage === 'google' ? 'btn-active btn-primary' : 'btn-ghost'}`}
+                    >
+                      <Cloud size={16} /> Google Drive
+                    </button>
+                    <button 
+                      onClick={() => setShowGoogleConfig(true)}
+                      className="btn btn-sm btn-square btn-ghost"
+                      title="Configure Google Drive"
+                    >
+                      <Settings size={14} />
+                    </button>
+                  </div>
                 </div>
               </div>
-
-              <div className="divider my-2"></div>
-
-              {/* Theme Section */}
-              <div>
-                <h4 className="text-sm font-semibold text-base-content/70 uppercase tracking-wider mb-3">Appearance</h4>
-                <div className="join w-full">
-                  <button 
-                    onClick={() => handleSetTheme('light')} 
-                    className={`btn join-item flex-1 btn-sm ${currentTheme === 'light' ? 'btn-active btn-primary' : ''}`}
-                  >
                     Light
                   </button>
                   <button 
@@ -791,8 +830,60 @@ function App() {
           </form>
         </dialog>
       )}
+
+      {/* Google Config Modal */}
+      {showGoogleConfig && (
+        <dialog className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-lg mb-4">Google Drive Configuration</h3>
+            <div className="space-y-4">
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text">Client ID</span>
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="...apps.googleusercontent.com" 
+                  className="input input-bordered w-full" 
+                  value={googleConfig.clientId}
+                  onChange={(e) => setGoogleConfig({...googleConfig, clientId: e.target.value})}
+                />
+              </div>
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text">API Key</span>
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="AIza..." 
+                  className="input input-bordered w-full" 
+                  value={googleConfig.apiKey}
+                  onChange={(e) => setGoogleConfig({...googleConfig, apiKey: e.target.value})}
+                />
+              </div>
+              <div className="text-xs text-base-content/50">
+                <p>You need to create a project in Google Cloud Console, enable Drive API, and create OAuth credentials.</p>
+                <a href="https://console.cloud.google.com" target="_blank" rel="noreferrer" className="link link-primary">Go to Google Cloud Console</a>
+              </div>
+            </div>
+            <div className="modal-action">
+              <button onClick={() => setShowGoogleConfig(false)} className="btn">Cancel</button>
+              <button onClick={handleGoogleSave} className="btn btn-primary">Save & Connect</button>
+            </div>
+          </div>
+          <form method="dialog" className="modal-backdrop">
+            <button onClick={() => setShowGoogleConfig(false)}>close</button>
+          </form>
+        </dialog>
+      )}
+    </div>
+  );
+}     {showGitHubConfig && (
+          <form method="dialog" className="modal-backdrop">
+            <button onClick={() => setShowSettings(false)}>close</button>
+          </form>
+        </dialog>
+      )}
     </div>
   );
 }
-
-export default App;

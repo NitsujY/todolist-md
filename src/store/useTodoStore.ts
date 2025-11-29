@@ -4,6 +4,7 @@ import type { StorageProvider } from '../adapters/StorageProvider';
 import { LocalStorageAdapter } from '../adapters/LocalStorageAdapter';
 import { MockCloudAdapter } from '../adapters/MockCloudAdapter';
 import { FileSystemAdapter } from '../adapters/FileSystemAdapter';
+import { GoogleDriveAdapter, type GoogleDriveConfig } from '../adapters/GoogleDriveAdapter';
 import { parseTasks, toggleTaskInMarkdown, addTaskToMarkdown, updateTaskTextInMarkdown, insertTaskAfterInMarkdown, reorderTaskInMarkdown, deleteTaskInMarkdown, updateTaskDescriptionInMarkdown, type Task } from '../lib/MarkdownParser';
 // import { pluginRegistry } from '../plugins/pluginEngine';
 
@@ -23,7 +24,8 @@ interface TodoState {
   setActiveTag: (tag: string | null) => void;
   setFontSize: (size: 'small' | 'normal' | 'large' | 'xl') => void;
   setCompactMode: (compact: boolean) => void;
-  setStorage: (adapterName: 'local' | 'cloud' | 'fs') => void;
+  setStorage: (adapterName: 'local' | 'cloud' | 'fs' | 'google') => void;
+  setGoogleDriveConfig: (config: GoogleDriveConfig) => Promise<void>;
   loadTodos: () => Promise<void>;
   toggleTask: (taskId: string) => Promise<void>;
   addTask: (text: string) => Promise<void>;
@@ -33,7 +35,7 @@ interface TodoState {
   insertTaskAfter: (taskId: string, text: string) => Promise<void>;
   reorderTasks: (activeId: string, overId: string) => Promise<void>;
   updateMarkdown: (newMarkdown: string) => Promise<void>;
-  openFileOrFolder: (type: 'file' | 'folder') => Promise<void>;
+  openFileOrFolder: (type: 'file' | 'folder') => Promise<boolean>;
   selectFile: (filename: string) => Promise<void>;
   renameFile: (oldName: string, newName: string) => Promise<void>;
   createFile: (filename: string) => Promise<void>;
@@ -41,12 +43,11 @@ interface TodoState {
   grantPermission: () => Promise<void>;
   requiresPermission: boolean;
   restorableName: string;
-}
-
 const adapters = {
   local: new LocalStorageAdapter(),
   cloud: new MockCloudAdapter(),
   fs: new FileSystemAdapter(),
+  google: new GoogleDriveAdapter(),
 };
 
 export const useTodoStore = create<TodoState>()(
@@ -74,8 +75,42 @@ export const useTodoStore = create<TodoState>()(
   setStorage: (adapterName) => {
     set({ storage: adapters[adapterName] });
     // Don't auto-load for FS, wait for user action
-    if (adapterName !== 'fs') {
+    if (adapterName === 'google') {
+      const config = adapters.google.getConfig();
+      if (config) {
+        adapters.google.init().then(() => {
+          set({ isFolderMode: true });
+          adapters.google.list('').then(files => {
+            set({ fileList: files });
+            if (files.length > 0) {
+              get().selectFile(files[0]);
+            }
+          });
+        }).catch(console.error);
+      }
+    } else if (adapterName !== 'fs') {
       get().loadTodos();
+    }
+  },
+
+  setGoogleDriveConfig: async (config) => {
+    adapters.google.setConfig(config);
+    await adapters.google.init();
+    set({ storage: adapters.google, isFolderMode: true });
+    const files = await adapters.google.list('');
+    set({ fileList: files });
+    if (files.length > 0) {
+      get().selectFile(files[0]);
+    } else {
+      set({ markdown: '', tasks: [] });
+    }
+  },  get().loadTodos();
+    }
+  },
+    if (files.length > 0) {
+      get().selectFile(files[0]);
+    } else {
+      set({ markdown: '', tasks: [] });
     }
   },
 
@@ -103,6 +138,7 @@ export const useTodoStore = create<TodoState>()(
         get().loadTodos();
       }
     }
+    return success;
   },
 
   selectFile: async (filename) => {
