@@ -43,6 +43,8 @@ interface TodoState {
   grantPermission: () => Promise<void>;
   requiresPermission: boolean;
   restorableName: string;
+}
+
 const adapters = {
   local: new LocalStorageAdapter(),
   cloud: new MockCloudAdapter(),
@@ -99,14 +101,6 @@ export const useTodoStore = create<TodoState>()(
     set({ storage: adapters.google, isFolderMode: true });
     const files = await adapters.google.list('');
     set({ fileList: files });
-    if (files.length > 0) {
-      get().selectFile(files[0]);
-    } else {
-      set({ markdown: '', tasks: [] });
-    }
-  },  get().loadTodos();
-    }
-  },
     if (files.length > 0) {
       get().selectFile(files[0]);
     } else {

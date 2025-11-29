@@ -161,7 +161,9 @@ export class GoogleDriveAdapter implements StorageProvider {
       });
       if (response.result.files && response.result.files.length > 0) {
         fileId = response.result.files[0].id;
-        this.fileCache.set(path, { id: fileId, name: path });
+        if (fileId) {
+          this.fileCache.set(path, { id: fileId, name: path });
+        }
       }
     }
 
@@ -192,7 +194,9 @@ export class GoogleDriveAdapter implements StorageProvider {
       });
       if (listResp.result.files && listResp.result.files.length > 0) {
         fileId = listResp.result.files[0].id;
-        this.fileCache.set(path, { id: fileId, name: path });
+        if (fileId) {
+          this.fileCache.set(path, { id: fileId, name: path });
+        }
       }
     }
 

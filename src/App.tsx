@@ -225,22 +225,6 @@ function App() {
     setActiveStorage('google');
     setShowGoogleConfig(false);
     setShowSettings(false);
-  };  const handleGitHubSave = async () => {
-    await useTodoStore.getState().setGitHubConfig(githubConfig);
-    setActiveStorage('github');
-    setShowGitHubConfig(false);
-    setShowSettings(false);
-  };  // The user said "I guess for local file, I should be able to select a folder"
-      // Let's try to open folder first
-      const success = await openFileOrFolder('folder');
-      if (success) {
-        setActiveStorage('fs');
-      }
-    } else {
-      setActiveStorage(type);
-      setStorage(type);
-    }
-    (document.activeElement as HTMLElement)?.blur();
   };
 
   const handleSaveRaw = () => {
@@ -697,17 +681,6 @@ function App() {
                   </button>
                   <div className="flex gap-2">
                     <button 
-                      onClick={() => handleStorageChange('github')} 
-                      className={`btn btn-sm justify-start flex-1 ${activeStorage === 'github' ? 'btn-active btn-primary' : 'btn-ghost'}`}
-                    >
-                  <button 
-                    onClick={() => handleStorageChange('cloud')} 
-                    className={`btn btn-sm justify-start ${activeStorage === 'cloud' ? 'btn-active btn-primary' : 'btn-ghost'}`}
-                  >
-                    <Cloud size={16} /> Cloud (Mock)
-                  </button>
-                  <div className="flex gap-2">
-                    <button 
                       onClick={() => handleStorageChange('google')} 
                       className={`btn btn-sm justify-start flex-1 ${activeStorage === 'google' ? 'btn-active btn-primary' : 'btn-ghost'}`}
                     >
@@ -723,6 +696,17 @@ function App() {
                   </div>
                 </div>
               </div>
+
+              <div className="divider my-2"></div>
+
+              {/* Theme Section */}
+              <div>
+                <h4 className="text-sm font-semibold text-base-content/70 uppercase tracking-wider mb-3">Appearance</h4>
+                <div className="join w-full">
+                  <button 
+                    onClick={() => handleSetTheme('light')} 
+                    className={`btn join-item flex-1 btn-sm ${currentTheme === 'light' ? 'btn-active btn-primary' : ''}`}
+                  >
                     Light
                   </button>
                   <button 
@@ -878,12 +862,6 @@ function App() {
       )}
     </div>
   );
-}     {showGitHubConfig && (
-          <form method="dialog" className="modal-backdrop">
-            <button onClick={() => setShowSettings(false)}>close</button>
-          </form>
-        </dialog>
-      )}
-    </div>
-  );
 }
+
+export default App;
