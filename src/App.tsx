@@ -528,6 +528,39 @@ function App() {
             {/* Header & Controls */}
             <div className={`flex justify-between items-center border-b border-base-200 bg-base-50/50 ${compactMode ? 'p-2 h-[56px]' : 'p-4 h-[72px]'}`}>
               <div className="flex items-center gap-3 overflow-hidden flex-1 mr-4">
+                <div className="dropdown dropdown-bottom">
+                  <div tabIndex={0} role="button" className="btn btn-ghost btn-sm gap-2 px-2">
+                    {activeStorage === 'local' && <HardDrive size={18} />}
+                    {activeStorage === 'fs' && <FolderOpen size={18} />}
+                    {activeStorage === 'cloud' && <Cloud size={18} className="text-info" />}
+                    {activeStorage === 'google' && <Cloud size={18} className="text-success" />}
+                    <span className="hidden sm:inline text-xs opacity-70 font-normal">
+                      {activeStorage === 'local' && 'Local'}
+                      {activeStorage === 'fs' && 'Folder'}
+                      {activeStorage === 'cloud' && 'Cloud'}
+                      {activeStorage === 'google' && 'Drive'}
+                    </span>
+                  </div>
+                  <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 border border-base-200">
+                    <li><a onClick={() => handleStorageChange('local')} className={activeStorage === 'local' ? 'active' : ''}><HardDrive size={16} /> Local Storage</a></li>
+                    <li><a onClick={() => handleStorageChange('fs')} className={activeStorage === 'fs' ? 'active' : ''}><FolderOpen size={16} /> Local Folder</a></li>
+                    <li><a onClick={() => handleStorageChange('google')} className={activeStorage === 'google' ? 'active' : ''}><Cloud size={16} /> Google Drive</a></li>
+                    {activeStorage === 'google' && (
+                      <li className="ml-4 border-l border-base-200">
+                        <a onClick={() => useTodoStore.getState().pickGoogleDriveFolder()} className="text-xs">
+                          <FolderOpen size={14} /> Select Folder
+                        </a>
+                        {(!googleConfig.clientId || !googleConfig.apiKey) && (
+                          <a onClick={() => setShowGoogleConfig(true)} className="text-xs text-warning">
+                            <Settings size={14} /> Configure Keys
+                          </a>
+                        )}
+                      </li>
+                    )}
+                    <li><a onClick={() => handleStorageChange('cloud')} className={activeStorage === 'cloud' ? 'active' : ''}><Cloud size={16} /> Mock Cloud</a></li>
+                  </ul>
+                </div>
+
                 <h1 className="text-xl font-bold text-base-content truncate flex-shrink-0 max-w-[200px] sm:max-w-md">
                   {isFolderMode ? currentFile : 'My Tasks'}
                 </h1>
@@ -714,56 +747,8 @@ function App() {
             
             <div className="space-y-6">
               
-              {/* Storage Section */}
-              <div>
-                <h4 className="text-sm font-semibold text-base-content/70 uppercase tracking-wider mb-3">Storage Location</h4>
-                <div className="flex flex-col gap-2">
-                  <button 
-                    onClick={() => handleStorageChange('local')} 
-                    className={`btn btn-sm justify-start ${activeStorage === 'local' ? 'btn-active btn-primary' : 'btn-ghost'}`}
-                  >
-                    <HardDrive size={16} /> Browser Storage
-                  </button>
-                  <button 
-                    onClick={() => handleStorageChange('fs')} 
-                    className={`btn btn-sm justify-start ${activeStorage === 'fs' ? 'btn-active btn-primary' : 'btn-ghost'}`}
-                  >
-                    <FolderOpen size={16} /> Local Folder
-                  </button>
-                  <button 
-                    onClick={() => handleStorageChange('cloud')} 
-                    className={`btn btn-sm justify-start ${activeStorage === 'cloud' ? 'btn-active btn-primary' : 'btn-ghost'}`}
-                  >
-                    <Cloud size={16} /> Cloud (Mock)
-                  </button>
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => handleStorageChange('google')} 
-                      className={`btn btn-sm justify-start flex-1 ${activeStorage === 'google' ? 'btn-active btn-primary' : 'btn-ghost'}`}
-                    >
-                      <Cloud size={16} /> Google Drive
-                    </button>
-                    <button 
-                      onClick={() => setShowGoogleConfig(true)}
-                      className="btn btn-sm btn-square btn-ghost"
-                      title="Configure Google Drive"
-                    >
-                      <Settings size={16} />
-                    </button>
-                  </div>
-                  {activeStorage === 'google' && (
-                    <button 
-                      onClick={() => useTodoStore.getState().pickGoogleDriveFolder()}
-                      className="btn btn-xs btn-outline btn-primary mt-1 w-full"
-                    >
-                      Select Drive Folder
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="divider my-2"></div>
-
+              {/* Storage settings moved to navbar */}
+              
               {/* Theme Section */}
               <div>
                 <h4 className="text-sm font-semibold text-base-content/70 uppercase tracking-wider mb-3">Appearance</h4>

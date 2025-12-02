@@ -82,20 +82,29 @@ export const useTodoStore = create<TodoState>()(
     
     // Don't auto-load for FS, wait for user action
     if (adapterName === 'google') {
+      set({ isLoading: true });
       const config = adapters.google.getConfig();
       if (config) {
         adapters.google.init().then(() => {
           set({ isFolderMode: true });
           adapters.google.list('').then(files => {
-            set({ fileList: files });
+            set({ fileList: files, isLoading: false });
             const lastFile = localStorage.getItem('lastOpenedFile');
             if (lastFile && files.includes(lastFile)) {
               get().selectFile(lastFile);
             } else if (files.length > 0) {
               get().selectFile(files[0]);
             }
+          }).catch(e => {
+            console.error(e);
+            set({ isLoading: false });
           });
-        }).catch(console.error);
+        }).catch(e => {
+          console.error(e);
+          set({ isLoading: false });
+        });
+      } else {
+        set({ isLoading: false });
       }
     } else if (adapterName !== 'fs') {
       get().loadTodos();
