@@ -27,6 +27,7 @@ interface TodoState {
   setGoogleDriveConfig: (config: GoogleDriveConfig) => Promise<void>;
   pickGoogleDriveFolder: () => Promise<void>;
   pickGoogleDriveFile: () => Promise<void>;
+  switchGoogleAccount: () => Promise<void>;
   loadTodos: () => Promise<void>;
   toggleTask: (taskId: string) => Promise<void>;
   addTask: (text: string) => Promise<void>;
