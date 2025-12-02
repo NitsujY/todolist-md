@@ -51,6 +51,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
     transition,
     zIndex: isDragging ? 100 : 'auto',
     position: isDragging ? 'relative' as const : undefined,
+    marginLeft: `${(task.depth || 0) * 1.5}rem`,
   };
 
   useEffect(() => {
