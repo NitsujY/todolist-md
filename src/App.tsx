@@ -7,6 +7,7 @@ import { ThemePlugin } from './plugins/ThemePlugin';
 import { DueDatePlugin } from './plugins/DueDatePlugin';
 import { FocusModePlugin } from './plugins/FocusModePlugin';
 import { TaskItem } from './components/TaskItem';
+import type { GoogleDriveConfig } from './adapters/GoogleDriveAdapter';
 import {
   DndContext, 
   closestCenter,
@@ -21,6 +22,7 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
+  arrayMove,
 } from '@dnd-kit/sortable';
 
 function App() {
@@ -60,7 +62,15 @@ function App() {
   const { undo, redo } = useStore(useTodoStore.temporal, (state) => state);
 
   const [showSettings, setShowSettings] = useState(false);
-  const [activeStorage, setActiveStorage] = useState<'local' | 'cloud' | 'fs'>('local');
+  const [showGoogleConfig, setShowGoogleConfig] = useState(false);
+  const [googleConfig, setGoogleConfig] = useState<GoogleDriveConfig>(() => {
+    const saved = localStorage.getItem('google-drive-config');
+    return saved ? JSON.parse(saved) : {
+      clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID || '',
+      apiKey: import.meta.env.VITE_GOOGLE_API_KEY || ''
+    };
+  });
+  const [activeStorage, setActiveStorage] = useState<'local' | 'cloud' | 'fs' | 'google'>('local');
   const [isEditingRaw, setIsEditingRaw] = useState(false);
   const [rawMarkdown, setRawMarkdown] = useState('');
   const [showCompleted, setShowCompleted] = useState(false);
@@ -74,6 +84,7 @@ function App() {
   const [isResizing, setIsResizing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0);
 
   useEffect(() => {
     localStorage.setItem('sidebar-collapsed', JSON.stringify(showSidebar));
@@ -186,30 +197,43 @@ function App() {
   useEffect(() => {
     setRawMarkdown(markdown);
   }, [markdown]);
-
-  useEffect(() => {
-    const handleFocus = () => {
-      if (activeStorage === 'fs' || activeStorage === 'local') {
-        loadTodos();
-      }
-    };
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [activeStorage, loadTodos]);
-
-  const handleStorageChange = async (type: 'local' | 'cloud' | 'fs') => {
+  const handleStorageChange = async (type: 'local' | 'cloud' | 'fs' | 'google') => {
     if (type === 'fs') {
       // For FS, we need to ask if they want file or folder
       // But for now, let's default to folder as requested, or ask?
       // The user said "I guess for local file, I should be able to select a folder"
       // Let's try to open folder first
-      await openFileOrFolder('folder');
-      setActiveStorage('fs');
+      const success = await openFileOrFolder('folder');
+      if (success) {
+        setActiveStorage('fs');
+      }
+    } else if (type === 'google') {
+      const config = localStorage.getItem('google-drive-config');
+      if (!config) {
+        setShowGoogleConfig(true);
+        return;
+      }
+      setActiveStorage('google');
+      setStorage('google');
     } else {
       setActiveStorage(type);
       setStorage(type);
     }
     (document.activeElement as HTMLElement)?.blur();
+  };
+
+  const handleGoogleSave = async () => {
+    await useTodoStore.getState().setGoogleDriveConfig(googleConfig);
+    setActiveStorage('google');
+    setShowGoogleConfig(false);
+    setShowSettings(false);
+    
+    // Trigger folder picker flow
+    try {
+      await useTodoStore.getState().pickGoogleDriveFolder();
+    } catch (e) {
+      console.error("Failed to pick folder", e);
+    }
   };
 
   const handleSaveRaw = () => {
@@ -263,15 +287,47 @@ function App() {
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
+    setDragOffset(0);
+  };
+
+  const handleDragMove = (event: any) => {
+    setDragOffset(event.delta.x);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
+    const { active, over, delta } = event;
     
-    if (over && active.id !== over.id) {
-      reorderTasks(active.id as string, over.id as string);
+    if (over) {
+      // Check for nesting (indentation)
+      // If delta.x is positive (moved right) significantly (> 15px)
+      if (delta.x > 15) {
+        // Find the new index where the item would land
+        const activeIndex = tasks.findIndex(t => t.id === active.id);
+        const overIndex = tasks.findIndex(t => t.id === over.id);
+        
+        // Calculate the hypothetical new list order
+        const newTasks = arrayMove(tasks, activeIndex, overIndex);
+        
+        // The item is now at 'overIndex' in 'newTasks'.
+        // The candidate parent is the item immediately preceding it.
+        if (overIndex > 0) {
+          const parentCandidate = newTasks[overIndex - 1];
+          // Prevent nesting under itself (impossible by definition but good to check)
+          if (parentCandidate.id !== active.id) {
+             useTodoStore.getState().nestTask(active.id as string, parentCandidate.id);
+             setActiveId(null);
+             setDragOffset(0);
+             return;
+          }
+        }
+      }
+      
+      if (active.id !== over.id) {
+        reorderTasks(active.id as string, over.id as string);
+      }
     }
     setActiveId(null);
+    setDragOffset(0);
   };
 
   const handleAddNext = (id: string) => {
@@ -586,6 +642,7 @@ function App() {
                       sensors={sensors}
                       collisionDetection={closestCenter}
                       onDragStart={handleDragStart}
+                      onDragMove={handleDragMove}
                       onDragEnd={handleDragEnd}
                     >
                       <SortableContext 
@@ -612,7 +669,13 @@ function App() {
                       </SortableContext>
                       <DragOverlay>
                         {activeId ? (
-                          <div className="p-4 bg-base-100 border border-base-300 rounded shadow-lg opacity-90 flex items-start gap-3">
+                          <div 
+                            className="p-4 bg-base-100 border border-base-300 rounded shadow-lg opacity-90 flex items-start gap-3"
+                            style={{
+                              marginLeft: dragOffset > 15 ? '24px' : '0',
+                              borderLeft: dragOffset > 15 ? '4px solid var(--color-primary)' : '1px solid var(--color-base-300)'
+                            }}
+                          >
                              <div className="mt-1 text-base-content/30">
                                <div className="w-5 h-5 border-2 border-base-300 rounded-md" />
                              </div>
@@ -664,13 +727,29 @@ function App() {
                   >
                     <Cloud size={16} /> Cloud (Mock)
                   </button>
-                  <button 
-                    disabled
-                    className="btn btn-sm justify-start btn-ghost opacity-50 cursor-not-allowed"
-                    title="Requires Google API Configuration"
-                  >
-                    <Cloud size={16} /> Google Drive (Coming Soon)
-                  </button>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => handleStorageChange('google')} 
+                      className={`btn btn-sm justify-start flex-1 ${activeStorage === 'google' ? 'btn-active btn-primary' : 'btn-ghost'}`}
+                    >
+                      <Cloud size={16} /> Google Drive
+                    </button>
+                    <button 
+                      onClick={() => setShowGoogleConfig(true)}
+                      className="btn btn-sm btn-square btn-ghost"
+                      title="Configure Google Drive"
+                    >
+                      <Settings size={16} />
+                    </button>
+                  </div>
+                  {activeStorage === 'google' && (
+                    <button 
+                      onClick={() => useTodoStore.getState().pickGoogleDriveFolder()}
+                      className="btn btn-xs btn-outline btn-primary mt-1 w-full"
+                    >
+                      Select Drive Folder
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -788,6 +867,52 @@ function App() {
           </div>
           <form method="dialog" className="modal-backdrop">
             <button onClick={() => setShowSettings(false)}>close</button>
+          </form>
+        </dialog>
+      )}
+
+      {/* Google Config Modal */}
+      {showGoogleConfig && (
+        <dialog className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-lg mb-4">Google Drive Configuration</h3>
+            <div className="space-y-4">
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text">Client ID</span>
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="...apps.googleusercontent.com" 
+                  className="input input-bordered w-full" 
+                  value={googleConfig.clientId}
+                  onChange={(e) => setGoogleConfig({...googleConfig, clientId: e.target.value})}
+                />
+              </div>
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text">API Key</span>
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="AIza..." 
+                  className="input input-bordered w-full" 
+                  value={googleConfig.apiKey}
+                  onChange={(e) => setGoogleConfig({...googleConfig, apiKey: e.target.value})}
+                />
+              </div>
+              <div className="text-xs text-base-content/50">
+                <p>You need to create a project in Google Cloud Console, enable Drive API, and create OAuth credentials.</p>
+                <a href="https://console.cloud.google.com" target="_blank" rel="noreferrer" className="link link-primary">Go to Google Cloud Console</a>
+              </div>
+            </div>
+            <div className="modal-action">
+              <button onClick={() => setShowGoogleConfig(false)} className="btn">Cancel</button>
+              <button onClick={handleGoogleSave} className="btn btn-primary">Save & Connect</button>
+            </div>
+          </div>
+          <form method="dialog" className="modal-backdrop">
+            <button onClick={() => setShowGoogleConfig(false)}>close</button>
           </form>
         </dialog>
       )}

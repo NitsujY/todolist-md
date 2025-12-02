@@ -4,8 +4,37 @@ import { get, set, del } from '../lib/db';
 export class FileSystemAdapter implements StorageProvider {
   private fileHandle: FileSystemFileHandle | null = null;
   private dirHandle: FileSystemDirectoryHandle | null = null;
+  private memoryFiles: Map<string, string> = new Map();
+  public isMemoryMode = false;
 
   async openFile(): Promise<boolean> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (typeof (window as any).showOpenFilePicker !== 'function') {
+      // Fallback for mobile/unsupported browsers
+      return new Promise((resolve) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.md,.markdown,.txt';
+        
+        input.onchange = async () => {
+          if (input.files && input.files.length > 0) {
+            const file = input.files[0];
+            const text = await file.text();
+            this.memoryFiles.clear();
+            this.memoryFiles.set(file.name, text);
+            this.isMemoryMode = true;
+            this.fileHandle = null;
+            this.dirHandle = null;
+            resolve(true);
+          } else {
+            resolve(false);
+          }
+        };
+        input.oncancel = () => resolve(false);
+        input.click();
+      });
+    }
+
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const [handle] = await (window as any).showOpenFilePicker({
@@ -27,6 +56,41 @@ export class FileSystemAdapter implements StorageProvider {
   }
 
   async openDirectory(): Promise<boolean> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (typeof (window as any).showDirectoryPicker !== 'function') {
+      // Fallback for mobile/unsupported browsers - use multiple file selection
+      return new Promise((resolve) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.multiple = true;
+        // Try to enable folder selection (works on some desktop browsers, often ignored on mobile)
+        input.setAttribute('webkitdirectory', '');
+        input.setAttribute('directory', '');
+        input.accept = '.md,.markdown,.txt';
+        
+        input.onchange = async () => {
+          if (input.files && input.files.length > 0) {
+            this.memoryFiles.clear();
+            this.isMemoryMode = true;
+            this.dirHandle = null;
+            this.fileHandle = null;
+            
+            for (let i = 0; i < input.files.length; i++) {
+              const file = input.files[i];
+              const text = await file.text();
+              this.memoryFiles.set(file.name, text);
+            }
+            alert('Opened in Read-Only/Memory mode. Changes will NOT be saved to disk automatically.');
+            resolve(true);
+          } else {
+            resolve(false);
+          }
+        };
+        input.oncancel = () => resolve(false);
+        input.click();
+      });
+    }
+
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const handle = await (window as any).showDirectoryPicker();
@@ -42,6 +106,14 @@ export class FileSystemAdapter implements StorageProvider {
   }
 
   async read(filename: string): Promise<string | null> {
+    if (this.isMemoryMode) {
+      // If filename is not provided, return the first file
+      if (!filename && this.memoryFiles.size > 0) {
+        return this.memoryFiles.values().next().value || null;
+      }
+      return this.memoryFiles.get(filename) || null;
+    }
+
     // If we have a direct file handle and no filename is specified (or it matches), use it
     if (this.fileHandle && (!filename || filename === this.fileHandle.name)) {
       await this.verifyPermission(this.fileHandle, false);
@@ -66,6 +138,12 @@ export class FileSystemAdapter implements StorageProvider {
   }
 
   async write(filename: string, content: string): Promise<void> {
+    if (this.isMemoryMode) {
+      this.memoryFiles.set(filename, content);
+      console.warn('Writing to memory only. Changes are not persisted to disk.');
+      return;
+    }
+
     let handle = this.fileHandle;
 
     if (this.dirHandle) {
@@ -85,6 +163,10 @@ export class FileSystemAdapter implements StorageProvider {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async list(_path: string): Promise<string[]> {
+    if (this.isMemoryMode) {
+      return Array.from(this.memoryFiles.keys());
+    }
+
     if (!this.dirHandle) return [];
     
     await this.verifyPermission(this.dirHandle, false);
@@ -99,7 +181,7 @@ export class FileSystemAdapter implements StorageProvider {
   }
 
   isFolderMode(): boolean {
-    return !!this.dirHandle;
+    return !!this.dirHandle || (this.isMemoryMode && this.memoryFiles.size > 1);
   }
 
   async rename(oldName: string, newName: string): Promise<void> {
@@ -159,6 +241,7 @@ export class FileSystemAdapter implements StorageProvider {
   }
 
   getHandleName(): string {
+    if (this.isMemoryMode) return 'Memory Mode';
     return this.dirHandle?.name || this.fileHandle?.name || '';
   }
 

@@ -4,7 +4,8 @@ import type { StorageProvider } from '../adapters/StorageProvider';
 import { LocalStorageAdapter } from '../adapters/LocalStorageAdapter';
 import { MockCloudAdapter } from '../adapters/MockCloudAdapter';
 import { FileSystemAdapter } from '../adapters/FileSystemAdapter';
-import { parseTasks, toggleTaskInMarkdown, addTaskToMarkdown, updateTaskTextInMarkdown, insertTaskAfterInMarkdown, reorderTaskInMarkdown, deleteTaskInMarkdown, updateTaskDescriptionInMarkdown, type Task } from '../lib/MarkdownParser';
+import { GoogleDriveAdapter, type GoogleDriveConfig } from '../adapters/GoogleDriveAdapter';
+import { parseTasks, toggleTaskInMarkdown, addTaskToMarkdown, updateTaskTextInMarkdown, insertTaskAfterInMarkdown, reorderTaskInMarkdown, deleteTaskInMarkdown, updateTaskDescriptionInMarkdown, nestTaskInMarkdown, type Task } from '../lib/MarkdownParser';
 // import { pluginRegistry } from '../plugins/pluginEngine';
 
 interface TodoState {
@@ -23,7 +24,9 @@ interface TodoState {
   setActiveTag: (tag: string | null) => void;
   setFontSize: (size: 'small' | 'normal' | 'large' | 'xl') => void;
   setCompactMode: (compact: boolean) => void;
-  setStorage: (adapterName: 'local' | 'cloud' | 'fs') => void;
+  setStorage: (adapterName: 'local' | 'cloud' | 'fs' | 'google') => void;
+  setGoogleDriveConfig: (config: GoogleDriveConfig) => Promise<void>;
+  pickGoogleDriveFolder: () => Promise<void>;
   loadTodos: () => Promise<void>;
   toggleTask: (taskId: string) => Promise<void>;
   addTask: (text: string) => Promise<void>;
@@ -32,8 +35,9 @@ interface TodoState {
   deleteTask: (taskId: string) => Promise<void>;
   insertTaskAfter: (taskId: string, text: string) => Promise<void>;
   reorderTasks: (activeId: string, overId: string) => Promise<void>;
+  nestTask: (activeId: string, overId: string) => Promise<void>;
   updateMarkdown: (newMarkdown: string) => Promise<void>;
-  openFileOrFolder: (type: 'file' | 'folder') => Promise<void>;
+  openFileOrFolder: (type: 'file' | 'folder') => Promise<boolean>;
   selectFile: (filename: string) => Promise<void>;
   renameFile: (oldName: string, newName: string) => Promise<void>;
   createFile: (filename: string) => Promise<void>;
@@ -47,6 +51,7 @@ const adapters = {
   local: new LocalStorageAdapter(),
   cloud: new MockCloudAdapter(),
   fs: new FileSystemAdapter(),
+  google: new GoogleDriveAdapter(),
 };
 
 export const useTodoStore = create<TodoState>()(
@@ -73,46 +78,68 @@ export const useTodoStore = create<TodoState>()(
 
   setStorage: (adapterName) => {
     set({ storage: adapters[adapterName] });
+    localStorage.setItem('active-storage', adapterName);
+    
     // Don't auto-load for FS, wait for user action
-    if (adapterName !== 'fs') {
+    if (adapterName === 'google') {
+      const config = adapters.google.getConfig();
+      if (config) {
+        adapters.google.init().then(() => {
+          set({ isFolderMode: true });
+          adapters.google.list('').then(files => {
+            set({ fileList: files });
+            const lastFile = localStorage.getItem('lastOpenedFile');
+            if (lastFile && files.includes(lastFile)) {
+              get().selectFile(lastFile);
+            } else if (files.length > 0) {
+              get().selectFile(files[0]);
+            }
+          });
+        }).catch(console.error);
+      }
+    } else if (adapterName !== 'fs') {
       get().loadTodos();
     }
   },
 
-  openFileOrFolder: async (type) => {
-    const fsAdapter = adapters.fs;
-    let success = false;
-    
-    if (type === 'folder') {
-      success = await fsAdapter.openDirectory();
-    } else {
-      success = await fsAdapter.openFile();
-    }
-
-    if (success) {
-      set({ storage: fsAdapter, isFolderMode: type === 'folder' });
-      if (type === 'folder') {
-        const files = await fsAdapter.list('');
-        set({ fileList: files });
-        if (files.length > 0) {
-          get().selectFile(files[0]);
-        } else {
-          set({ markdown: '', tasks: [] });
-        }
-      } else {
-        get().loadTodos();
-      }
-    }
+  setGoogleDriveConfig: async (config) => {
+    adapters.google.setConfig(config);
   },
 
-  selectFile: async (filename) => {
-    set({ currentFile: filename, isLoading: true, activeTag: null });
-    localStorage.setItem('lastOpenedFile', filename);
-    const { storage } = get();
-    const content = await storage.read(filename);
-    const markdown = content || '';
-    const tasks = parseTasks(markdown);
-    set({ markdown, tasks, isLoading: false });
+  pickGoogleDriveFolder: async () => {
+    try {
+      console.log('Store: Picking folder...');
+      const folderId = await adapters.google.pickFolder();
+      console.log('Store: Folder picked result:', folderId);
+      
+      if (folderId) {
+        const config = adapters.google.getConfig();
+        if (config) {
+          const newConfig = { ...config, rootFolderId: folderId };
+          adapters.google.setConfig(newConfig);
+          console.log('Store: Config updated, listing files...');
+          
+          // Refresh file list
+          try {
+            const files = await adapters.google.list('');
+            console.log('Store: Files listed:', files.length);
+            set({ fileList: files });
+            if (files.length > 0) {
+              get().selectFile(files[0]);
+            }
+          } catch (listErr) {
+            console.error('Store: Failed to list files after picking folder', listErr);
+            alert('Folder selected, but failed to list files. Check console for API Key errors.');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error picking folder:', error);
+      if (typeof error === 'object' && error !== null) {
+        console.error('Detailed error:', JSON.stringify(error, null, 2));
+      }
+      alert('Failed to connect to Google Drive. Please check the console for details.');
+    }
   },
 
   loadTodos: async () => {
@@ -206,6 +233,19 @@ export const useTodoStore = create<TodoState>()(
     }
   },
 
+  nestTask: async (activeId, overId) => {
+    const { markdown, storage, currentFile, isFolderMode } = get();
+    const newMarkdown = nestTaskInMarkdown(markdown, activeId, overId);
+    
+    set({ markdown: newMarkdown, tasks: parseTasks(newMarkdown) });
+    
+    if (isFolderMode) {
+      await storage.write(currentFile, newMarkdown);
+    } else {
+      await storage.write('todo.md', newMarkdown);
+    }
+  },
+
   updateMarkdown: async (newMarkdown) => {
     const { storage, currentFile, isFolderMode } = get();
     set({ markdown: newMarkdown, tasks: parseTasks(newMarkdown) });
@@ -260,6 +300,31 @@ export const useTodoStore = create<TodoState>()(
     get().selectFile(filename);
   },
   restoreSession: async () => {
+    // Try to restore Google Drive session first
+    const activeStorage = localStorage.getItem('active-storage');
+    if (activeStorage === 'google') {
+      const config = adapters.google.getConfig();
+      if (config) {
+        set({ storage: adapters.google, isFolderMode: true });
+        try {
+          await adapters.google.init();
+          const files = await adapters.google.list('');
+          set({ fileList: files });
+          
+          const lastFile = localStorage.getItem('lastOpenedFile');
+          if (lastFile && files.includes(lastFile)) {
+            get().selectFile(lastFile);
+          } else if (files.length > 0) {
+            get().selectFile(files[0]);
+          }
+          return; // Successfully restored Google session
+        } catch (e) {
+          console.error('Failed to restore Google Drive session', e);
+          // Fall through to FS restore if Google fails
+        }
+      }
+    }
+
     const fsAdapter = adapters.fs;
     const mode = await fsAdapter.restore();
     
@@ -324,6 +389,39 @@ export const useTodoStore = create<TodoState>()(
         }
       }
     }
+  },
+
+  openFileOrFolder: async (type) => {
+    const adapter = adapters.fs;
+    if (type === 'folder') {
+      const success = await adapter.openDirectory();
+      if (success) {
+        set({ storage: adapter, isFolderMode: true });
+        const files = await adapter.list('');
+        set({ fileList: files });
+        if (files.length > 0) {
+          get().selectFile(files[0]);
+        }
+      }
+      return success;
+    } else {
+      const success = await adapter.openFile();
+      if (success) {
+        set({ storage: adapter, isFolderMode: false });
+        const files = await adapter.list('');
+        if (files.length > 0) {
+          set({ currentFile: files[0] });
+          get().loadTodos();
+        }
+      }
+      return success;
+    }
+  },
+
+  selectFile: async (filename) => {
+    set({ currentFile: filename });
+    localStorage.setItem('lastOpenedFile', filename);
+    await get().loadTodos();
   },
     }),
     {
