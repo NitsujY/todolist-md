@@ -2,7 +2,6 @@ import type { Plugin, PluginAPI } from './pluginEngine';
 import { useTodoStore } from '../store/useTodoStore';
 import { deleteTaskInMarkdown } from '../lib/MarkdownParser';
 import { Trash2 } from 'lucide-react';
-import React from 'react';
 
 export class AutoCleanupPlugin implements Plugin {
   name = 'AutoCleanup';

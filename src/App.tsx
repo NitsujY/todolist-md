@@ -270,7 +270,7 @@ function App() {
   useEffect(() => {
     setRawMarkdown(markdown);
   }, [markdown]);
-  const handleStorageChange = async (type: 'local' | 'cloud' | 'fs' | 'google') => {
+  const handleStorageChange = async (type: 'local' | 'fs' | 'google') => {
     if (type === 'fs') {
       // For FS, we need to ask if they want file or folder
       // But for now, let's default to folder as requested, or ask?
