@@ -527,8 +527,8 @@ function App() {
             
             {/* Header & Controls */}
             <div className={`flex justify-between items-center border-b border-base-200 bg-base-50/50 ${compactMode ? 'p-2 h-[56px]' : 'p-4 h-[72px]'}`}>
-              <div className="flex items-center gap-3 overflow-hidden flex-1 mr-4">
-                <div className="dropdown dropdown-bottom">
+              <div className="flex items-center gap-3 flex-1 mr-4 min-w-0">
+                <div className="dropdown dropdown-bottom flex-shrink-0">
                   <div tabIndex={0} role="button" className="btn btn-ghost btn-sm gap-2 px-2">
                     {activeStorage === 'local' && <HardDrive size={18} />}
                     {activeStorage === 'fs' && <FolderOpen size={18} />}
@@ -541,7 +541,7 @@ function App() {
                       {activeStorage === 'google' && 'Drive'}
                     </span>
                   </div>
-                  <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 border border-base-200">
+                  <ul tabIndex={0} className="dropdown-content z-[50] menu p-2 shadow bg-base-100 rounded-box w-52 border border-base-200">
                     <li><a onClick={() => handleStorageChange('local')} className={activeStorage === 'local' ? 'active' : ''}><HardDrive size={16} /> Local Storage</a></li>
                     <li><a onClick={() => handleStorageChange('fs')} className={activeStorage === 'fs' ? 'active' : ''}><FolderOpen size={16} /> Local Folder</a></li>
                     <li><a onClick={() => handleStorageChange('google')} className={activeStorage === 'google' ? 'active' : ''}><Cloud size={16} /> Google Drive</a></li>
