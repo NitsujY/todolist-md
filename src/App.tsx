@@ -6,6 +6,7 @@ import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, 
 import { ThemePlugin } from './plugins/ThemePlugin';
 import { DueDatePlugin } from './plugins/DueDatePlugin';
 import { FocusModePlugin } from './plugins/FocusModePlugin';
+import { AutoCleanupPlugin } from './plugins/AutoCleanupPlugin';
 import { TaskItem } from './components/TaskItem';
 import type { GoogleDriveConfig } from './adapters/GoogleDriveAdapter';
 import {
@@ -23,7 +24,48 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
   arrayMove,
+  useSortable,
 } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+function SortableFileItem({ file, currentFile, onSelect, onRename }: { file: string, currentFile: string, onSelect: (f: string) => void, onRename: (f: string) => void }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: file, data: { type: 'file', file } });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="group flex items-center gap-1 pr-2 rounded-lg hover:bg-base-200 transition-colors">
+      <button
+        onClick={() => onSelect(file)}
+        className={`flex-1 text-left px-3 py-2 text-sm flex items-center gap-2 truncate ${currentFile === file ? 'text-primary font-medium' : 'text-base-content/70'}`}
+      >
+        <File size={14} />
+        <span className="truncate">{file}</span>
+      </button>
+      <button 
+        onClick={(e) => {
+          e.stopPropagation();
+          onRename(file);
+        }}
+        className="btn btn-ghost btn-xs btn-square opacity-0 group-hover:opacity-100 transition-opacity"
+        title="Rename"
+      >
+        <Edit2 size={12} />
+      </button>
+    </div>
+  );
+}
 
 function App() {
   const { 
@@ -45,6 +87,7 @@ function App() {
     renameFile,
     reorderTasks,
     insertTaskAfter,
+    reorderFiles,
     createFile,
     restoreSession,
     requiresPermission,
@@ -79,7 +122,7 @@ function App() {
       rootFolderId: saved?.rootFolderId
     };
   });
-  const [activeStorage, setActiveStorage] = useState<'local' | 'cloud' | 'fs' | 'google'>('local');
+  const [activeStorage, setActiveStorage] = useState<'local' | 'fs' | 'google'>('local');
   const [isEditingRaw, setIsEditingRaw] = useState(false);
   const [rawMarkdown, setRawMarkdown] = useState('');
   const [showCompleted, setShowCompleted] = useState(false);
@@ -94,6 +137,20 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
+  const [activeFileId, setActiveFileId] = useState<string | null>(null);
+
+  const handleFileDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveFileId(null);
+    
+    if (over && active.id !== over.id) {
+      reorderFiles(active.id as string, over.id as string);
+    }
+  };
+
+  const handleFileDragStart = (event: DragStartEvent) => {
+    setActiveFileId(event.active.id as string);
+  };
 
   useEffect(() => {
     localStorage.setItem('sidebar-collapsed', JSON.stringify(showSidebar));
@@ -136,7 +193,11 @@ function App() {
   const [targetFocusId, setTargetFocusId] = useState<string | null>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -184,6 +245,9 @@ function App() {
     
     // Register Focus Mode Plugin
     pluginRegistry.register(new FocusModePlugin(), false);
+
+    // Register Auto Cleanup Plugin
+    pluginRegistry.register(new AutoCleanupPlugin(), false);
 
     // Register Gamify Plugin (Conditional)
     if (import.meta.env.VITE_ENABLE_GAMIFY !== 'false') {
@@ -452,39 +516,35 @@ function App() {
                 <button onClick={handleCreateFile} className="btn btn-ghost btn-xs btn-square" title="New File">
                   <Plus size={14} />
                 </button>
-                {'showDirectoryPicker' in window && (
-                  <button onClick={() => openFileOrFolder('folder')} className="btn btn-ghost btn-xs btn-square" title="Open Folder">
-                    <FolderOpen size={14} />
-                  </button>
-                )}
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
-              <button 
-                onClick={handleCreateFile}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-base-content/60 hover:text-primary hover:bg-base-200 rounded-lg transition-colors mb-2 border border-dashed border-base-300"
+              <DndContext 
+                sensors={sensors} 
+                collisionDetection={closestCenter} 
+                onDragEnd={handleFileDragEnd}
+                onDragStart={handleFileDragStart}
               >
-                <Plus size={14} />
-                <span>New File...</span>
-              </button>
-              {fileList.map(file => (
-                <div key={file} className="group flex items-center gap-1 pr-2 rounded-lg hover:bg-base-200 transition-colors">
-                  <button
-                    onClick={() => selectFile(file)}
-                    className={`flex-1 text-left px-3 py-2 text-sm flex items-center gap-2 truncate ${currentFile === file ? 'text-primary font-medium' : 'text-base-content/70'}`}
-                  >
-                    <File size={14} />
-                    <span className="truncate">{file}</span>
-                  </button>
-                  <button 
-                    onClick={() => handleRenameFile(file)}
-                    className="btn btn-ghost btn-xs btn-square opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Rename"
-                  >
-                    <Edit2 size={12} />
-                  </button>
-                </div>
-              ))}
+                <SortableContext items={fileList} strategy={verticalListSortingStrategy}>
+                  {fileList.map(file => (
+                    <SortableFileItem 
+                      key={file} 
+                      file={file} 
+                      currentFile={currentFile} 
+                      onSelect={selectFile} 
+                      onRename={handleRenameFile} 
+                    />
+                  ))}
+                </SortableContext>
+                <DragOverlay>
+                  {activeFileId ? (
+                    <div className="flex items-center gap-1 pr-2 rounded-lg bg-base-200 p-2 opacity-80 shadow-md border border-base-300">
+                      <File size={14} />
+                      <span className="truncate">{activeFileId}</span>
+                    </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
               {fileList.length === 0 && (
                 <div className="text-center p-4 text-base-content/40 text-sm">No markdown files found</div>
               )}
@@ -527,7 +587,43 @@ function App() {
             
             {/* Header & Controls */}
             <div className={`flex justify-between items-center border-b border-base-200 bg-base-50/50 ${compactMode ? 'p-2 h-[56px]' : 'p-4 h-[72px]'}`}>
-              <div className="flex items-center gap-3 overflow-hidden flex-1 mr-4">
+              <div className="flex items-center gap-3 flex-1 mr-4 min-w-0">
+                <div className="dropdown dropdown-bottom flex-shrink-0">
+                  <div tabIndex={0} role="button" className="btn btn-ghost btn-sm gap-2 px-2">
+                    {activeStorage === 'local' && <HardDrive size={18} />}
+                    {activeStorage === 'fs' && <FolderOpen size={18} />}
+                    {activeStorage === 'google' && <Cloud size={18} className="text-success" />}
+                    <span className="hidden sm:inline text-xs opacity-70 font-normal">
+                      {activeStorage === 'local' && 'Local'}
+                      {activeStorage === 'fs' && 'Folder'}
+                      {activeStorage === 'google' && 'Drive'}
+                    </span>
+                  </div>
+                  <ul tabIndex={0} className="dropdown-content z-[50] menu p-2 shadow bg-base-100 rounded-box w-52 border border-base-200">
+                    <li><a onClick={() => handleStorageChange('local')} className={activeStorage === 'local' ? 'active' : ''}><HardDrive size={16} /> Browser Cache (Temp)</a></li>
+                    <li><a onClick={() => handleStorageChange('fs')} className={activeStorage === 'fs' ? 'active' : ''}><FolderOpen size={16} /> Local Folder</a></li>
+                    <li><a onClick={() => handleStorageChange('google')} className={activeStorage === 'google' ? 'active' : ''}><Cloud size={16} /> Google Drive</a></li>
+                    {activeStorage === 'google' && (
+                      <li className="ml-4 border-l border-base-200">
+                        <a onClick={() => useTodoStore.getState().pickGoogleDriveFolder()} className="text-xs">
+                          <FolderOpen size={14} /> Select Folder
+                        </a>
+                        <a onClick={() => useTodoStore.getState().pickGoogleDriveFile()} className="text-xs">
+                          <FileText size={14} /> Open File
+                        </a>
+                        <a onClick={() => useTodoStore.getState().switchGoogleAccount()} className="text-xs">
+                          <RefreshCw size={14} /> Switch Account
+                        </a>
+                        {(!googleConfig.clientId || !googleConfig.apiKey) && (
+                          <a onClick={() => setShowGoogleConfig(true)} className="text-xs text-warning">
+                            <Settings size={14} /> Configure Keys
+                          </a>
+                        )}
+                      </li>
+                    )}
+                  </ul>
+                </div>
+
                 <h1 className="text-xl font-bold text-base-content truncate flex-shrink-0 max-w-[200px] sm:max-w-md">
                   {isFolderMode ? currentFile : 'My Tasks'}
                 </h1>
@@ -714,56 +810,8 @@ function App() {
             
             <div className="space-y-6">
               
-              {/* Storage Section */}
-              <div>
-                <h4 className="text-sm font-semibold text-base-content/70 uppercase tracking-wider mb-3">Storage Location</h4>
-                <div className="flex flex-col gap-2">
-                  <button 
-                    onClick={() => handleStorageChange('local')} 
-                    className={`btn btn-sm justify-start ${activeStorage === 'local' ? 'btn-active btn-primary' : 'btn-ghost'}`}
-                  >
-                    <HardDrive size={16} /> Browser Storage
-                  </button>
-                  <button 
-                    onClick={() => handleStorageChange('fs')} 
-                    className={`btn btn-sm justify-start ${activeStorage === 'fs' ? 'btn-active btn-primary' : 'btn-ghost'}`}
-                  >
-                    <FolderOpen size={16} /> Local Folder
-                  </button>
-                  <button 
-                    onClick={() => handleStorageChange('cloud')} 
-                    className={`btn btn-sm justify-start ${activeStorage === 'cloud' ? 'btn-active btn-primary' : 'btn-ghost'}`}
-                  >
-                    <Cloud size={16} /> Cloud (Mock)
-                  </button>
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => handleStorageChange('google')} 
-                      className={`btn btn-sm justify-start flex-1 ${activeStorage === 'google' ? 'btn-active btn-primary' : 'btn-ghost'}`}
-                    >
-                      <Cloud size={16} /> Google Drive
-                    </button>
-                    <button 
-                      onClick={() => setShowGoogleConfig(true)}
-                      className="btn btn-sm btn-square btn-ghost"
-                      title="Configure Google Drive"
-                    >
-                      <Settings size={16} />
-                    </button>
-                  </div>
-                  {activeStorage === 'google' && (
-                    <button 
-                      onClick={() => useTodoStore.getState().pickGoogleDriveFolder()}
-                      className="btn btn-xs btn-outline btn-primary mt-1 w-full"
-                    >
-                      Select Drive Folder
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="divider my-2"></div>
-
+              {/* Storage settings moved to navbar */}
+              
               {/* Theme Section */}
               <div>
                 <h4 className="text-sm font-semibold text-base-content/70 uppercase tracking-wider mb-3">Appearance</h4>
