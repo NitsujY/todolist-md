@@ -82,6 +82,11 @@ export class GoogleDriveAdapter implements StorageProvider {
   async init(): Promise<void> {
     if (this.isInitialized) return;
     if (!this.config) throw new Error('Google Drive config not set');
+<<<<<<< HEAD
+=======
+    if (!this.config.clientId) throw new Error('Google Drive Client ID is missing. Please configure it in Settings.');
+    if (!this.config.apiKey) throw new Error('Google Drive API Key is missing. Please configure it in Settings.');
+>>>>>>> main
 
     await this.loadScripts();
 

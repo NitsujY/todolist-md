@@ -133,12 +133,13 @@ export const useTodoStore = create<TodoState>()(
           }
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error picking folder:', error);
-      if (typeof error === 'object' && error !== null) {
-        console.error('Detailed error:', JSON.stringify(error, null, 2));
+      if (error.message && (error.message.includes('Client ID is missing') || error.message.includes('API Key is missing'))) {
+        alert(error.message);
+      } else {
+        alert('Failed to connect to Google Drive. Please check the console for details.');
       }
-      alert('Failed to connect to Google Drive. Please check the console for details.');
     }
   },
 
