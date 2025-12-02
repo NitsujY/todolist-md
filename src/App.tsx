@@ -64,10 +64,19 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showGoogleConfig, setShowGoogleConfig] = useState(false);
   const [googleConfig, setGoogleConfig] = useState<GoogleDriveConfig>(() => {
-    const saved = localStorage.getItem('google-drive-config');
-    return saved ? JSON.parse(saved) : {
-      clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID || '',
-      apiKey: import.meta.env.VITE_GOOGLE_API_KEY || ''
+    const savedStr = localStorage.getItem('google-drive-config');
+    let saved: GoogleDriveConfig | null = null;
+    try {
+      if (savedStr) saved = JSON.parse(savedStr);
+    } catch (e) { /* ignore */ }
+
+    const envClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+    const envApiKey = import.meta.env.VITE_GOOGLE_API_KEY || '';
+
+    return {
+      clientId: saved?.clientId || envClientId,
+      apiKey: saved?.apiKey || envApiKey,
+      rootFolderId: saved?.rootFolderId
     };
   });
   const [activeStorage, setActiveStorage] = useState<'local' | 'cloud' | 'fs' | 'google'>('local');

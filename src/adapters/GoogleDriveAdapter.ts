@@ -23,21 +23,26 @@ export class GoogleDriveAdapter implements StorageProvider {
   private driveApiLoaded = false;
 
   constructor() {
-    const savedConfig = localStorage.getItem('google-drive-config');
-    if (savedConfig) {
-      this.config = JSON.parse(savedConfig);
-    } else {
-      // Try to load from environment variables
-      const envClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-      const envApiKey = import.meta.env.VITE_GOOGLE_API_KEY;
-      
-      if (envClientId && envApiKey) {
-        this.config = {
-          clientId: envClientId,
-          apiKey: envApiKey
-        };
+    const savedConfigStr = localStorage.getItem('google-drive-config');
+    let savedConfig: GoogleDriveConfig | null = null;
+    try {
+      if (savedConfigStr) {
+        savedConfig = JSON.parse(savedConfigStr);
       }
+    } catch (e) {
+      console.error('Failed to parse saved config', e);
     }
+
+    // Load from environment variables
+    const envClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+    const envApiKey = import.meta.env.VITE_GOOGLE_API_KEY || '';
+
+    // Merge saved config with env vars (env vars act as defaults if saved values are missing)
+    this.config = {
+      clientId: savedConfig?.clientId || envClientId,
+      apiKey: savedConfig?.apiKey || envApiKey,
+      rootFolderId: savedConfig?.rootFolderId
+    };
   }
 
   setConfig(config: GoogleDriveConfig) {
