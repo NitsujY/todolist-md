@@ -66,8 +66,8 @@ function App() {
   const [googleConfig, setGoogleConfig] = useState<GoogleDriveConfig>(() => {
     const saved = localStorage.getItem('google-drive-config');
     return saved ? JSON.parse(saved) : {
-      clientId: '',
-      apiKey: ''
+      clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID || '',
+      apiKey: import.meta.env.VITE_GOOGLE_API_KEY || ''
     };
   });
   const [activeStorage, setActiveStorage] = useState<'local' | 'cloud' | 'fs' | 'google'>('local');
@@ -227,6 +227,13 @@ function App() {
     setActiveStorage('google');
     setShowGoogleConfig(false);
     setShowSettings(false);
+    
+    // Trigger folder picker flow
+    try {
+      await useTodoStore.getState().pickGoogleDriveFolder();
+    } catch (e) {
+      console.error("Failed to pick folder", e);
+    }
   };
 
   const handleSaveRaw = () => {
@@ -732,9 +739,17 @@ function App() {
                       className="btn btn-sm btn-square btn-ghost"
                       title="Configure Google Drive"
                     >
-                      <Settings size={14} />
+                      <Settings size={16} />
                     </button>
                   </div>
+                  {activeStorage === 'google' && (
+                    <button 
+                      onClick={() => useTodoStore.getState().pickGoogleDriveFolder()}
+                      className="btn btn-xs btn-outline btn-primary mt-1 w-full"
+                    >
+                      Select Drive Folder
+                    </button>
+                  )}
                 </div>
               </div>
 
