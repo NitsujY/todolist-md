@@ -115,6 +115,22 @@ export const useTodoStore = create<TodoState>()(
     adapters.google.setConfig(config);
   },
 
+  switchGoogleAccount: async () => {
+    try {
+      await adapters.google.switchAccount();
+      // After switching, refresh the list
+      const files = await adapters.google.list('');
+      set({ fileList: files });
+      if (files.length > 0) {
+        get().selectFile(files[0]);
+      } else {
+        set({ markdown: '', tasks: [] });
+      }
+    } catch (error) {
+      console.error('Failed to switch account', error);
+    }
+  },
+
   pickGoogleDriveFolder: async () => {
     try {
       console.log('Store: Picking folder...');

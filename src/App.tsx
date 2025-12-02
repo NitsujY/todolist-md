@@ -542,13 +542,16 @@ function App() {
                     </span>
                   </div>
                   <ul tabIndex={0} className="dropdown-content z-[50] menu p-2 shadow bg-base-100 rounded-box w-52 border border-base-200">
-                    <li><a onClick={() => handleStorageChange('local')} className={activeStorage === 'local' ? 'active' : ''}><HardDrive size={16} /> Local Storage</a></li>
+                    <li><a onClick={() => handleStorageChange('local')} className={activeStorage === 'local' ? 'active' : ''}><HardDrive size={16} /> Browser Cache (Temp)</a></li>
                     <li><a onClick={() => handleStorageChange('fs')} className={activeStorage === 'fs' ? 'active' : ''}><FolderOpen size={16} /> Local Folder</a></li>
                     <li><a onClick={() => handleStorageChange('google')} className={activeStorage === 'google' ? 'active' : ''}><Cloud size={16} /> Google Drive</a></li>
                     {activeStorage === 'google' && (
                       <li className="ml-4 border-l border-base-200">
                         <a onClick={() => useTodoStore.getState().pickGoogleDriveFolder()} className="text-xs">
                           <FolderOpen size={14} /> Select Folder
+                        </a>
+                        <a onClick={() => useTodoStore.getState().switchGoogleAccount()} className="text-xs">
+                          <RefreshCw size={14} /> Switch Account
                         </a>
                         {(!googleConfig.clientId || !googleConfig.apiKey) && (
                           <a onClick={() => setShowGoogleConfig(true)} className="text-xs text-warning">
