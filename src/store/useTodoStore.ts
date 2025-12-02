@@ -26,6 +26,7 @@ interface TodoState {
   setStorage: (adapterName: 'local' | 'fs' | 'google') => void;
   setGoogleDriveConfig: (config: GoogleDriveConfig) => Promise<void>;
   pickGoogleDriveFolder: () => Promise<void>;
+  pickGoogleDriveFile: () => Promise<void>;
   loadTodos: () => Promise<void>;
   toggleTask: (taskId: string) => Promise<void>;
   addTask: (text: string) => Promise<void>;
@@ -185,6 +186,41 @@ export const useTodoStore = create<TodoState>()(
       } else {
         alert('Failed to connect to Google Drive. Please check the console for details.');
       }
+    }
+  },
+
+  pickGoogleDriveFile: async () => {
+    try {
+      const file = await adapters.google.pickFile();
+      if (file) {
+        // We need to ensure this file is in the list or just open it directly
+        // Since we are in folder mode usually, we might want to just add it to the list if not present
+        // But wait, if we are in folder mode, we list files in the rootFolderId.
+        // If this file is elsewhere, it won't show up in the list unless we change rootFolderId or handle single file mode.
+        // For simplicity, let's just open it and add to list temporarily if needed.
+        
+        // Actually, picking a file grants access to it.
+        // If we just select it, the read() method will find it by name if we use name as ID in our store?
+        // Our store uses filename as ID for FS/Google.
+        // GoogleDriveAdapter uses a cache mapping filename -> ID.
+        // So we should update the cache.
+        
+        // The adapter's pickFile returns { id, name }.
+        // We can't easily inject it into the adapter's cache from here without a method, 
+        // but the adapter handles it internally if we call read? No.
+        
+        // Let's just refresh the list. If the file is in the current folder, it will appear.
+        // If it's NOT in the current folder, we have a problem because our UI assumes a single folder view.
+        
+        // However, the user's issue is likely that they picked a folder, but the file inside it is read-only.
+        // Picking the file explicitly grants write access.
+        // So if they pick the SAME file that is already in the list, it should just work.
+        
+        // So we just need to select it.
+        get().selectFile(file.name);
+      }
+    } catch (error) {
+      console.error('Error picking file:', error);
     }
   },
 

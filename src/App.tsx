@@ -608,6 +608,9 @@ function App() {
                         <a onClick={() => useTodoStore.getState().pickGoogleDriveFolder()} className="text-xs">
                           <FolderOpen size={14} /> Select Folder
                         </a>
+                        <a onClick={() => useTodoStore.getState().pickGoogleDriveFile()} className="text-xs">
+                          <FileText size={14} /> Open File
+                        </a>
                         <a onClick={() => useTodoStore.getState().switchGoogleAccount()} className="text-xs">
                           <RefreshCw size={14} /> Switch Account
                         </a>
