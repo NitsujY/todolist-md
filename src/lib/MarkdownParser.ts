@@ -381,13 +381,36 @@ export const toggleTaskInMarkdown = (markdown: string, taskId: string): string =
       if (isTask) {
         const id = `${node.position?.start.line}-${text.substring(0, 10)}`;
         if (id === taskId) {
-          if (typeof node.checked === 'boolean') {
-            node.checked = !node.checked;
-          } else {
-            // Handle manual text toggle
-            // This is tricky because we need to modify the text node
-            // For now, let's just assume GFM works for writing
-            node.checked = !node.checked; // Try to force GFM property
+          const wasChecked = node.checked;
+          node.checked = !wasChecked;
+          
+          // Handle @done(YYYY-MM-DD) tag
+          if (node.children && node.children.length > 0) {
+            const p = node.children[0];
+            if (p.type === 'paragraph' && p.children) {
+              // We need to modify the text content to add/remove @done tag
+              // This is a bit complex with remark AST, so we might need to reconstruct the text
+              // But remark-stringify handles node.checked for us.
+              // We just need to append/remove the tag from the text node.
+              
+              // Find the text node
+              const textNode = p.children.find((c: any) => c.type === 'text');
+              if (textNode) {
+                let content = textNode.value;
+                const doneRegex = / @done\(\d{4}-\d{2}-\d{2}\)/;
+                
+                if (node.checked) {
+                  // Task became completed, add tag if not present
+                  if (!doneRegex.test(content)) {
+                    const today = new Date().toISOString().split('T')[0];
+                    textNode.value = `${content} @done(${today})`;
+                  }
+                } else {
+                  // Task became incomplete, remove tag
+                  textNode.value = content.replace(doneRegex, '');
+                }
+              }
+            }
           }
         }
       }
