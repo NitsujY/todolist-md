@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { temporal } from 'zundo';
 import type { StorageProvider } from '../adapters/StorageProvider';
 import { LocalStorageAdapter } from '../adapters/LocalStorageAdapter';
-import { MockCloudAdapter } from '../adapters/MockCloudAdapter';
 import { FileSystemAdapter } from '../adapters/FileSystemAdapter';
 import { GoogleDriveAdapter, type GoogleDriveConfig } from '../adapters/GoogleDriveAdapter';
 import { parseTasks, toggleTaskInMarkdown, addTaskToMarkdown, updateTaskTextInMarkdown, insertTaskAfterInMarkdown, reorderTaskInMarkdown, deleteTaskInMarkdown, updateTaskDescriptionInMarkdown, nestTaskInMarkdown, type Task } from '../lib/MarkdownParser';
@@ -24,7 +23,7 @@ interface TodoState {
   setActiveTag: (tag: string | null) => void;
   setFontSize: (size: 'small' | 'normal' | 'large' | 'xl') => void;
   setCompactMode: (compact: boolean) => void;
-  setStorage: (adapterName: 'local' | 'cloud' | 'fs' | 'google') => void;
+  setStorage: (adapterName: 'local' | 'fs' | 'google') => void;
   setGoogleDriveConfig: (config: GoogleDriveConfig) => Promise<void>;
   pickGoogleDriveFolder: () => Promise<void>;
   loadTodos: () => Promise<void>;
@@ -35,6 +34,7 @@ interface TodoState {
   deleteTask: (taskId: string) => Promise<void>;
   insertTaskAfter: (taskId: string, text: string) => Promise<void>;
   reorderTasks: (activeId: string, overId: string) => Promise<void>;
+  reorderFiles: (activeFile: string, overFile: string) => void;
   nestTask: (activeId: string, overId: string) => Promise<void>;
   updateMarkdown: (newMarkdown: string) => Promise<void>;
   openFileOrFolder: (type: 'file' | 'folder') => Promise<boolean>;
@@ -49,10 +49,30 @@ interface TodoState {
 
 const adapters = {
   local: new LocalStorageAdapter(),
-  cloud: new MockCloudAdapter(),
   fs: new FileSystemAdapter(),
   google: new GoogleDriveAdapter(),
 };
+
+const sortFiles = (files: string[]) => {
+  try {
+    const savedOrder = JSON.parse(localStorage.getItem('file-order') || '[]');
+    if (Array.isArray(savedOrder) && savedOrder.length > 0) {
+      return [...files].sort((a, b) => {
+        const indexA = savedOrder.indexOf(a);
+        const indexB = savedOrder.indexOf(b);
+        if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+        if (indexA === -1) return 1;
+        if (indexB === -1) return -1;
+        return indexA - indexB;
+      });
+    }
+  } catch (e) {
+    console.error('Failed to sort files', e);
+  }
+  return files;
+};
+
+import { arrayMove } from '@dnd-kit/sortable';
 
 export const useTodoStore = create<TodoState>()(
   temporal(
@@ -88,7 +108,7 @@ export const useTodoStore = create<TodoState>()(
         adapters.google.init().then(() => {
           set({ isFolderMode: true });
           adapters.google.list('').then(files => {
-            set({ fileList: files, isLoading: false });
+            set({ fileList: sortFiles(files), isLoading: false });
             const lastFile = localStorage.getItem('lastOpenedFile');
             if (lastFile && files.includes(lastFile)) {
               get().selectFile(lastFile);
@@ -120,7 +140,7 @@ export const useTodoStore = create<TodoState>()(
       await adapters.google.switchAccount();
       // After switching, refresh the list
       const files = await adapters.google.list('');
-      set({ fileList: files });
+      set({ fileList: sortFiles(files) });
       if (files.length > 0) {
         get().selectFile(files[0]);
       } else {
@@ -148,7 +168,7 @@ export const useTodoStore = create<TodoState>()(
           try {
             const files = await adapters.google.list('');
             console.log('Store: Files listed:', files.length);
-            set({ fileList: files });
+            set({ fileList: sortFiles(files) });
             if (files.length > 0) {
               get().selectFile(files[0]);
             }
@@ -246,6 +266,19 @@ export const useTodoStore = create<TodoState>()(
     }
   },
 
+  reorderFiles: (activeFile, overFile) => {
+    const { fileList } = get();
+    const oldIndex = fileList.indexOf(activeFile);
+    const newIndex = fileList.indexOf(overFile);
+    
+    if (oldIndex !== -1 && newIndex !== -1) {
+      const newFileList = arrayMove(fileList, oldIndex, newIndex);
+      set({ fileList: newFileList });
+      // Persist order
+      localStorage.setItem('file-order', JSON.stringify(newFileList));
+    }
+  },
+
   reorderTasks: async (activeId, overId) => {
     const { markdown, storage, currentFile, isFolderMode } = get();
     const newMarkdown = reorderTaskInMarkdown(markdown, activeId, overId);
@@ -304,6 +337,8 @@ export const useTodoStore = create<TodoState>()(
       
       const newFileList = fileList.map(f => f === oldName ? newName : f);
       set({ fileList: newFileList });
+      // Update persisted order
+      localStorage.setItem('file-order', JSON.stringify(newFileList));
       
       if (currentFile === oldName) {
         set({ currentFile: newName });
@@ -320,9 +355,9 @@ export const useTodoStore = create<TodoState>()(
       filename += '.md';
     }
     
-    await storage.write(filename, '# New List\n\n- [ ] New task');
+    await storage.write(filename, '- [ ] New task');
     const files = await storage.list('');
-    set({ fileList: files });
+    set({ fileList: sortFiles(files) });
     get().selectFile(filename);
   },
   restoreSession: async () => {
@@ -335,7 +370,7 @@ export const useTodoStore = create<TodoState>()(
         try {
           await adapters.google.init();
           const files = await adapters.google.list('');
-          set({ fileList: files });
+          set({ fileList: sortFiles(files) });
           
           const lastFile = localStorage.getItem('lastOpenedFile');
           if (lastFile && files.includes(lastFile)) {
@@ -362,7 +397,7 @@ export const useTodoStore = create<TodoState>()(
         if (mode === 'folder') {
           try {
             const files = await fsAdapter.list('');
-            set({ fileList: files });
+            set({ fileList: sortFiles(files) });
             
             const lastFile = localStorage.getItem('lastOpenedFile');
             if (lastFile && files.includes(lastFile)) {
@@ -400,7 +435,7 @@ export const useTodoStore = create<TodoState>()(
         set({ requiresPermission: false });
         if (isFolderMode) {
           const files = await storage.list('');
-          set({ fileList: files });
+          set({ fileList: sortFiles(files) });
           
           const lastFile = localStorage.getItem('lastOpenedFile');
           if (lastFile && files.includes(lastFile)) {
@@ -424,7 +459,7 @@ export const useTodoStore = create<TodoState>()(
       if (success) {
         set({ storage: adapter, isFolderMode: true });
         const files = await adapter.list('');
-        set({ fileList: files });
+        set({ fileList: sortFiles(files) });
         if (files.length > 0) {
           get().selectFile(files[0]);
         }
