@@ -8,6 +8,7 @@ import { FontPlugin } from './plugins/FontPlugin';
 import { DueDatePlugin } from './plugins/DueDatePlugin';
 import { FocusModePlugin } from './plugins/FocusModePlugin';
 import { AutoCleanupPlugin } from './plugins/AutoCleanupPlugin';
+import { SoundEffectsPlugin } from './plugins/SoundEffectsPlugin';
 import { TaskItem } from './components/TaskItem';
 import type { GoogleDriveConfig } from './adapters/GoogleDriveAdapter';
 import {
@@ -252,6 +253,9 @@ function App() {
 
     // Register Auto Cleanup Plugin
     pluginRegistry.register(new AutoCleanupPlugin(), false);
+
+    // Register Sound Effects Plugin
+    pluginRegistry.register(new SoundEffectsPlugin(), false);
 
     // Register Gamify Plugin (Conditional)
     if (import.meta.env.VITE_ENABLE_GAMIFY !== 'false') {
