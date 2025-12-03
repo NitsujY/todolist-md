@@ -4,6 +4,7 @@ import { useTodoStore } from './store/useTodoStore';
 import { pluginRegistry } from './plugins/pluginEngine';
 import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading, Plus, Search, X, Tag } from 'lucide-react';
 import { ThemePlugin } from './plugins/ThemePlugin';
+import { FontPlugin } from './plugins/FontPlugin';
 import { DueDatePlugin } from './plugins/DueDatePlugin';
 import { FocusModePlugin } from './plugins/FocusModePlugin';
 import { AutoCleanupPlugin } from './plugins/AutoCleanupPlugin';
@@ -98,7 +99,8 @@ function App() {
     fontSize,
     setFontSize,
     activeTag,
-    setActiveTag
+    setActiveTag,
+    addTask
   } = useTodoStore();
 
   // Access temporal store for undo/redo
@@ -240,6 +242,8 @@ function App() {
 
     // Register Theme Plugin
     pluginRegistry.register(new ThemePlugin(), true); // System plugin
+    // Register Font Plugin
+    pluginRegistry.register(new FontPlugin(), true); // System plugin
     // Register Due Date Plugin
     pluginRegistry.register(new DueDatePlugin(), true); // System plugin
     
@@ -730,6 +734,9 @@ function App() {
                           <>
                             <Package size={48} className="mb-2 opacity-20" />
                             <p>No tasks found</p>
+                            <button onClick={() => addTask('New task')} className="btn btn-primary btn-sm mt-4 gap-2">
+                              <Plus size={16} /> Add First Task
+                            </button>
                           </>
                         )
                       ) : (
@@ -838,6 +845,30 @@ function App() {
 
                 <div className="mt-4">
                   <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-medium">Font Family</span>
+                  </div>
+                  <select 
+                    className="select select-bordered select-sm w-full"
+                    defaultValue={localStorage.getItem('font-preference') || 'system'}
+                    onChange={(e) => {
+                      const font = e.target.value;
+                      switch(font) {
+                        case 'inter': pluginRegistry.actions.get('setFontInter')?.(); break;
+                        case 'roboto-mono': pluginRegistry.actions.get('setFontRobotoMono')?.(); break;
+                        case 'fira-code': pluginRegistry.actions.get('setFontFiraCode')?.(); break;
+                        case 'system': pluginRegistry.actions.get('setFontSystem')?.(); break;
+                      }
+                    }}
+                  >
+                    <option value="system">System UI</option>
+                    <option value="inter">Inter</option>
+                    <option value="roboto-mono">Roboto Mono</option>
+                    <option value="fira-code">Fira Code</option>
+                  </select>
+                </div>
+
+                <div className="mt-4">
+                  <div className="flex justify-between items-center mb-2">
                     <span className="text-sm font-medium">Font Size</span>
                     <span className="text-xs text-base-content/50 capitalize">{fontSize}</span>
                   </div>
@@ -916,6 +947,10 @@ function App() {
                   ))}
                 </div>
               </div>
+            </div>
+            
+            <div className="text-center text-xs text-base-content/30 mt-8">
+              v{__APP_VERSION__}
             </div>
             
             <div className="modal-action">
