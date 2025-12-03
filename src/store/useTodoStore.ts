@@ -394,6 +394,18 @@ export const useTodoStore = create<TodoState>()(
     
     await storage.write(filename, '- [ ] New task');
     const files = await storage.list('');
+
+    // Update persisted order to include new file
+    try {
+      const savedOrder = JSON.parse(localStorage.getItem('file-order') || '[]');
+      if (Array.isArray(savedOrder) && !savedOrder.includes(filename)) {
+        savedOrder.push(filename);
+        localStorage.setItem('file-order', JSON.stringify(savedOrder));
+      }
+    } catch (e) {
+      console.error('Failed to update file order', e);
+    }
+
     set({ fileList: sortFiles(files) });
     get().selectFile(filename);
   },
