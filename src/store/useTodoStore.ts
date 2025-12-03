@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { temporal } from 'zundo';
 import type { StorageProvider } from '../adapters/StorageProvider';
 import { LocalStorageAdapter } from '../adapters/LocalStorageAdapter';
-import { MockCloudAdapter } from '../adapters/MockCloudAdapter';
 import { FileSystemAdapter } from '../adapters/FileSystemAdapter';
 import { GoogleDriveAdapter, type GoogleDriveConfig } from '../adapters/GoogleDriveAdapter';
 import { parseTasks, toggleTaskInMarkdown, addTaskToMarkdown, updateTaskTextInMarkdown, insertTaskAfterInMarkdown, reorderTaskInMarkdown, deleteTaskInMarkdown, updateTaskDescriptionInMarkdown, nestTaskInMarkdown, type Task } from '../lib/MarkdownParser';
@@ -24,9 +23,11 @@ interface TodoState {
   setActiveTag: (tag: string | null) => void;
   setFontSize: (size: 'small' | 'normal' | 'large' | 'xl') => void;
   setCompactMode: (compact: boolean) => void;
-  setStorage: (adapterName: 'local' | 'cloud' | 'fs' | 'google') => void;
+  setStorage: (adapterName: 'local' | 'fs' | 'google') => void;
   setGoogleDriveConfig: (config: GoogleDriveConfig) => Promise<void>;
   pickGoogleDriveFolder: () => Promise<void>;
+  pickGoogleDriveFile: () => Promise<void>;
+  switchGoogleAccount: () => Promise<void>;
   loadTodos: () => Promise<void>;
   toggleTask: (taskId: string) => Promise<void>;
   addTask: (text: string) => Promise<void>;
@@ -35,6 +36,7 @@ interface TodoState {
   deleteTask: (taskId: string) => Promise<void>;
   insertTaskAfter: (taskId: string, text: string) => Promise<void>;
   reorderTasks: (activeId: string, overId: string) => Promise<void>;
+  reorderFiles: (activeFile: string, overFile: string) => void;
   nestTask: (activeId: string, overId: string) => Promise<void>;
   updateMarkdown: (newMarkdown: string) => Promise<void>;
   openFileOrFolder: (type: 'file' | 'folder') => Promise<boolean>;
@@ -49,10 +51,30 @@ interface TodoState {
 
 const adapters = {
   local: new LocalStorageAdapter(),
-  cloud: new MockCloudAdapter(),
   fs: new FileSystemAdapter(),
   google: new GoogleDriveAdapter(),
 };
+
+const sortFiles = (files: string[]) => {
+  try {
+    const savedOrder = JSON.parse(localStorage.getItem('file-order') || '[]');
+    if (Array.isArray(savedOrder) && savedOrder.length > 0) {
+      return [...files].sort((a, b) => {
+        const indexA = savedOrder.indexOf(a);
+        const indexB = savedOrder.indexOf(b);
+        if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+        if (indexA === -1) return 1;
+        if (indexB === -1) return -1;
+        return indexA - indexB;
+      });
+    }
+  } catch (e) {
+    console.error('Failed to sort files', e);
+  }
+  return files;
+};
+
+import { arrayMove } from '@dnd-kit/sortable';
 
 export const useTodoStore = create<TodoState>()(
   temporal(
@@ -82,20 +104,29 @@ export const useTodoStore = create<TodoState>()(
     
     // Don't auto-load for FS, wait for user action
     if (adapterName === 'google') {
+      set({ isLoading: true });
       const config = adapters.google.getConfig();
       if (config) {
         adapters.google.init().then(() => {
           set({ isFolderMode: true });
           adapters.google.list('').then(files => {
-            set({ fileList: files });
+            set({ fileList: sortFiles(files), isLoading: false });
             const lastFile = localStorage.getItem('lastOpenedFile');
             if (lastFile && files.includes(lastFile)) {
               get().selectFile(lastFile);
             } else if (files.length > 0) {
               get().selectFile(files[0]);
             }
+          }).catch(e => {
+            console.error(e);
+            set({ isLoading: false });
           });
-        }).catch(console.error);
+        }).catch(e => {
+          console.error(e);
+          set({ isLoading: false });
+        });
+      } else {
+        set({ isLoading: false });
       }
     } else if (adapterName !== 'fs') {
       get().loadTodos();
@@ -104,6 +135,22 @@ export const useTodoStore = create<TodoState>()(
 
   setGoogleDriveConfig: async (config) => {
     adapters.google.setConfig(config);
+  },
+
+  switchGoogleAccount: async () => {
+    try {
+      await adapters.google.switchAccount();
+      // After switching, refresh the list
+      const files = await adapters.google.list('');
+      set({ fileList: sortFiles(files) });
+      if (files.length > 0) {
+        get().selectFile(files[0]);
+      } else {
+        set({ markdown: '', tasks: [] });
+      }
+    } catch (error) {
+      console.error('Failed to switch account', error);
+    }
   },
 
   pickGoogleDriveFolder: async () => {
@@ -123,7 +170,7 @@ export const useTodoStore = create<TodoState>()(
           try {
             const files = await adapters.google.list('');
             console.log('Store: Files listed:', files.length);
-            set({ fileList: files });
+            set({ fileList: sortFiles(files) });
             if (files.length > 0) {
               get().selectFile(files[0]);
             }
@@ -140,6 +187,41 @@ export const useTodoStore = create<TodoState>()(
       } else {
         alert('Failed to connect to Google Drive. Please check the console for details.');
       }
+    }
+  },
+
+  pickGoogleDriveFile: async () => {
+    try {
+      const file = await adapters.google.pickFile();
+      if (file) {
+        // We need to ensure this file is in the list or just open it directly
+        // Since we are in folder mode usually, we might want to just add it to the list if not present
+        // But wait, if we are in folder mode, we list files in the rootFolderId.
+        // If this file is elsewhere, it won't show up in the list unless we change rootFolderId or handle single file mode.
+        // For simplicity, let's just open it and add to list temporarily if needed.
+        
+        // Actually, picking a file grants access to it.
+        // If we just select it, the read() method will find it by name if we use name as ID in our store?
+        // Our store uses filename as ID for FS/Google.
+        // GoogleDriveAdapter uses a cache mapping filename -> ID.
+        // So we should update the cache.
+        
+        // The adapter's pickFile returns { id, name }.
+        // We can't easily inject it into the adapter's cache from here without a method, 
+        // but the adapter handles it internally if we call read? No.
+        
+        // Let's just refresh the list. If the file is in the current folder, it will appear.
+        // If it's NOT in the current folder, we have a problem because our UI assumes a single folder view.
+        
+        // However, the user's issue is likely that they picked a folder, but the file inside it is read-only.
+        // Picking the file explicitly grants write access.
+        // So if they pick the SAME file that is already in the list, it should just work.
+        
+        // So we just need to select it.
+        get().selectFile(file.name);
+      }
+    } catch (error) {
+      console.error('Error picking file:', error);
     }
   },
 
@@ -221,6 +303,19 @@ export const useTodoStore = create<TodoState>()(
     }
   },
 
+  reorderFiles: (activeFile, overFile) => {
+    const { fileList } = get();
+    const oldIndex = fileList.indexOf(activeFile);
+    const newIndex = fileList.indexOf(overFile);
+    
+    if (oldIndex !== -1 && newIndex !== -1) {
+      const newFileList = arrayMove(fileList, oldIndex, newIndex);
+      set({ fileList: newFileList });
+      // Persist order
+      localStorage.setItem('file-order', JSON.stringify(newFileList));
+    }
+  },
+
   reorderTasks: async (activeId, overId) => {
     const { markdown, storage, currentFile, isFolderMode } = get();
     const newMarkdown = reorderTaskInMarkdown(markdown, activeId, overId);
@@ -279,6 +374,8 @@ export const useTodoStore = create<TodoState>()(
       
       const newFileList = fileList.map(f => f === oldName ? newName : f);
       set({ fileList: newFileList });
+      // Update persisted order
+      localStorage.setItem('file-order', JSON.stringify(newFileList));
       
       if (currentFile === oldName) {
         set({ currentFile: newName });
@@ -295,9 +392,21 @@ export const useTodoStore = create<TodoState>()(
       filename += '.md';
     }
     
-    await storage.write(filename, '# New List\n\n- [ ] New task');
+    await storage.write(filename, '- [ ] New task');
     const files = await storage.list('');
-    set({ fileList: files });
+
+    // Update persisted order to include new file
+    try {
+      const savedOrder = JSON.parse(localStorage.getItem('file-order') || '[]');
+      if (Array.isArray(savedOrder) && !savedOrder.includes(filename)) {
+        savedOrder.push(filename);
+        localStorage.setItem('file-order', JSON.stringify(savedOrder));
+      }
+    } catch (e) {
+      console.error('Failed to update file order', e);
+    }
+
+    set({ fileList: sortFiles(files) });
     get().selectFile(filename);
   },
   restoreSession: async () => {
@@ -310,7 +419,7 @@ export const useTodoStore = create<TodoState>()(
         try {
           await adapters.google.init();
           const files = await adapters.google.list('');
-          set({ fileList: files });
+          set({ fileList: sortFiles(files) });
           
           const lastFile = localStorage.getItem('lastOpenedFile');
           if (lastFile && files.includes(lastFile)) {
@@ -337,7 +446,7 @@ export const useTodoStore = create<TodoState>()(
         if (mode === 'folder') {
           try {
             const files = await fsAdapter.list('');
-            set({ fileList: files });
+            set({ fileList: sortFiles(files) });
             
             const lastFile = localStorage.getItem('lastOpenedFile');
             if (lastFile && files.includes(lastFile)) {
@@ -375,7 +484,7 @@ export const useTodoStore = create<TodoState>()(
         set({ requiresPermission: false });
         if (isFolderMode) {
           const files = await storage.list('');
-          set({ fileList: files });
+          set({ fileList: sortFiles(files) });
           
           const lastFile = localStorage.getItem('lastOpenedFile');
           if (lastFile && files.includes(lastFile)) {
@@ -399,7 +508,7 @@ export const useTodoStore = create<TodoState>()(
       if (success) {
         set({ storage: adapter, isFolderMode: true });
         const files = await adapter.list('');
-        set({ fileList: files });
+        set({ fileList: sortFiles(files) });
         if (files.length > 0) {
           get().selectFile(files[0]);
         }

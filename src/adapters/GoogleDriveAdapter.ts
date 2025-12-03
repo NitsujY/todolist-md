@@ -100,9 +100,9 @@ export class GoogleDriveAdapter implements StorageProvider {
 
           this.tokenClient = window.google.accounts.oauth2.initTokenClient({
             client_id: this.config!.clientId,
-            // Use only drive.file scope. This is "Sensitive" but not "Restricted".
-            // The Picker handles the "open" permission grant for selected folders.
-            scope: 'https://www.googleapis.com/auth/drive.file',
+            // Use 'drive' scope to allow full access to all files, enabling the "Open Folder" workflow
+            // where we can edit any file in the selected folder.
+            scope: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.install',
             callback: (response: any) => {
               if (response.error !== undefined) {
                 throw response;
@@ -155,6 +155,22 @@ export class GoogleDriveAdapter implements StorageProvider {
     });
   }
 
+  async switchAccount(): Promise<void> {
+    if (!this.isInitialized) await this.init();
+    
+    return new Promise((resolve) => {
+      this.tokenClient.callback = (resp: any) => {
+        if (resp.error !== undefined) {
+          throw resp;
+        }
+        this.accessToken = resp.access_token;
+        resolve();
+      };
+      // Force account selection
+      this.tokenClient.requestAccessToken({ prompt: 'select_account' });
+    });
+  }
+
   private async ensureAuth() {
     if (!this.accessToken) {
       await this.signIn();
@@ -167,8 +183,7 @@ export class GoogleDriveAdapter implements StorageProvider {
     
     // List markdown files
     // We'll look for files with .md extension or markdown mime type
-    // We are using 'drive.file' scope, so we only see files created by this app
-    // or files opened with this app.
+    // We are using 'drive' scope, so we can see all files in the folder.
     try {
       let query = "(name contains '.md' or name contains '.markdown') and trashed = false";
       if (this.config?.rootFolderId) {
@@ -179,6 +194,8 @@ export class GoogleDriveAdapter implements StorageProvider {
         q: query,
         fields: 'files(id, name)',
         spaces: 'drive',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true
       });
 
       const files = response.result.files;
@@ -226,6 +243,8 @@ export class GoogleDriveAdapter implements StorageProvider {
       const response = await window.gapi.client.drive.files.list({
         q: query,
         fields: 'files(id, name)',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true
       });
       if (response.result.files && response.result.files.length > 0) {
         fileId = response.result.files[0].id;
@@ -241,6 +260,7 @@ export class GoogleDriveAdapter implements StorageProvider {
       const response = await window.gapi.client.drive.files.get({
         fileId: fileId,
         alt: 'media',
+        supportsAllDrives: true
       });
       return response.body;
     } catch (e) {
@@ -263,6 +283,7 @@ export class GoogleDriveAdapter implements StorageProvider {
 
     if (!fileId) {
        // Check if exists first
+       console.log(`[GoogleDrive] File ID not in cache for ${path}, searching...`);
        let query = `name = '${path}' and trashed = false`;
        if (this.config?.rootFolderId) {
          query = `'${this.config.rootFolderId}' in parents and ${query}`;
@@ -271,12 +292,17 @@ export class GoogleDriveAdapter implements StorageProvider {
        const listResp = await window.gapi.client.drive.files.list({
         q: query,
         fields: 'files(id, name)',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true
       });
       if (listResp.result.files && listResp.result.files.length > 0) {
         fileId = listResp.result.files[0].id;
+        console.log(`[GoogleDrive] Found file ${path} with ID ${fileId}`);
         if (fileId) {
           this.fileCache.set(path, { id: fileId, name: path });
         }
+      } else {
+        console.log(`[GoogleDrive] File ${path} not found, will create new.`);
       }
     }
 
@@ -286,44 +312,55 @@ export class GoogleDriveAdapter implements StorageProvider {
     };
 
     // Only set parents on creation, not update.
-    // Updating parents via PATCH metadata is often restricted (fieldNotWritable).
     if (!fileId && this.config?.rootFolderId) {
       metadata.parents = [this.config.rootFolderId];
     }
 
-    const multipartRequestBody =
-      `\r\n--foo_bar_baz\r\n` +
-      `Content-Type: application/json\r\n\r\n` +
-      JSON.stringify(metadata) +
-      `\r\n--foo_bar_baz\r\n` +
-      `Content-Type: text/markdown\r\n\r\n` +
-      content +
-      `\r\n--foo_bar_baz--`;
-
     try {
       if (fileId) {
-        // Update
+        // Update content only using 'media' uploadType
+        // This avoids metadata permission issues and is simpler for content updates
+        console.log(`[GoogleDrive] Updating file content ${fileId} (${path})...`);
         await window.gapi.client.request({
           path: `/upload/drive/v3/files/${fileId}`,
           method: 'PATCH',
-          params: { uploadType: 'multipart' },
-          headers: {
-            'Content-Type': 'multipart/related; boundary=foo_bar_baz',
+          params: { 
+            uploadType: 'media',
+            supportsAllDrives: true
           },
-          body: multipartRequestBody,
+          headers: {
+            'Content-Type': 'text/markdown',
+          },
+          body: content,
         });
+        console.log(`[GoogleDrive] Update successful for ${fileId}`);
       } else {
-        // Create
+        // Create new file using 'multipart' to set metadata (name, parents)
+        console.log(`[GoogleDrive] Creating new file ${path}...`);
+        
+        const multipartRequestBody =
+          `\r\n--foo_bar_baz\r\n` +
+          `Content-Type: application/json\r\n\r\n` +
+          JSON.stringify(metadata) +
+          `\r\n--foo_bar_baz\r\n` +
+          `Content-Type: text/markdown\r\n\r\n` +
+          content +
+          `\r\n--foo_bar_baz--`;
+
         const response = await window.gapi.client.request({
           path: '/upload/drive/v3/files',
           method: 'POST',
-          params: { uploadType: 'multipart' },
+          params: { 
+            uploadType: 'multipart',
+            supportsAllDrives: true
+          },
           headers: {
             'Content-Type': 'multipart/related; boundary=foo_bar_baz',
           },
           body: multipartRequestBody,
         });
         const newFile = response.result;
+        console.log(`[GoogleDrive] Created file ${newFile.id}`);
         this.fileCache.set(path, { id: newFile.id, name: path });
       }
     } catch (e) {
@@ -333,6 +370,10 @@ export class GoogleDriveAdapter implements StorageProvider {
         this.accessToken = null;
         await this.signIn();
         return this.write(path, content);
+      }
+      if ((e as any).status === 403) {
+        console.error('Permission denied. User might need to grant write access.');
+        alert('Permission denied! Please ensure you have granted the app full Drive access. You may need to sign out and sign in again to update permissions.');
       }
       throw e;
     }
@@ -389,6 +430,52 @@ export class GoogleDriveAdapter implements StorageProvider {
           console.log('pickFolder: Picker set to visible');
         } catch (err) {
           console.error('pickFolder: Error building/showing picker', err);
+          reject(err);
+        }
+    });
+  }
+
+  async pickFile(): Promise<{ id: string; name: string } | null> {
+    console.log('pickFile: Starting...');
+    try {
+      await this.ensureAuth();
+    } catch (e) {
+      console.error('pickFile: Auth failed', e);
+      throw e;
+    }
+    
+    return new Promise((resolve, reject) => {
+      if (!window.google || !window.google.picker) {
+        reject(new Error('Google Picker API not loaded'));
+        return;
+      }
+
+      try {
+        const pickerCallback = (data: any) => {
+            if (data.action === window.google.picker.Action.PICKED) {
+              const doc = data.docs[0];
+              console.log('pickFile: File picked', doc.id);
+              // Update cache with the picked file ID to ensure subsequent operations use it
+              this.fileCache.set(doc.name, { id: doc.id, name: doc.name });
+              resolve({ id: doc.id, name: doc.name });
+            } else if (data.action === window.google.picker.Action.CANCEL) {
+              resolve(null);
+            }
+          };
+
+          const view = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
+            .setIncludeFolders(true)
+            .setMimeTypes('text/markdown,text/plain');
+
+          const picker = new window.google.picker.PickerBuilder()
+            .addView(view)
+            .setOAuthToken(this.accessToken)
+            .setDeveloperKey(this.config!.apiKey)
+            .setCallback(pickerCallback)
+            .build();
+
+          picker.setVisible(true);
+        } catch (err) {
           reject(err);
         }
     });
