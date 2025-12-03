@@ -240,6 +240,16 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
     }
   };
 
+  const getHeaderFontSizeClass = () => {
+    switch (fontSize) {
+      case 'small': return 'text-sm';
+      case 'normal': return 'text-base';
+      case 'large': return 'text-lg';
+      case 'xl': return 'text-xl';
+      default: return 'text-lg';
+    }
+  };
+
   if (!isVisible) return null;
 
   if (task.type === 'header') {

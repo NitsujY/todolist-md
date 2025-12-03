@@ -17,6 +17,7 @@ export class GoogleDriveAdapter implements StorageProvider {
   private config: GoogleDriveConfig | null = null;
   private tokenClient: any;
   private accessToken: string | null = null;
+  private tokenExpiration: number = 0;
   private isInitialized = false;
   private fileCache: Map<string, { id: string; name: string }> = new Map();
 
@@ -31,6 +32,17 @@ export class GoogleDriveAdapter implements StorageProvider {
       }
     } catch (e) {
       console.error('Failed to parse saved config', e);
+    }
+
+    // Try to restore token
+    const savedToken = localStorage.getItem('google-drive-token');
+    const savedExpiration = localStorage.getItem('google-drive-token-expires');
+    if (savedToken && savedExpiration) {
+      const expiresAt = parseInt(savedExpiration, 10);
+      if (Date.now() < expiresAt) {
+        this.accessToken = savedToken;
+        this.tokenExpiration = expiresAt;
+      }
     }
 
     // Load from environment variables
@@ -107,7 +119,7 @@ export class GoogleDriveAdapter implements StorageProvider {
               if (response.error !== undefined) {
                 throw response;
               }
-              this.accessToken = response.access_token;
+              this.handleTokenResponse(response);
             },
           });
 
@@ -147,7 +159,7 @@ export class GoogleDriveAdapter implements StorageProvider {
         if (resp.error !== undefined) {
           throw resp;
         }
-        this.accessToken = resp.access_token;
+        this.handleTokenResponse(resp);
         resolve();
       };
       // Don't force consent every time. This allows silent sign-in if already authorized.
@@ -163,7 +175,7 @@ export class GoogleDriveAdapter implements StorageProvider {
         if (resp.error !== undefined) {
           throw resp;
         }
-        this.accessToken = resp.access_token;
+        this.handleTokenResponse(resp);
         resolve();
       };
       // Force account selection
@@ -171,8 +183,18 @@ export class GoogleDriveAdapter implements StorageProvider {
     });
   }
 
+  private handleTokenResponse(resp: any) {
+    this.accessToken = resp.access_token;
+    // expires_in is in seconds. Subtract a buffer (e.g. 5 mins) to be safe.
+    const expiresIn = parseInt(resp.expires_in, 10);
+    this.tokenExpiration = Date.now() + (expiresIn - 300) * 1000;
+    
+    localStorage.setItem('google-drive-token', this.accessToken!);
+    localStorage.setItem('google-drive-token-expires', this.tokenExpiration.toString());
+  }
+
   private async ensureAuth() {
-    if (!this.accessToken) {
+    if (!this.accessToken || Date.now() >= this.tokenExpiration) {
       await this.signIn();
     }
   }
