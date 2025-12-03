@@ -220,13 +220,23 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
     }
   };
 
-  const getHeaderFontSizeClass = () => {
+  const getCheckboxSizeClass = () => {
     switch (fontSize) {
-      case 'small': return 'text-sm';
-      case 'normal': return 'text-base';
-      case 'large': return 'text-lg';
-      case 'xl': return 'text-xl';
-      default: return 'text-lg';
+      case 'small': return 'w-4 h-4';
+      case 'normal': return 'w-5 h-5';
+      case 'large': return 'w-5 h-5';
+      case 'xl': return 'w-6 h-6';
+      default: return 'w-5 h-5';
+    }
+  };
+
+  const getLineHeightClass = () => {
+    switch (fontSize) {
+      case 'small': return 'h-4'; // leading-4
+      case 'normal': return 'h-5'; // leading-5
+      case 'large': return 'h-6'; // leading-6
+      case 'xl': return 'h-7'; // leading-7
+      default: return 'h-6';
     }
   };
 
@@ -316,22 +326,28 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
       ref={setNodeRef}
       style={style}
       className={`
-        task-item group flex items-center gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
+        task-item group flex items-start gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
         ${compact ? 'p-1' : 'p-3'}
         ${isAnimating ? 'opacity-0 -translate-y-4 max-h-0 overflow-hidden py-0 border-none' : 'opacity-100 max-h-24'}
         ${isDragging ? 'opacity-50 bg-base-200' : ''}
       `}
     >
-      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div {...attributes} {...listeners} className={`cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center ${getLineHeightClass()}`}>
         <GripVertical size={16} />
       </div>
 
-      <button 
-        onClick={() => onToggle(task.id)}
-        className={`flex-shrink-0 transition-colors p-1 rounded-full hover:bg-base-200 ${task.completed ? 'text-base-content/30' : 'text-base-content/50 hover:text-primary'}`}
-      >
-        {task.completed ? <div className="w-5 h-5 rounded-full border-2 border-current bg-current"></div> : <div className="w-5 h-5 rounded-full border-2 border-current"></div>}
-      </button>
+      <div className={`flex items-center justify-center flex-shrink-0 ${getLineHeightClass()}`}>
+        <button 
+          onClick={() => onToggle(task.id)}
+          className={`transition-colors p-0 rounded-full hover:bg-base-200 ${task.completed ? 'text-base-content/30' : 'text-base-content/50 hover:text-primary'}`}
+        >
+          {task.completed ? (
+            <div className={`${getCheckboxSizeClass()} rounded-full border-2 border-current bg-current`}></div>
+          ) : (
+            <div className={`${getCheckboxSizeClass()} rounded-full border-2 border-current`}></div>
+          )}
+        </button>
+      </div>
       
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
