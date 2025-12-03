@@ -242,11 +242,11 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
 
   const getHeaderFontSizeClass = () => {
     switch (fontSize) {
-      case 'small': return 'text-sm';
-      case 'normal': return 'text-base';
-      case 'large': return 'text-lg';
-      case 'xl': return 'text-xl';
-      default: return 'text-lg';
+      case 'small': return 'text-lg';
+      case 'normal': return 'text-xl';
+      case 'large': return 'text-2xl';
+      case 'xl': return 'text-3xl';
+      default: return 'text-xl';
     }
   };
 
