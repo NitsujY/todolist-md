@@ -242,20 +242,8 @@ function App() {
       }
     });
 
-    // Register Theme Plugin
-    pluginRegistry.register(new ThemePlugin(), true); // System plugin
-    // Register Font Plugin
-    pluginRegistry.register(new FontPlugin(), true); // System plugin
-    // Register Due Date Plugin
-    pluginRegistry.register(new DueDatePlugin(), true); // System plugin
+    // Core plugins are now registered in main.tsx
     
-    // Register Focus Mode Plugin
-    pluginRegistry.register(new FocusModePlugin(), false);
-
-    // Register Auto Cleanup Plugin
-    pluginRegistry.register(new AutoCleanupPlugin(), false);
-    // Register Sound Effects Plugin
-    pluginRegistry.register(new SoundEffectsPlugin(), false);
     // Register Gamify Plugin (Conditional)
     if (import.meta.env.VITE_ENABLE_GAMIFY !== 'false') {
       // Use glob import to make it optional at build time

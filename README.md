@@ -43,6 +43,7 @@ A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (
 - **Undo/Redo**: Mistakes are fine with full history support.
 - **Search**: Quickly find tasks across your list.
 - **Focus Mode**: Dim distractions and focus on one task at a time (via Plugin).
+- **Google Drive Integration**: Open and edit Markdown files directly from your Google Drive.
 - **Customizable UI**:
     - **Themes**: Light, Dark, and System preference.
     - **Compact Mode**: For when you want to see more.
@@ -51,7 +52,20 @@ A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (
 - **Storage Options**:
     - **Local Storage**: Quick start, data stays in browser.
     - **File System**: Edit real files on your disk.
-    - **Cloud**: (Mock) Architecture ready for cloud backends.
+    - **Google Drive**: Sync with your Google Drive (requires API setup).
+
+## Plugins
+
+The app features a robust plugin system. You can enable/disable them in Settings.
+
+- **Theme Manager**: Switch between Light, Dark, and Auto themes.
+- **Font Manager**: Choose your preferred font (System, Inter, Roboto Mono, Fira Code).
+- **Due Date**: Add due dates to tasks using `due:YYYY-MM-DD` syntax.
+- **Focus Mode**: Enter a distraction-free mode to focus on a single task.
+- **Auto Cleanup**: Automatically removes completed tasks older than a configurable number of days (default: 30).
+- **Auto Refresh**: Periodically reloads the list from storage (configurable interval) to keep in sync with external changes.
+- **Sound Effects**: Adds satisfying sounds when completing tasks.
+- **Gamification**: (Experimental) Earn XP and level up by completing tasks.
 
 ## Markdown Syntax Guide
 
