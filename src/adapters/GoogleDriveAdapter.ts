@@ -192,6 +192,9 @@ export class GoogleDriveAdapter implements StorageProvider {
     localStorage.setItem('google-drive-token-expires', this.tokenExpiration.toString());
   }
   private async ensureAuth() {
+    if (!this.isInitialized) {
+      await this.init();
+    }
     if (!this.accessToken || Date.now() >= this.tokenExpiration) {
       await this.signIn();
     }
