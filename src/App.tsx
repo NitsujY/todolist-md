@@ -253,10 +253,8 @@ function App() {
 
     // Register Auto Cleanup Plugin
     pluginRegistry.register(new AutoCleanupPlugin(), false);
-
     // Register Sound Effects Plugin
     pluginRegistry.register(new SoundEffectsPlugin(), false);
-
     // Register Gamify Plugin (Conditional)
     if (import.meta.env.VITE_ENABLE_GAMIFY !== 'false') {
       // Use glob import to make it optional at build time

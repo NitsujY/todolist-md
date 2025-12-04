@@ -182,7 +182,6 @@ export class GoogleDriveAdapter implements StorageProvider {
       this.tokenClient.requestAccessToken({ prompt: 'select_account' });
     });
   }
-
   private handleTokenResponse(resp: any) {
     this.accessToken = resp.access_token;
     // expires_in is in seconds. Subtract a buffer (e.g. 5 mins) to be safe.
@@ -192,7 +191,6 @@ export class GoogleDriveAdapter implements StorageProvider {
     localStorage.setItem('google-drive-token', this.accessToken!);
     localStorage.setItem('google-drive-token-expires', this.tokenExpiration.toString());
   }
-
   private async ensureAuth() {
     if (!this.accessToken || Date.now() >= this.tokenExpiration) {
       await this.signIn();
