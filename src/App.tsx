@@ -786,6 +786,11 @@ function App() {
                     </DndContext>
                   )}
                 </div>
+                <div className="p-2 text-center text-xs text-base-content/30 border-t border-base-200 bg-base-50">
+                  <a href="/privacy.html" target="_blank" className="hover:text-primary">Privacy Policy</a>
+                  <span className="mx-2">•</span>
+                  <a href="/terms.html" target="_blank" className="hover:text-primary">Terms of Service</a>
+                </div>
               </div>
             )}
           </div>
@@ -940,8 +945,12 @@ function App() {
               </div>
             </div>
             
-            <div className="text-center text-xs text-base-content/30 mt-8">
-              v{__APP_VERSION__}
+            <div className="text-center text-xs text-base-content/30 mt-8 flex flex-col gap-2">
+              <span>v{__APP_VERSION__}</span>
+              <div className="flex justify-center gap-3">
+                <a href="/privacy.html" target="_blank" className="hover:text-primary underline">Privacy Policy</a>
+                <a href="/terms.html" target="_blank" className="hover:text-primary underline">Terms of Service</a>
+              </div>
             </div>
             
             <div className="modal-action">
