@@ -9,6 +9,7 @@ export interface Plugin {
   onTaskComplete?: (task: Task) => void;
   renderDashboard?: () => ReactNode;
   renderHeaderButton?: () => ReactNode;
+  renderSettings?: () => ReactNode;
   onEnable?: () => void;
   onDisable?: () => void;
   defaultEnabled?: boolean;

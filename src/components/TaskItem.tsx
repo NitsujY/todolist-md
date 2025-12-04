@@ -98,6 +98,8 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
     }
   }, [task.completed, showCompleted]);
 
+  if (!isVisible) return null;
+
   // Sync local state with prop when prop changes
   if (task.text !== editText && !isEditing) {
     setEditText(task.text);
@@ -249,8 +251,6 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
       default: return 'text-xl';
     }
   };
-
-  if (!isVisible) return null;
 
   if (task.type === 'header') {
     return (

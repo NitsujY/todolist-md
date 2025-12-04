@@ -40,13 +40,14 @@ The app uses the `StorageProvider` interface to support multiple backends.
 - **Permissions**: Must request read/write permission on every session restore (browser security constraint).
 
 ### 3.3 Google Drive Adapter (`google`)
-- **Auth**: OAuth 2.0 with `https://www.googleapis.com/auth/drive` scope.
+- **Auth**: OAuth 2.0 with `https://www.googleapis.com/auth/drive` and `https://www.googleapis.com/auth/drive.install` scopes.
 - **Persistence**:
-    - Access Token is cached in `localStorage` with expiration handling to minimize re-auth prompts.
+    - Access Token is cached in `localStorage` with expiration handling.
     - `google-drive-config` stores Client ID and API Key.
-- **Behavior**:
-    - Lists `.md` and `.markdown` files in the configured root folder (or root of Drive).
-    - Supports switching accounts.
+- **File Listing Strategy**:
+    - Uses Google Picker API for folder selection to ensure reliable ID retrieval.
+    - Fetches *all* non-trashed files in the selected folder and filters for Markdown (`.md`, `.markdown`, `text/markdown`) in-memory to avoid API query inconsistencies.
+    - Explicitly sets `gapi.client` token to ensure authenticated requests for private files.
 
 ## 4. Feature Specifications
 
@@ -62,6 +63,9 @@ The app uses the `StorageProvider` interface to support multiple backends.
 - **Reordering**:
     - Drag and drop via handle.
     - Supports reordering within the same level and nesting (drag right to nest).
+- **Completion**:
+    - Toggling a task triggers a "disappear" animation (if "Show Done" is off).
+    - Completed tasks are hidden after the animation completes.
 
 ### 4.2 Appearance & Settings
 - **Themes**: Light, Dark, Auto (system preference).
@@ -79,12 +83,18 @@ The app uses the `StorageProvider` interface to support multiple backends.
     - `onTaskRender`: Render custom UI next to tasks.
     - `transformMarkdown`: Modify markdown before parsing (hooks).
     - `renderHeaderButton`: Add buttons to the main toolbar.
+    - `renderSettings`: Render custom configuration UI in the Settings modal.
+    - `onTaskComplete`: Hook triggered when a task is marked as done.
+    - `renderDashboard`: Render background controllers or UI elements (e.g., for auto-refresh).
 - **Built-in Plugins**:
     - `ThemePlugin`: Manages theme switching.
     - `FontPlugin`: Manages font switching.
     - `DueDatePlugin`: Highlights due dates.
     - `FocusModePlugin`: Dim other tasks when focusing on one.
-    - `AutoCleanupPlugin`: Archives completed tasks.
+    - `AutoCleanupPlugin`: Archives completed tasks older than X days (configurable).
+    - `AutoRefreshPlugin`: Periodically reloads the list (configurable interval).
+    - `SoundEffectsPlugin`: Plays sounds on task completion.
+    - `GamifyPlugin`: (Experimental) XP and leveling system.
 
 ## 5. Technical Constraints & Rules
 1.  **No Database**: Do not introduce a backend database. All state must be reconstructible from Markdown files.
