@@ -3,13 +3,6 @@ import { useStore } from 'zustand';
 import { useTodoStore } from './store/useTodoStore';
 import { pluginRegistry } from './plugins/pluginEngine';
 import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading, Plus, Search, X, Tag } from 'lucide-react';
-import { ThemePlugin } from './plugins/ThemePlugin';
-import { FontPlugin } from './plugins/FontPlugin';
-import { DueDatePlugin } from './plugins/DueDatePlugin';
-import { FocusModePlugin } from './plugins/FocusModePlugin';
-import { AutoCleanupPlugin } from './plugins/AutoCleanupPlugin';
-import { SoundEffectsPlugin } from './plugins/SoundEffectsPlugin';
-import { AutoRefreshPlugin } from './plugins/AutoRefreshPlugin';
 import { TaskItem } from './components/TaskItem';
 import type { GoogleDriveConfig } from './adapters/GoogleDriveAdapter';
 import {

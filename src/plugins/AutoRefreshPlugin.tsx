@@ -50,7 +50,7 @@ function AutoRefreshSettings() {
 
 function AutoRefreshController() {
   const loadTodos = useTodoStore(state => state.loadTodos);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const getInterval = () => {
