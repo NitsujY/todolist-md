@@ -427,6 +427,8 @@ function App() {
 
   const filteredTasks = tasks.filter(t => {
     if (activeTag && (!t.tags || !t.tags.includes(activeTag))) return false;
+    // Hide completed tasks immediately when showCompleted is false
+    if (!showCompleted && t.completed) return false;
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return (
