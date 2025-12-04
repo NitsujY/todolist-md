@@ -4,7 +4,6 @@ type FontType = 'inter' | 'roboto-mono' | 'fira-code' | 'system';
 
 export class FontPlugin implements Plugin {
   name = 'FontManager';
-  private currentFont: FontType = 'system';
 
   onInit(api: PluginAPI) {
     // Register actions to switch fonts
