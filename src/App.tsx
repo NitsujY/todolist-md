@@ -119,7 +119,9 @@ function App() {
       rootFolderId: saved?.rootFolderId
     };
   });
-  const [activeStorage, setActiveStorage] = useState<'local' | 'fs' | 'google'>('local');
+  const [activeStorage, setActiveStorage] = useState<'local' | 'fs' | 'google'>(() => {
+    return (localStorage.getItem('active-storage') as 'local' | 'fs' | 'google') || 'local';
+  });
   const [isEditingRaw, setIsEditingRaw] = useState(false);
   const [rawMarkdown, setRawMarkdown] = useState('');
   const [showCompleted, setShowCompleted] = useState(false);
@@ -901,13 +903,13 @@ function App() {
                 
                 <div className="space-y-2">
                   {pluginRegistry.getPlugins().map((p) => (
-                    <div key={p.name} className="flex items-center justify-between p-3 bg-base-200 rounded-lg">
-                      <div className="flex items-center gap-3">
+                    <div key={p.name} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-base-200 rounded-lg gap-3">
+                      <div className="flex items-center gap-3 shrink-0">
                         <div className={`w-2 h-2 rounded-full ${p.enabled ? 'bg-success' : 'bg-base-content/20'}`}></div>
                         <span className={p.enabled ? 'font-medium' : 'text-base-content/50'}>{p.name}</span>
                         {p.isSystem && <span className="badge badge-xs badge-ghost">System</span>}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
                         {p.enabled && p.instance.renderSettings && (
                           <div className="mr-2">
                             {p.instance.renderSettings()}
