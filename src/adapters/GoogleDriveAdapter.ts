@@ -182,7 +182,6 @@ export class GoogleDriveAdapter implements StorageProvider {
       this.tokenClient.requestAccessToken({ prompt: 'select_account' });
     });
   }
-
   private handleTokenResponse(resp: any) {
     this.accessToken = resp.access_token;
     // expires_in is in seconds. Subtract a buffer (e.g. 5 mins) to be safe.
@@ -192,10 +191,17 @@ export class GoogleDriveAdapter implements StorageProvider {
     localStorage.setItem('google-drive-token', this.accessToken!);
     localStorage.setItem('google-drive-token-expires', this.tokenExpiration.toString());
   }
-
   private async ensureAuth() {
+    if (!this.isInitialized) {
+      await this.init();
+    }
     if (!this.accessToken || Date.now() >= this.tokenExpiration) {
       await this.signIn();
+    }
+
+    // Ensure gapi client has the token for requests
+    if (this.accessToken && window.gapi && window.gapi.client) {
+      window.gapi.client.setToken({ access_token: this.accessToken });
     }
   }
 
@@ -203,22 +209,31 @@ export class GoogleDriveAdapter implements StorageProvider {
     await this.ensureAuth();
     await this.ensureDriveApi();
     
-    // List markdown files
-    // We'll look for files with .md extension or markdown mime type
-    // We are using 'drive' scope, so we can see all files in the folder.
     try {
-      let query = "(name contains '.md' or name contains '.markdown') and trashed = false";
+      // Simplified query strategy:
+      // If a root folder is selected, fetch ALL non-trashed files in that folder and filter in memory.
+      // This avoids issues where 'name contains' might fail or behave unexpectedly.
+      // If no root folder, we must filter by name in the query to avoid listing the entire Drive.
+      
+      let query = "trashed = false";
       if (this.config?.rootFolderId) {
         query = `'${this.config.rootFolderId}' in parents and ${query}`;
+      } else {
+        query = `(name contains '.md' or name contains '.markdown') and ${query}`;
       }
+      
+      console.log(`[GoogleDrive] Listing files with query: ${query}`);
 
       const response = await window.gapi.client.drive.files.list({
         q: query,
-        fields: 'files(id, name)',
+        fields: 'files(id, name, mimeType, parents)',
         spaces: 'drive',
         supportsAllDrives: true,
-        includeItemsFromAllDrives: true
+        includeItemsFromAllDrives: true,
+        pageSize: 1000 // Fetch more items since we might filter many out in memory
       });
+      
+      console.log(`[GoogleDrive] Raw list response:`, response.result.files);
 
       const files = response.result.files;
       this.fileCache.clear();
@@ -228,12 +243,21 @@ export class GoogleDriveAdapter implements StorageProvider {
         const result: string[] = [];
         
         files.forEach((f: any) => {
-          if (!uniqueFiles.has(f.name)) {
+          // In-memory filter for markdown files
+          // We check for extension OR mimeType
+          const name = f.name.toLowerCase();
+          const isMarkdown = (name.endsWith('.md') || 
+                             name.endsWith('.markdown') || 
+                             f.mimeType === 'text/markdown') &&
+                             f.mimeType !== 'application/vnd.google-apps.folder';
+
+          if (isMarkdown && !uniqueFiles.has(f.name)) {
             uniqueFiles.add(f.name);
             this.fileCache.set(f.name, { id: f.id, name: f.name });
             result.push(f.name);
           }
         });
+        console.log(`[GoogleDrive] Filtered result:`, result);
         return result;
       }
       return [];
@@ -422,7 +446,7 @@ export class GoogleDriveAdapter implements StorageProvider {
         const pickerCallback = (data: any) => {
             if (data.action === window.google.picker.Action.PICKED) {
               const doc = data.docs[0];
-              console.log('pickFolder: Folder picked', doc.id);
+              console.log('pickFolder: Folder picked', doc);
               resolve(doc.id);
             } else if (data.action === window.google.picker.Action.CANCEL) {
               console.log('pickFolder: Cancelled');

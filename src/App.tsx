@@ -9,6 +9,7 @@ import { DueDatePlugin } from './plugins/DueDatePlugin';
 import { FocusModePlugin } from './plugins/FocusModePlugin';
 import { AutoCleanupPlugin } from './plugins/AutoCleanupPlugin';
 import { SoundEffectsPlugin } from './plugins/SoundEffectsPlugin';
+import { AutoRefreshPlugin } from './plugins/AutoRefreshPlugin';
 import { TaskItem } from './components/TaskItem';
 import type { GoogleDriveConfig } from './adapters/GoogleDriveAdapter';
 import {
@@ -241,22 +242,8 @@ function App() {
       }
     });
 
-    // Register Theme Plugin
-    pluginRegistry.register(new ThemePlugin(), true); // System plugin
-    // Register Font Plugin
-    pluginRegistry.register(new FontPlugin(), true); // System plugin
-    // Register Due Date Plugin
-    pluginRegistry.register(new DueDatePlugin(), true); // System plugin
+    // Core plugins are now registered in main.tsx
     
-    // Register Focus Mode Plugin
-    pluginRegistry.register(new FocusModePlugin(), false);
-
-    // Register Auto Cleanup Plugin
-    pluginRegistry.register(new AutoCleanupPlugin(), false);
-
-    // Register Sound Effects Plugin
-    pluginRegistry.register(new SoundEffectsPlugin(), false);
-
     // Register Gamify Plugin (Conditional)
     if (import.meta.env.VITE_ENABLE_GAMIFY !== 'false') {
       // Use glob import to make it optional at build time
@@ -427,7 +414,7 @@ function App() {
     }
   }, [tasks, focusId]);
 
-  const filteredTasks = tasks.filter(t => {
+     const filteredTasks = tasks.filter(t => {
     if (activeTag && (!t.tags || !t.tags.includes(activeTag))) return false;
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
@@ -928,6 +915,11 @@ function App() {
                         {p.isSystem && <span className="badge badge-xs badge-ghost">System</span>}
                       </div>
                       <div className="flex items-center gap-2">
+                        {p.enabled && p.instance.renderSettings && (
+                          <div className="mr-2">
+                            {p.instance.renderSettings()}
+                          </div>
+                        )}
                         {!p.isSystem && (
                           <>
                             <button 
