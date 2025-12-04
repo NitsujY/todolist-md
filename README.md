@@ -50,9 +50,9 @@ A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (
     - **Font Size**: Adjustable text size.
 - **Plugin System**: Extensible architecture (includes Due Date, Focus Mode, and Priority Highlighter plugins).
 - **Storage Options**:
-    - **Local Storage**: Quick start, data stays in browser.
-    - **File System**: Edit real files on your disk.
-    - **Google Drive**: Sync with your Google Drive (requires API setup).
+    - **Local Storage**: Quick start, data stays in browser. Persists across reloads.
+    - **File System**: Edit real files on your disk. Remembers your last folder/file and prompts to restore access on reload.
+    - **Google Drive**: Sync with your Google Drive (requires API setup). Automatically reconnects on reload.
 
 ## Plugins
 

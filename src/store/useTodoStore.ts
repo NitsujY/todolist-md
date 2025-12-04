@@ -472,6 +472,7 @@ export const useTodoStore = create<TodoState>()(
         });
       }
     } else {
+      localStorage.setItem('active-storage', 'local');
       get().loadTodos();
     }
   },
