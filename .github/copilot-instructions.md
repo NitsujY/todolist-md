@@ -17,4 +17,4 @@
 
 - [x] Ensure Documentation is Complete
 
-- [ ] Always keep the README.md up to date with the latest features and changes.
+- [x] Always keep the README.md for high level and SPECIFICATION.md for low level up to date with the latest features and changes.
