@@ -63,7 +63,7 @@ The app features a robust plugin system. You can enable/disable them in Settings
 - **Due Date**: Add due dates to tasks using `due:YYYY-MM-DD` syntax.
 - **Focus Mode**: Enter a distraction-free mode to focus on a single task.
 - **Auto Cleanup**: Automatically removes completed tasks older than a configurable number of days (default: 30).
-- **Auto Refresh**: Periodically reloads the list from storage (configurable interval) to keep in sync with external changes.
+- **Auto Refresh**: Periodically reloads the list from storage (configurable interval) to keep in sync with external changes. Intelligently pauses while you are editing to prevent interruptions.
 - **Sound Effects**: Adds satisfying sounds when completing tasks.
 - **Gamification**: (Experimental) Earn XP and level up by completing tasks.
 
