@@ -195,6 +195,21 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
   const getDisplayText = (text: string) => {
     let processed = text.replace(/due:\d{4}-\d{2}-\d{2}/g, '').trim();
     
+    // Explicitly handle <url> syntax to ensure it renders as a link
+    // We need to be careful not to double-linkify if it's already [url](url)
+    // But <url> is distinct.
+    processed = processed.replace(/<(https?:\/\/[^>]+)>/g, '[$1]($1)');
+
+    // Also handle plain URLs that might have been passed through (e.g. if parser didn't wrap them)
+    // But avoid matching inside existing markdown links [text](url) or <url> (if any left)
+    // This regex is tricky. A safer way is to let ReactMarkdown handle plain URLs via remark-gfm.
+    // BUT, if we want to ensure they are clickable even if remark-gfm misses them (unlikely for standard URLs),
+    // we can leave them.
+    // The issue "nothing is show" suggests that maybe the text is empty?
+    // If text is just "<https://...>", processed becomes "[https://...](https://...)"
+    
+    // Tag processing: Replace #tag with link format for custom rendering
+
     // Tag processing: Replace #tag with link format for custom rendering
     // But ignore \#tag (escaped)
     processed = processed.replace(/(?<!\\)#([a-zA-Z0-9_]+)/g, '[#$1](tag:$1)');
@@ -206,9 +221,11 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
     // Matches common TLDs, avoids existing links or protocols
     const urlRegex = /(^|\s)(?!https?:\/\/)(?!\[)((?:www\.|[\w-]+\.)+(?:com|org|net|io|gov|edu|co|me|app|dev|xyz))(?=\s|$)/gi;
     
-    return processed.replace(urlRegex, (_match, prefix, url) => {
+    processed = processed.replace(urlRegex, (_match, prefix, url) => {
       return `${prefix}[${url}](https://${url})`;
     });
+
+    return processed;
   };
 
   // Helper to get font size class

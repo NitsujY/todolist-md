@@ -22,6 +22,57 @@ const createProcessor = () => unified()
     listItemIndent: 'one',
   });
 
+const parseInline = (text: string): any[] => {
+  const processor = createProcessor();
+  const tree = processor.parse(text) as Root;
+  let nodes: any[] = [];
+  
+  if (tree.children.length > 0 && tree.children[0].type === 'paragraph') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    nodes = (tree.children[0] as any).children;
+  } else {
+    nodes = [{ type: 'text', value: text }];
+  }
+
+  // Post-process nodes to catch unparsed URLs in text nodes and convert them to Link nodes
+  // This prevents remark-stringify from escaping URLs (e.g. https\://) and ensures they are clickable
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const finalNodes: any[] = [];
+  for (const node of nodes) {
+    if (node.type === 'text') {
+       // Regex to match URLs that are not already part of a link
+       // Excludes common trailing punctuation
+       // We use a simplified regex that captures the protocol and domain/path
+       const urlRegex = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s>])/g;
+       const content = node.value;
+       let lastIndex = 0;
+       let match;
+       
+       while ((match = urlRegex.exec(content)) !== null) {
+         if (match.index > lastIndex) {
+           finalNodes.push({ type: 'text', value: content.slice(lastIndex, match.index) });
+         }
+         
+         finalNodes.push({
+           type: 'link',
+           url: match[0],
+           children: [{ type: 'text', value: match[0] }]
+         });
+         
+         lastIndex = match.index + match[0].length;
+       }
+       
+       if (lastIndex < content.length) {
+         finalNodes.push({ type: 'text', value: content.slice(lastIndex) });
+       }
+    } else {
+      finalNodes.push(node);
+    }
+  }
+  
+  return finalNodes;
+};
+
 export const parseTasks = (markdown: string): Task[] => {
   const processor = createProcessor();
   const tree = processor.parse(markdown) as Root;
@@ -30,173 +81,7 @@ export const parseTasks = (markdown: string): Task[] => {
   // Simple traversal to find task list items
   // In a real app, use 'unist-util-visit'
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const visit = (node: any, depth: number = 0) => {
-    let isTask = false;
-    let checked = false;
-    let text = '';
 
-    if (node.type === 'heading') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      text = node.children.map((c: any) => c.value || '').join('');
-      const id = `${node.position?.start.line}-header-${text.substring(0, 10)}`;
-      tasks.push({
-        id,
-        text,
-        completed: false,
-        type: 'header',
-        depth: 0
-      });
-      return;
-    }
-
-    // Check if it's a GFM task list item
-    if (node.type === 'listItem') {
-      if (typeof node.checked === 'boolean') {
-        isTask = true;
-        checked = node.checked;
-      }
-      
-      // Extract text
-      if (node.children && node.children.length > 0) {
-        const p = node.children[0];
-        if (p.type === 'paragraph' && p.children && p.children.length > 0) {
-           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-           text = p.children.map((c: any) => c.value || '').join('');
-        }
-      }
-
-      // Fallback: Check for manual [ ] or [x] in text if GFM failed or user typed it manually
-      if (!isTask && text) {
-        // Allow [ ], [x], [X], and also [] (empty) for flexibility
-        const match = text.match(/^\[([ xX]?)\]\s+(.*)/);
-        if (match) {
-          isTask = true;
-          checked = match[1].toLowerCase() === 'x';
-          text = match[2];
-        }
-      }
-
-      if (!isTask && !text) {
-        const id = `${node.position?.start.line}-empty`;
-        tasks.push({
-          id,
-          text: '',
-          completed: false,
-          type: 'empty',
-          tags: [],
-          depth
-        });
-      }
-    }
-
-    if (isTask) {
-      // Generate a stable-ish ID based on content and position (for demo purposes)
-      const id = `${node.position?.start.line}-${text.substring(0, 10)}`;
-      
-      // Extract tags: matches #tag but not \#tag
-      const tags: string[] = [];
-      const tagRegex = /(?<!\\)#([a-zA-Z0-9_]+)/g;
-      let match;
-      while ((match = tagRegex.exec(text)) !== null) {
-        tags.push(match[1]);
-      }
-
-      // Check for description (blockquote)
-      let description = '';
-      if (node.children && node.children.length > 1) {
-        // Look for blockquote in children
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const blockquote = node.children.find((c: any) => c.type === 'blockquote');
-        if (blockquote && blockquote.children) {
-          // Extract text from blockquote
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          description = blockquote.children.map((p: any) => {
-            if (p.type === 'paragraph' && p.children) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              return p.children.map((c: any) => c.value || '').join('');
-            }
-            return '';
-          }).join('\n');
-        }
-      }
-
-      tasks.push({
-        id,
-        text,
-        completed: checked,
-        type: 'task',
-        description: description || undefined,
-        tags,
-        depth
-      });
-    }
-    
-    if (node.children) {
-      node.children.forEach((child: any) => {
-        if (child.type === 'list') {
-          // If we are inside a listItem, and we see a list, it's a nested list.
-          // But wait, my recursion logic:
-          // visit(tree, 0) -> tree has children (List)
-          // visit(List, 0) -> List has children (ListItem)
-          // visit(ListItem, 0) -> ListItem has children (Paragraph, List?)
-          // If ListItem has List child, we want to visit that List with depth + 1
-          
-          // Actually, I should handle the recursion logic here carefully.
-          // If I am visiting a ListItem, I am AT 'depth'.
-          // Any List child of this ListItem represents 'depth + 1' items.
-          
-          // But 'visit' is generic.
-          // If node is 'list', I should pass 'depth' to its children?
-          // No, if node is 'list', its children are 'listItem's at the SAME depth as the list implies?
-          
-          // Let's trace:
-          // Root -> List (A)
-          // List (A) -> ListItem (1)
-          // ListItem (1) -> List (B)
-          // List (B) -> ListItem (2)
-          
-          // visit(Root, 0)
-          //   visit(List A, 0)
-          //     visit(ListItem 1, 0) -> Pushes Task (depth 0)
-          //       visit(List B, ?)
-          
-          // I need to increment depth when entering a List that is NOT the root list?
-          // Or just increment depth when entering a List?
-          // If I increment at List A, then ListItem 1 is depth 1.
-          // But I want top level to be depth 0.
-          
-          // So:
-          // visit(Root, 0)
-          //   visit(List A, 0) -> It's a list.
-          //     visit(ListItem 1, 0)
-          //       visit(List B, 1) -> It's a nested list.
-          //         visit(ListItem 2, 1)
-          
-          // So, if I am in a ListItem, and I see a List child, I call visit(List, depth + 1).
-          // If I am in a List, I call visit(ListItem, depth).
-          // If I am in Root, I call visit(List, 0).
-          
-          // My generic recursion `node.children.forEach` needs to be smarter or I handle it in specific blocks.
-          
-          visit(child, depth + 1); 
-        } else {
-          // For non-list children (like paragraph inside listItem), depth doesn't change
-          // But wait, if I am in List A, child is ListItem 1.
-          // If I call visit(ListItem 1, depth + 1), it becomes 1.
-          // I want 0.
-          
-          // Let's refine:
-          // Only increment depth when passing from ListItem -> List.
-          
-          // But 'visit' is called on everything.
-          // I need to know if 'node' is a List.
-          
-          // Let's change the signature or logic.
-          visit(child, depth);
-        }
-      });
-    }
-  };
   
   // We need a specialized visitor to handle the depth increment correctly
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -232,9 +117,12 @@ export const parseTasks = (markdown: string): Task[] => {
       
       if (node.children && node.children.length > 0) {
         const p = node.children[0];
-        if (p.type === 'paragraph' && p.children && p.children.length > 0) {
+        if (p.type === 'paragraph') {
+           // Use stringify to get the markdown representation of the paragraph content
+           // This ensures links and other markdown elements are preserved correctly
+           const tempRoot = { type: 'root', children: [p] };
            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-           text = p.children.map((c: any) => c.value || '').join('');
+           text = processor.stringify(tempRoot as any).trim();
         }
       }
 
@@ -434,7 +322,7 @@ export const addTaskToMarkdown = (markdown: string, taskText: string): string =>
     spread: false,
     children: [{
       type: 'paragraph',
-      children: [{ type: 'text', value: taskText }]
+      children: parseInline(taskText)
     }]
   };
 
@@ -465,7 +353,7 @@ export const updateTaskTextInMarkdown = (markdown: string, taskId: string, newTe
       const id = `${node.position?.start.line}-header-${text.substring(0, 10)}`;
       
       if (id === taskId) {
-        node.children = [{ type: 'text', value: newText }];
+        node.children = parseInline(newText);
       }
     }
 
@@ -501,13 +389,13 @@ export const updateTaskTextInMarkdown = (markdown: string, taskId: string, newTe
           if (!node.children || node.children.length === 0) {
             node.children = [{
               type: 'paragraph',
-              children: [{ type: 'text', value: newText }]
+              children: parseInline(newText)
             }];
           } else {
              // It might have children but no text (e.g. empty paragraph)
              const p = node.children[0];
              if (p.type === 'paragraph') {
-               p.children = [{ type: 'text', value: newText }];
+               p.children = parseInline(newText);
              }
           }
         }
@@ -521,7 +409,7 @@ export const updateTaskTextInMarkdown = (markdown: string, taskId: string, newTe
             const p = node.children[0];
             if (p.type === 'paragraph') {
               // Replace children with new text node
-              p.children = [{ type: 'text', value: newText }];
+              p.children = parseInline(newText);
             }
           }
         }
@@ -625,7 +513,7 @@ export const insertTaskAfterInMarkdown = (markdown: string, targetTaskId: string
     spread: false,
     children: [{
       type: 'paragraph',
-      children: [{ type: 'text', value: newTaskText }]
+      children: parseInline(newTaskText)
     }]
   };
 
