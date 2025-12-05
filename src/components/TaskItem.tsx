@@ -338,7 +338,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
       className={`
         task-item group flex items-start gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
         ${compact ? 'p-1' : 'p-3'}
-        ${isAnimating ? 'opacity-0 -translate-y-4 max-h-0 overflow-hidden py-0 border-none' : 'opacity-100 max-h-24'}
+        ${isAnimating ? 'opacity-0 -translate-y-4 max-h-0 overflow-hidden py-0 border-none' : 'opacity-100 max-h-[2000px]'}
         ${isDragging ? 'opacity-50 bg-base-200' : ''}
       `}
     >

@@ -59,6 +59,18 @@ function AutoRefreshController() {
     };
 
     const run = () => {
+      // Check if user is editing (active element is an input/textarea in a task item)
+      const active = document.activeElement;
+      const isEditing = active && (
+        (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT') &&
+        active.closest('.task-item')
+      );
+
+      if (isEditing) {
+        console.log('[AutoRefresh] User is editing, skipping refresh.');
+        return;
+      }
+
       console.log('[AutoRefresh] Refreshing todos...');
       loadTodos();
     };

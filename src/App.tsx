@@ -337,7 +337,11 @@ function App() {
   const handleRenameFile = async (oldName: string) => {
     const newName = prompt('Enter new file name:', oldName);
     if (newName && newName !== oldName) {
-      await renameFile(oldName, newName);
+      try {
+        await renameFile(oldName, newName);
+      } catch (e: any) {
+        alert(`Failed to rename file: ${e.message}`);
+      }
     }
   };
 
