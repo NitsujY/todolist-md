@@ -37,6 +37,14 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
   const headerInputRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
+  // Auto-resize description textarea when opening edit mode
+  useEffect(() => {
+    if (isEditingDescription && descriptionRef.current) {
+      descriptionRef.current.style.height = 'auto';
+      descriptionRef.current.style.height = descriptionRef.current.scrollHeight + 'px';
+    }
+  }, [isEditingDescription]);
+
   const {
     attributes,
     listeners,
@@ -483,25 +491,9 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
             ) : (
               <div 
                 onClick={() => setIsEditingDescription(true)}
-                className="text-sm text-base-content/70 prose prose-sm max-w-none cursor-text border-l-2 border-base-300 pl-3 py-1"
+                className="text-sm text-base-content/70 cursor-text border-l-2 border-base-300 pl-3 py-1 whitespace-pre-wrap font-mono"
               >
-                <ReactMarkdown 
-                  remarkPlugins={[remarkGfm, remarkBreaks]}
-                  components={{
-                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                    a: ({node, ...props}) => (
-                      <a 
-                        {...props} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="text-primary hover:underline cursor-pointer"
-                        onClick={(e) => e.stopPropagation()} 
-                      />
-                    )
-                  }}
-                >
-                  {task.description || ''}
-                </ReactMarkdown>
+                {task.description || ''}
               </div>
             )}
           </div>

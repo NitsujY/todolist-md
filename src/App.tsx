@@ -4,7 +4,6 @@ import { useTodoStore } from './store/useTodoStore';
 import { pluginRegistry } from './plugins/pluginEngine';
 import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading, Plus, Search, X, Tag } from 'lucide-react';
 import { TaskItem } from './components/TaskItem';
-import type { GoogleDriveConfig } from './adapters/GoogleDriveAdapter';
 import {
   DndContext, 
   closestCenter,
@@ -102,23 +101,6 @@ function App() {
   const { undo, redo } = useStore(useTodoStore.temporal, (state) => state);
 
   const [showSettings, setShowSettings] = useState(false);
-  const [showGoogleConfig, setShowGoogleConfig] = useState(false);
-  const [googleConfig, setGoogleConfig] = useState<GoogleDriveConfig>(() => {
-    const savedStr = localStorage.getItem('google-drive-config');
-    let saved: GoogleDriveConfig | null = null;
-    try {
-      if (savedStr) saved = JSON.parse(savedStr);
-    } catch (e) { /* ignore */ }
-
-    const envClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-    const envApiKey = import.meta.env.VITE_GOOGLE_API_KEY || '';
-
-    return {
-      clientId: saved?.clientId || envClientId,
-      apiKey: saved?.apiKey || envApiKey,
-      rootFolderId: saved?.rootFolderId
-    };
-  });
   const [activeStorage, setActiveStorage] = useState<'local' | 'fs' | 'google'>(() => {
     return (localStorage.getItem('active-storage') as 'local' | 'fs' | 'google') || 'local';
   });
@@ -271,11 +253,6 @@ function App() {
         setActiveStorage('fs');
       }
     } else if (type === 'google') {
-      const config = localStorage.getItem('google-drive-config');
-      if (!config) {
-        setShowGoogleConfig(true);
-        return;
-      }
       setActiveStorage('google');
       setStorage('google');
     } else {
@@ -283,20 +260,6 @@ function App() {
       setStorage(type);
     }
     (document.activeElement as HTMLElement)?.blur();
-  };
-
-  const handleGoogleSave = async () => {
-    await useTodoStore.getState().setGoogleDriveConfig(googleConfig);
-    setActiveStorage('google');
-    setShowGoogleConfig(false);
-    setShowSettings(false);
-    
-    // Trigger folder picker flow
-    try {
-      await useTodoStore.getState().pickGoogleDriveFolder();
-    } catch (e) {
-      console.error("Failed to pick folder", e);
-    }
   };
 
   const handleSaveRaw = () => {
@@ -608,11 +571,6 @@ function App() {
                         <a onClick={() => useTodoStore.getState().switchGoogleAccount()} className="text-xs">
                           <RefreshCw size={14} /> Switch Account
                         </a>
-                        {(!googleConfig.clientId || !googleConfig.apiKey) && (
-                          <a onClick={() => setShowGoogleConfig(true)} className="text-xs text-warning">
-                            <Settings size={14} /> Configure Keys
-                          </a>
-                        )}
                       </li>
                     )}
                   </ul>
@@ -967,51 +925,7 @@ function App() {
         </dialog>
       )}
 
-      {/* Google Config Modal */}
-      {showGoogleConfig && (
-        <dialog className="modal modal-open">
-          <div className="modal-box">
-            <h3 className="font-bold text-lg mb-4">Google Drive Configuration</h3>
-            <div className="space-y-4">
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Client ID</span>
-                </label>
-                <input 
-                  type="text" 
-                  placeholder="...apps.googleusercontent.com" 
-                  className="input input-bordered w-full" 
-                  value={googleConfig.clientId}
-                  onChange={(e) => setGoogleConfig({...googleConfig, clientId: e.target.value})}
-                />
-              </div>
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">API Key</span>
-                </label>
-                <input 
-                  type="text" 
-                  placeholder="AIza..." 
-                  className="input input-bordered w-full" 
-                  value={googleConfig.apiKey}
-                  onChange={(e) => setGoogleConfig({...googleConfig, apiKey: e.target.value})}
-                />
-              </div>
-              <div className="text-xs text-base-content/50">
-                <p>You need to create a project in Google Cloud Console, enable Drive API, and create OAuth credentials.</p>
-                <a href="https://console.cloud.google.com" target="_blank" rel="noreferrer" className="link link-primary">Go to Google Cloud Console</a>
-              </div>
-            </div>
-            <div className="modal-action">
-              <button onClick={() => setShowGoogleConfig(false)} className="btn">Cancel</button>
-              <button onClick={handleGoogleSave} className="btn btn-primary">Save & Connect</button>
-            </div>
-          </div>
-          <form method="dialog" className="modal-backdrop">
-            <button onClick={() => setShowGoogleConfig(false)}>close</button>
-          </form>
-        </dialog>
-      )}
+      {/* Google Config Modal Removed */}
     </div>
   );
 }
