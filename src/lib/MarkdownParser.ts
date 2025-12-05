@@ -1001,7 +1001,7 @@ export const updateTaskDescriptionInMarkdown = (markdown: string, taskId: string
               type: 'blockquote',
               children: description.split('\n').map(line => ({
                 type: 'paragraph',
-                children: [{ type: 'text', value: line }]
+                children: parseInline(line)
               }))
             };
 
