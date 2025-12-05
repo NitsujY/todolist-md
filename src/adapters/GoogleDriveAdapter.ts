@@ -526,4 +526,10 @@ export class GoogleDriveAdapter implements StorageProvider {
         }
     });
   }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async rename(oldName: string, newName: string): Promise<void> {
+    console.warn('Rename not implemented for Google Drive adapter yet');
+    throw new Error('Rename not supported in Google Drive mode yet');
+  }
 }

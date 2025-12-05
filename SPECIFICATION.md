@@ -38,6 +38,7 @@ The app uses the `StorageProvider` interface to support multiple backends.
     - **Single File**: Opens and edits one `.md` file.
     - **Folder**: Opens a directory, listing all `.md` files.
 - **Permissions**: Must request read/write permission on every session restore (browser security constraint).
+- **Renaming**: Handles case-insensitive file systems (e.g., macOS/Windows) by using a temporary file strategy when renaming files where only the case changes (e.g., `todo.md` -> `Todo.md`).
 
 ### 3.3 Google Drive Adapter (`google`)
 - **Auth**: OAuth 2.0 with `https://www.googleapis.com/auth/drive` and `https://www.googleapis.com/auth/drive.install` scopes.
@@ -93,6 +94,7 @@ The app uses the `StorageProvider` interface to support multiple backends.
     - `FocusModePlugin`: Dim other tasks when focusing on one.
     - `AutoCleanupPlugin`: Archives completed tasks older than X days (configurable).
     - `AutoRefreshPlugin`: Periodically reloads the list (configurable interval).
+        - **Constraint**: Must pause/skip refresh if the user is currently editing a task (input focused) to prevent data loss or UI disruption.
     - `SoundEffectsPlugin`: Plays sounds on task completion.
     - `GamifyPlugin`: (Experimental) XP and leveling system.
 

@@ -22,4 +22,12 @@ export class LocalStorageAdapter implements StorageProvider {
     }
     return keys;
   }
+
+  async rename(oldName: string, newName: string): Promise<void> {
+    const content = localStorage.getItem(oldName);
+    if (content !== null) {
+      localStorage.setItem(newName, content);
+      localStorage.removeItem(oldName);
+    }
+  }
 }
