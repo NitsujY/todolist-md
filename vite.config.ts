@@ -9,6 +9,9 @@ export default defineConfig({
   server: {
     host: true,
   },
+  build: {
+    cssMinify: 'lightningcss',
+  },
   define: {
     '__APP_VERSION__': JSON.stringify(pkg.version),
   }

@@ -28,4 +28,16 @@ export class MockCloudAdapter implements StorageProvider {
     await this.delay();
     return Array.from(this.storage.keys()).filter(k => k.startsWith(path));
   }
+
+  async rename(oldName: string, newName: string): Promise<void> {
+    await this.delay();
+    const content = this.storage.get(oldName);
+    if (content) {
+      this.storage.set(newName, content);
+      this.storage.delete(oldName);
+      console.log(`[MockCloud] Renamed ${oldName} to ${newName}`);
+    } else {
+      throw new Error(`File ${oldName} not found`);
+    }
+  }
 }
