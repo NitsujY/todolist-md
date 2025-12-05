@@ -368,18 +368,21 @@ export const useTodoStore = create<TodoState>()(
 
   renameFile: async (oldName, newName) => {
     const { storage, fileList, currentFile } = get();
-    if ('rename' in storage) {
-      // @ts-expect-error - we know it exists on FileSystemAdapter
-      await storage.rename(oldName, newName);
-      
-      const newFileList = fileList.map(f => f === oldName ? newName : f);
-      set({ fileList: newFileList });
-      // Update persisted order
-      localStorage.setItem('file-order', JSON.stringify(newFileList));
-      
-      if (currentFile === oldName) {
-        set({ currentFile: newName });
-      }
+    
+    // Ensure extension
+    if (!newName.endsWith('.md') && !newName.endsWith('.markdown')) {
+      newName += '.md';
+    }
+
+    await storage.rename(oldName, newName);
+    
+    const newFileList = fileList.map(f => f === oldName ? newName : f);
+    set({ fileList: newFileList });
+    // Update persisted order
+    localStorage.setItem('file-order', JSON.stringify(newFileList));
+    
+    if (currentFile === oldName) {
+      set({ currentFile: newName });
     }
   },
 

@@ -186,14 +186,59 @@ export class FileSystemAdapter implements StorageProvider {
 
   async rename(oldName: string, newName: string): Promise<void> {
     if (!this.dirHandle) throw new Error('Not in folder mode');
+    if (oldName === newName) return;
     
+    await this.verifyPermission(this.dirHandle, true);
+
     try {
       // Get old file
       const oldHandle = await this.dirHandle.getFileHandle(oldName);
       const oldFile = await oldHandle.getFile();
       const content = await oldFile.text();
       
-      // Create new file
+      // Check if target exists
+      let targetHandle: FileSystemFileHandle | null = null;
+      let targetExists = false;
+
+      try {
+        targetHandle = await this.dirHandle.getFileHandle(newName);
+        targetExists = true;
+      } catch (e: any) {
+        if (e.name !== 'NotFoundError') throw e;
+      }
+
+      if (targetExists && targetHandle) {
+        const isSame = await oldHandle.isSameEntry(targetHandle);
+        if (!isSame) {
+          throw new Error(`File "${newName}" already exists.`);
+        }
+        // If isSame is true, it's a case-only rename. Use temp strategy.
+        console.log('Renaming to same file (case change), using temp file strategy');
+        const tempName = `${oldName}.tmp-${Date.now()}`;
+        
+        // 1. Write to temp
+        const tempHandle = await this.dirHandle.getFileHandle(tempName, { create: true });
+        const tempWritable = await tempHandle.createWritable();
+        await tempWritable.write(content);
+        await tempWritable.close();
+        
+        // 2. Delete old
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (this.dirHandle as any).removeEntry(oldName);
+        
+        // 3. Write to new (which is now free)
+        const finalHandle = await this.dirHandle.getFileHandle(newName, { create: true });
+        const finalWritable = await finalHandle.createWritable();
+        await finalWritable.write(content);
+        await finalWritable.close();
+        
+        // 4. Delete temp
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (this.dirHandle as any).removeEntry(tempName);
+        return;
+      }
+      
+      // Normal rename (target does not exist)
       const newHandle = await this.dirHandle.getFileHandle(newName, { create: true });
       const writable = await newHandle.createWritable();
       await writable.write(content);
