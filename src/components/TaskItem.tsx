@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Plus, ChevronDown, ChevronRight, Calendar, AlignLeft } from 'lucide-react';
+import { GripVertical, Plus, ChevronDown, ChevronRight, Calendar, AlignLeft, Copy, Check } from 'lucide-react';
 import { pluginRegistry } from '../plugins/pluginEngine';
 import type { Task } from '../lib/MarkdownParser';
 
@@ -32,6 +32,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
   const [showDescription, setShowDescription] = useState(false);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [editDescription, setEditDescription] = useState(task.description || '');
+  const [justCopied, setJustCopied] = useState(false);
   
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const headerInputRef = useRef<HTMLInputElement>(null);
@@ -112,6 +113,22 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
   if (task.text !== editText && !isEditing) {
     setEditText(task.text);
   }
+
+  const handleCopy = async () => {
+    const checkbox = task.completed ? '- [x] ' : '- [ ] ';
+    const text = task.text;
+    // Indent description and add blockquote marker to match parser expectations
+    const description = task.description ? `\n${task.description.split('\n').map(line => `  > ${line}`).join('\n')}` : '';
+    const copyText = `${checkbox}${text}${description}`;
+    
+    try {
+      await navigator.clipboard.writeText(copyText);
+      setJustCopied(true);
+      setTimeout(() => setJustCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
 
   const handleKeyDown = async (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -420,7 +437,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
           ) : (
             <div 
               onClick={() => setIsEditing(true)}
-              className={`flex-1 break-words cursor-text select-none prose prose-sm max-w-none min-h-[1.5em] ${task.completed ? 'line-through text-base-content/30' : 'text-base-content'} ${compact ? 'leading-snug' : ''} ${getFontSizeClass()}`}
+              className={`flex-1 break-words cursor-text prose prose-sm max-w-none min-h-[1.5em] ${task.completed ? 'line-through text-base-content/30' : 'text-base-content'} ${compact ? 'leading-snug' : ''} ${getFontSizeClass()}`}
             >
               <ReactMarkdown 
                 remarkPlugins={[remarkGfm, remarkBreaks]} 
@@ -459,6 +476,15 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
             {pluginRegistry.renderTaskExtensions(task)}
           </div>
 
+          {/* Copy Button */}
+          <button 
+            onClick={handleCopy}
+            className="btn btn-ghost btn-xs btn-circle opacity-0 group-hover:opacity-100 transition-opacity text-base-content/40 hover:text-primary"
+            title="Copy task and description"
+          >
+            {justCopied ? <Check size={16} /> : <Copy size={16} />}
+          </button>
+
           {/* Description Toggle */}
           {(task.description || isEditingDescription) && (
             <button 
@@ -491,9 +517,25 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
             ) : (
               <div 
                 onClick={() => setIsEditingDescription(true)}
-                className="text-sm text-base-content/70 cursor-text border-l-2 border-base-300 pl-3 py-1 whitespace-pre-wrap font-mono"
+                className="text-sm text-base-content/70 cursor-text border-l-2 border-base-300 pl-3 py-1 prose prose-sm max-w-none"
               >
-                {task.description || ''}
+                <ReactMarkdown 
+                  remarkPlugins={[remarkGfm, remarkBreaks]}
+                  components={{
+                    p: ({children}) => <span className="block mb-1 last:mb-0">{children}</span>,
+                    a: ({node, ...props}) => (
+                      <a 
+                        {...props} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-primary hover:underline cursor-pointer"
+                        onClick={(e) => e.stopPropagation()} 
+                      />
+                    )
+                  }}
+                >
+                  {task.description || ''}
+                </ReactMarkdown>
               </div>
             )}
           </div>

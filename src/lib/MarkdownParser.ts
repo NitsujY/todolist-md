@@ -160,15 +160,18 @@ export const parseTasks = (markdown: string): Task[] => {
         if (node.children && node.children.length > 1) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const blockquote = node.children.find((c: any) => c.type === 'blockquote');
-          if (blockquote && blockquote.children) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            description = blockquote.children.map((p: any) => {
-              if (p.type === 'paragraph' && p.children) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                return p.children.map((c: any) => c.value || '').join('');
-              }
-              return '';
-            }).join('\n');
+          if (blockquote && blockquote.position) {
+            // Extract raw text from the original markdown to preserve user formatting
+            const start = blockquote.position.start.offset;
+            const end = blockquote.position.end.offset;
+            const rawBlockquote = markdown.slice(start, end);
+            
+            // Remove > markers from each line
+            description = rawBlockquote
+              .split('\n')
+              .map(line => line.replace(/^\s*>\s?/, ''))
+              .join('\n')
+              .trim();
           }
         }
 
@@ -997,12 +1000,14 @@ export const updateTaskDescriptionInMarkdown = (markdown: string, taskId: string
           const blockquoteIndex = node.children.findIndex((c: any) => c.type === 'blockquote');
           
           if (description) {
+            // Parse the description string into AST nodes to preserve structure (lists, code blocks, etc.)
+            const descProcessor = createProcessor();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const descTree = descProcessor.parse(description) as any;
+            
             const newBlockquote = {
               type: 'blockquote',
-              children: description.split('\n').map(line => ({
-                type: 'paragraph',
-                children: parseInline(line)
-              }))
+              children: descTree.children
             };
 
             if (blockquoteIndex !== -1) {
