@@ -17,6 +17,7 @@ The application uses `unified`, `remark-parse`, and `remark-gfm` to parse Markdo
 - **Tags**: Words starting with `#` (e.g., `#urgent`) are parsed as tags. Escaped hashes `\#` are ignored.
 - **Due Dates**: The pattern `due:YYYY-MM-DD` is parsed as a due date.
 - **Descriptions**: A blockquote (`>`) immediately following a task list item is treated as the task's description.
+    - **Raw Markdown Requirement**: The description must be stored and edited as raw markdown. When a user edits a description, the application must present the raw markdown text (e.g., `**bold**`, `- item`) without escaping characters (like `\-` or `&#x20;`). The parser must extract the raw text content from the blockquote nodes to ensure fidelity.
 - **Headers**: Markdown headers (`#`, `##`, etc.) act as section dividers.
 
 ### 2.2 Nested Tasks
