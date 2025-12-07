@@ -6,6 +6,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Plus, ChevronDown, ChevronRight, Calendar, AlignLeft, Copy, Check } from 'lucide-react';
 import { pluginRegistry } from '../plugins/pluginEngine';
+import type { FocusModePlugin } from '../plugins/FocusModePlugin';
 import type { Task } from '../lib/MarkdownParser';
 
 interface TaskItemProps {
@@ -73,6 +74,14 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
 
   useEffect(() => {
     if (isEditing) {
+      // Check for Focus Mode and auto-expand description
+      const focusPluginMeta = pluginRegistry.getPlugins().find(p => p.name === 'FocusMode');
+      const focusPlugin = focusPluginMeta?.instance as FocusModePlugin | undefined;
+      if (focusPlugin?.isActive) {
+        setShowDescription(true);
+        setIsEditingDescription(true);
+      }
+
       if (inputRef.current) {
         inputRef.current.focus();
         inputRef.current.setSelectionRange(inputRef.current.value.length, inputRef.current.value.length);
@@ -177,11 +186,18 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
     }
   };
 
-  const handleDescriptionBlur = () => {
+  const handleDescriptionBlur = (e: React.FocusEvent) => {
+    // Check if focus is moving to the title input
+    if (e.relatedTarget && (e.relatedTarget === inputRef.current || e.relatedTarget === headerInputRef.current)) {
+      return;
+    }
+
     if (editDescription !== (task.description || '')) {
       onUpdateDescription?.(task.id, editDescription);
     }
     setIsEditingDescription(false);
+    // Also close title edit if we are leaving the task completely
+    setIsEditing(false);
   };
 
   const handleAddDueDate = () => {
@@ -197,7 +213,8 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
   };
 
   const handleToggleDescriptionEdit = () => {
-    setIsEditing(false);
+    // Keep title editing active for unified edit mode
+    // setIsEditing(false); 
     setShowDescription(true);
     setIsEditingDescription(true);
     setTimeout(() => {
@@ -207,13 +224,20 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
     }, 0);
   };
 
-  const handleBlur = () => {
+  const handleBlur = (e: React.FocusEvent) => {
+    // Check if focus is moving to the description input
+    if (e.relatedTarget && e.relatedTarget === descriptionRef.current) {
+      return;
+    }
+
     if (editText.trim() === '') {
       onDelete?.(task.id);
     } else if (editText.trim() !== task.text) {
       onUpdate?.(task.id, editText);
     }
     setIsEditing(false);
+    // Also close description edit if we are leaving
+    setIsEditingDescription(false);
   };
 
   // Helper to clean text for display (remove plugin syntax like due:YYYY-MM-DD)
@@ -303,6 +327,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
           task-item group flex items-center gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
           ${compact ? 'p-1 pt-2' : 'p-3 pt-6'}
           ${isDragging ? 'opacity-50 bg-base-200' : ''}
+          ${isEditing ? 'is-editing' : ''}
         `}
       >
         <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -346,6 +371,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
           task-item group flex items-center gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
           ${compact ? 'p-0.5' : 'p-2'}
           ${isDragging ? 'opacity-50 bg-base-200' : ''}
+          ${isEditing ? 'is-editing' : ''}
         `}
       >
         <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -376,12 +402,12 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
   return (
     <div 
       ref={setNodeRef}
-      style={style}
       className={`
         task-item group flex items-start gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
         ${compact ? 'p-1' : 'p-3'}
         ${isAnimating ? 'opacity-0 -translate-y-4 max-h-0 overflow-hidden py-0 border-none' : 'opacity-100 max-h-[2000px]'}
         ${isDragging ? 'opacity-50 bg-base-200' : ''}
+        ${(isEditing || isEditingDescription) ? 'is-editing' : ''}
       `}
     >
       <div {...attributes} {...listeners} className={`cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center ${getLineHeightClass()}`}>
@@ -420,12 +446,14 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
               />
               {/* Action Bar */}
               <div className="flex gap-2 mt-2">
+                {!isEditingDescription && (
                 <button 
                   onMouseDown={(e) => { e.preventDefault(); handleToggleDescriptionEdit(); }}
                   className="btn btn-xs btn-ghost gap-1 text-base-content/60 font-normal"
                 >
                   <AlignLeft size={12} /> Add Details
                 </button>
+                )}
                 <button 
                   onMouseDown={(e) => { e.preventDefault(); handleAddDueDate(); }}
                   className="btn btn-xs btn-ghost gap-1 text-base-content/60 font-normal"
@@ -473,7 +501,14 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
           
           {/* Plugin Extensions */}
           <div className="flex gap-2 empty:hidden">
-            {pluginRegistry.renderTaskExtensions(task)}
+            {pluginRegistry.getPlugins().map(plugin => {
+              if (!plugin.enabled || !plugin.instance.onTaskRender) return null;
+              return (
+                <div key={plugin.name}>
+                  {plugin.instance.onTaskRender(task, { isEditing })}
+                </div>
+              );
+            })}
           </div>
 
           {/* Copy Button */}
@@ -512,7 +547,6 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
                 onBlur={handleDescriptionBlur}
                 placeholder="Add a description..."
                 className="w-full bg-base-200/50 rounded p-2 text-sm text-base-content/80 border-none outline-none resize-none overflow-hidden"
-                autoFocus
               />
             ) : (
               <div 

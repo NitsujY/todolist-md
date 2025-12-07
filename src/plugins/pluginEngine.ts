@@ -4,7 +4,7 @@ import type { Task } from '../lib/MarkdownParser';
 export interface Plugin {
   name: string;
   onInit?: (api: PluginAPI) => void;
-  onTaskRender?: (task: Task) => ReactNode; // Returns extra UI to render next to task
+  onTaskRender?: (task: Task, context?: { isEditing: boolean }) => ReactNode; // Returns extra UI to render next to task
   transformMarkdown?: (markdown: string) => string;
   onTaskComplete?: (task: Task) => void;
   renderDashboard?: () => ReactNode;
@@ -93,10 +93,10 @@ class PluginRegistry {
   }
 
   // Hook execution helpers
-  renderTaskExtensions(task: Task): ReactNode[] {
+  renderTaskExtensions(task: Task, context?: { isEditing: boolean }): ReactNode[] {
     return Array.from(this.plugins.values())
       .filter(meta => meta.enabled)
-      .map(meta => meta.instance.onTaskRender ? meta.instance.onTaskRender(task) : null)
+      .map(meta => meta.instance.onTaskRender ? meta.instance.onTaskRender(task, context) : null)
       .filter(Boolean);
   }
 
