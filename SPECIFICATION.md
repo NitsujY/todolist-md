@@ -92,7 +92,7 @@ The app uses the `StorageProvider` interface to support multiple backends.
     - `ThemePlugin`: Manages theme switching.
     - `FontPlugin`: Manages font switching.
     - `DueDatePlugin`: Highlights due dates.
-    - `FocusModePlugin`: Dim other tasks when focusing on one.
+    - `FocusModePlugin`: Provides a "Zen Mode" experience. When enabled, editing a task expands it to a fullscreen view with larger text, while dimming and disabling all other tasks to eliminate distractions.
     - `AutoCleanupPlugin`: Archives completed tasks older than X days (configurable).
     - `AutoRefreshPlugin`: Periodically reloads the list (configurable interval).
         - **Constraint**: Must pause/skip refresh if the user is currently editing a task (input focused) to prevent data loss or UI disruption.
