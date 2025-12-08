@@ -42,9 +42,10 @@ The app uses the `StorageProvider` interface to support multiple backends.
 - **Renaming**: Handles case-insensitive file systems (e.g., macOS/Windows) by using a temporary file strategy when renaming files where only the case changes (e.g., `todo.md` -> `Todo.md`).
 
 ### 3.3 Google Drive Adapter (`google`)
-- **Auth**: OAuth 2.0 with `https://www.googleapis.com/auth/drive` and `https://www.googleapis.com/auth/drive.install` scopes.
+- **Auth**: OAuth 2.0 with `https://www.googleapis.com/auth/drive`, `https://www.googleapis.com/auth/drive.install`, and `https://www.googleapis.com/auth/userinfo.email` scopes.
 - **Persistence**:
     - Access Token is cached in `localStorage` with expiration handling.
+    - User Email is cached to provide `login_hint` for smoother re-authentication.
     - `google-drive-config` stores Client ID and API Key.
 - **File Listing Strategy**:
     - Uses Google Picker API for folder selection to ensure reliable ID retrieval.

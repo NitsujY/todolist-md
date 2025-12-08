@@ -18,6 +18,7 @@ export class GoogleDriveAdapter implements StorageProvider {
   private tokenClient: any;
   private accessToken: string | null = null;
   private tokenExpiration: number = 0;
+  private userEmail: string | null = null;
   private isInitialized = false;
   private fileCache: Map<string, { id: string; name: string }> = new Map();
 
@@ -37,11 +38,16 @@ export class GoogleDriveAdapter implements StorageProvider {
     // Try to restore token
     const savedToken = localStorage.getItem('google-drive-token');
     const savedExpiration = localStorage.getItem('google-drive-token-expires');
+    this.userEmail = localStorage.getItem('google-drive-user-email');
+
     if (savedToken && savedExpiration) {
       const expiresAt = parseInt(savedExpiration, 10);
       if (Date.now() < expiresAt) {
         this.accessToken = savedToken;
         this.tokenExpiration = expiresAt;
+        console.log('Restored valid Google Drive token, expires in', Math.round((expiresAt - Date.now()) / 1000), 'seconds');
+      } else {
+        console.log('Stored Google Drive token is expired');
       }
     }
 
@@ -114,7 +120,8 @@ export class GoogleDriveAdapter implements StorageProvider {
             client_id: this.config!.clientId,
             // Use 'drive' scope to allow full access to all files, enabling the "Open Folder" workflow
             // where we can edit any file in the selected folder.
-            scope: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.install',
+            // Add userinfo.email to help with silent sign-in hints
+            scope: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.install https://www.googleapis.com/auth/userinfo.email',
             callback: (response: any) => {
               if (response.error !== undefined) {
                 throw response;
@@ -124,6 +131,12 @@ export class GoogleDriveAdapter implements StorageProvider {
           });
 
           this.isInitialized = true;
+          
+          // If we restored a valid token, ensure it's set on the client immediately
+          if (this.accessToken) {
+            window.gapi.client.setToken({ access_token: this.accessToken });
+          }
+
           resolve();
         } catch (err) {
           console.error('GAPI Init Error:', JSON.stringify(err, null, 2));
@@ -163,7 +176,12 @@ export class GoogleDriveAdapter implements StorageProvider {
         resolve();
       };
       // Don't force consent every time. This allows silent sign-in if already authorized.
-      this.tokenClient.requestAccessToken({ prompt: '' });
+      // Use login_hint to help skip account chooser if we know the email
+      const config: any = { prompt: '' };
+      if (this.userEmail) {
+        config.login_hint = this.userEmail;
+      }
+      this.tokenClient.requestAccessToken(config);
     });
   }
 
@@ -190,7 +208,34 @@ export class GoogleDriveAdapter implements StorageProvider {
     
     localStorage.setItem('google-drive-token', this.accessToken!);
     localStorage.setItem('google-drive-token-expires', this.tokenExpiration.toString());
+
+    // Fetch user info if we don't have it yet
+    if (!this.userEmail) {
+      this.fetchUserInfo();
+    }
   }
+
+  private async fetchUserInfo() {
+    try {
+      // Ensure gapi client has the token
+      if (this.accessToken && window.gapi && window.gapi.client) {
+        window.gapi.client.setToken({ access_token: this.accessToken });
+        
+        const response = await window.gapi.client.request({
+          path: 'https://www.googleapis.com/oauth2/v3/userinfo',
+        });
+        
+        if (response.result && response.result.email) {
+          this.userEmail = response.result.email;
+          localStorage.setItem('google-drive-user-email', this.userEmail!);
+          console.log('Fetched user email:', this.userEmail);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch user info', e);
+    }
+  }
+
   private async ensureAuth() {
     if (!this.isInitialized) {
       await this.init();
