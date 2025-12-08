@@ -461,12 +461,12 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
       <div className={`flex items-center justify-center flex-shrink-0 ${getLineHeightClass()}`}>
         <button 
           onClick={() => onToggle(task.id)}
-          className={`transition-colors p-0 rounded-full hover:bg-base-200 ${task.completed ? 'text-base-content/30' : 'text-base-content/50 hover:text-primary'}`}
+          className="transition-colors p-0 rounded-full hover:bg-base-200 group/checkbox"
         >
           {task.completed ? (
-            <div className={`${getCheckboxSizeClass()} rounded-full border-2 border-current bg-current`}></div>
+            <div className={`${getCheckboxSizeClass()} rounded-full border-2 border-base-content/30 bg-base-content/30`}></div>
           ) : (
-            <div className={`${getCheckboxSizeClass()} rounded-full border-2 border-current`}></div>
+            <div className={`${getCheckboxSizeClass()} rounded-full border-2 border-base-content/50 group-hover/checkbox:border-primary`}></div>
           )}
         </button>
       </div>
