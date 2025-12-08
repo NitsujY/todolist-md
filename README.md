@@ -67,6 +67,10 @@ The app features a robust plugin system. You can enable/disable them in Settings
 - **Sound Effects**: Adds satisfying sounds when completing tasks.
 - **Gamification**: (Experimental) Earn XP and level up by completing tasks.
 
+## Changelog
+
+- 2025-12-08: Fix - Zen Mode toolbar reliably fades in on re-entry. Adjusted Focus Mode CSS to target portal-rendered controls and updated the fade animation to ensure it resets correctly when entering Zen Mode multiple times.
+
 ## Markdown Syntax Guide
 
 The app parses standard Markdown to generate the task list. Here is how it works:

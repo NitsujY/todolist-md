@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import { useSortable } from '@dnd-kit/sortable';
+import { useDndContext } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Plus, ChevronDown, ChevronRight, Calendar, AlignLeft, Copy, Check } from 'lucide-react';
 import { pluginRegistry } from '../plugins/pluginEngine';
@@ -39,13 +40,18 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
   const headerInputRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+
   // Auto-resize description textarea when opening edit mode
   useEffect(() => {
     if (isEditingDescription && descriptionRef.current) {
       descriptionRef.current.style.height = 'auto';
       descriptionRef.current.style.height = descriptionRef.current.scrollHeight + 'px';
     }
-  }, [isEditingDescription]);
+  }, [isEditingDescription, isPreviewMode]);
+
+  const { over } = useDndContext();
+  const isOver = over?.id === task.id;
 
   const {
     attributes,
@@ -62,6 +68,19 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
     zIndex: isDragging ? 100 : 'auto',
     position: isDragging ? 'relative' as const : undefined,
     marginLeft: `${(task.depth || 0) * 1.5}rem`,
+  };
+
+  // Check if Zen Mode is active
+  const focusPluginMeta = pluginRegistry.getPlugins().find(p => p.name === 'FocusMode');
+  const focusPlugin = focusPluginMeta?.instance as FocusModePlugin | undefined;
+  const isZenMode = focusPlugin?.isActive && isEditing;
+
+  // Render drop indicator line
+  const DropIndicator = () => {
+    if (!isOver || isDragging) return null;
+    return (
+      <div className="absolute left-0 right-0 h-0.5 bg-primary z-50 pointer-events-none transform -translate-y-1/2 top-0 shadow-[0_0_4px_rgba(var(--p),0.5)]" />
+    );
   };
 
   useEffect(() => {
@@ -192,6 +211,16 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
       return;
     }
 
+    // Check if focus is moving to Zen Mode controls
+    if (e.relatedTarget instanceof Element && e.relatedTarget.closest('.zen-controls')) {
+      return;
+    }
+
+    // In Zen Mode, don't auto-close on blur
+    if (isZenMode) {
+      return;
+    }
+
     if (editDescription !== (task.description || '')) {
       onUpdateDescription?.(task.id, editDescription);
     }
@@ -227,6 +256,17 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
   const handleBlur = (e: React.FocusEvent) => {
     // Check if focus is moving to the description input
     if (e.relatedTarget && e.relatedTarget === descriptionRef.current) {
+      return;
+    }
+
+    // Check if focus is moving to Zen Mode controls (which are in a portal)
+    if (e.relatedTarget instanceof Element && e.relatedTarget.closest('.zen-controls')) {
+      return;
+    }
+
+    // In Zen Mode, don't auto-close on blur unless explicitly requested (e.g. via Escape or Close button)
+    // We rely on the "Exit" button or Escape key to close Zen Mode
+    if (isZenMode) {
       return;
     }
 
@@ -324,12 +364,13 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
         ref={setNodeRef}
         style={style}
         className={`
-          task-item group flex items-center gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
+          task-item group flex items-center gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out relative
           ${compact ? 'p-1 pt-2' : 'p-3 pt-6'}
           ${isDragging ? 'opacity-50 bg-base-200' : ''}
           ${isEditing ? 'is-editing' : ''}
         `}
       >
+        <DropIndicator />
         <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 transition-opacity">
           <GripVertical size={16} />
         </div>
@@ -368,12 +409,13 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
         style={style}
         onClick={() => setIsEditing(true)}
         className={`
-          task-item group flex items-center gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
+          task-item group flex items-center gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out relative
           ${compact ? 'p-0.5' : 'p-2'}
           ${isDragging ? 'opacity-50 bg-base-200' : ''}
           ${isEditing ? 'is-editing' : ''}
         `}
       >
+        <DropIndicator />
         <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 transition-opacity">
           <GripVertical size={16} />
         </div>
@@ -402,14 +444,16 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
   return (
     <div 
       ref={setNodeRef}
+      style={style}
       className={`
-        task-item group flex items-start gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out
+        task-item group flex items-start gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out relative
         ${compact ? 'p-1' : 'p-3'}
         ${isAnimating ? 'opacity-0 -translate-y-4 max-h-0 overflow-hidden py-0 border-none' : 'opacity-100 max-h-[2000px]'}
         ${isDragging ? 'opacity-50 bg-base-200' : ''}
         ${(isEditing || isEditingDescription) ? 'is-editing' : ''}
       `}
     >
+      <DropIndicator />
       <div {...attributes} {...listeners} className={`cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center ${getLineHeightClass()}`}>
         <GripVertical size={16} />
       </div>
@@ -535,19 +579,60 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
         {(showDescription || isEditingDescription) && (
           <div className="mt-2 pl-1">
             {isEditingDescription ? (
-              <textarea
-                ref={descriptionRef}
-                value={editDescription}
-                onChange={(e) => {
-                  setEditDescription(e.target.value);
-                  e.target.style.height = 'auto';
-                  e.target.style.height = e.target.scrollHeight + 'px';
-                }}
-                onKeyDown={handleDescriptionKeyDown}
-                onBlur={handleDescriptionBlur}
-                placeholder="Add a description..."
-                className="w-full bg-base-200/50 rounded p-2 text-sm text-base-content/80 border-none outline-none resize-none overflow-hidden"
-              />
+              <div className="flex flex-col gap-2">
+                {isZenMode && (
+                  <div className="flex justify-end mb-1">
+                    <div className="join">
+                      <button 
+                        className={`join-item btn btn-xs ${!isPreviewMode ? 'btn-active' : ''}`}
+                        onClick={() => setIsPreviewMode(false)}
+                      >
+                        Write
+                      </button>
+                      <button 
+                        className={`join-item btn btn-xs ${isPreviewMode ? 'btn-active' : ''}`}
+                        onClick={() => setIsPreviewMode(true)}
+                      >
+                        Preview
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {isPreviewMode ? (
+                  <div className="w-full bg-base-200/30 rounded p-4 text-sm text-base-content/80 min-h-[100px] prose prose-sm max-w-none">
+                    <ReactMarkdown 
+                      remarkPlugins={[remarkGfm, remarkBreaks]}
+                      components={{
+                        p: ({children}) => <span className="block mb-2 last:mb-0">{children}</span>,
+                        a: ({node, ...props}) => <a {...props} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} />,
+                        ul: ({children}) => <ul className="list-disc pl-4 mb-2">{children}</ul>,
+                        ol: ({children}) => <ol className="list-decimal pl-4 mb-2">{children}</ol>,
+                        li: ({children}) => <li className="mb-1">{children}</li>,
+                        blockquote: ({children}) => <blockquote className="border-l-4 border-base-300 pl-2 italic my-2">{children}</blockquote>,
+                        code: ({children}) => <code className="bg-base-300 rounded px-1 py-0.5 text-xs font-mono">{children}</code>,
+                        pre: ({children}) => <pre className="bg-base-300 rounded p-2 overflow-x-auto my-2 text-xs font-mono">{children}</pre>,
+                      }}
+                    >
+                      {editDescription || '*No description*'}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <textarea
+                    ref={descriptionRef}
+                    value={editDescription}
+                    onChange={(e) => {
+                      setEditDescription(e.target.value);
+                      e.target.style.height = 'auto';
+                      e.target.style.height = e.target.scrollHeight + 'px';
+                    }}
+                    onKeyDown={handleDescriptionKeyDown}
+                    onBlur={handleDescriptionBlur}
+                    placeholder="Add a description..."
+                    className="w-full bg-base-200/50 rounded p-2 text-sm text-base-content/80 border-none outline-none resize-none overflow-hidden"
+                  />
+                )}
+              </div>
             ) : (
               <div 
                 onClick={() => setIsEditingDescription(true)}
@@ -575,6 +660,35 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
           </div>
         )}
       </div>
+      
+      {/* Render Plugin UI */}
+      {pluginRegistry.getPlugins().map(plugin => {
+        if (plugin.enabled && plugin.instance.onTaskRender) {
+          return (
+            <div key={plugin.name}>
+              {plugin.instance.onTaskRender(task, { 
+                isEditing,
+                onExit: () => {
+                  console.log('Exiting Zen Mode via callback');
+                  // Explicit exit handler for Zen Mode
+                  if (editText.trim() === '') {
+                    onDelete?.(task.id);
+                  } else if (editText.trim() !== task.text) {
+                    onUpdate?.(task.id, editText);
+                  }
+                  // Also save description if changed
+                  if (editDescription !== (task.description || '')) {
+                    onUpdateDescription?.(task.id, editDescription);
+                  }
+                  setIsEditing(false);
+                  setIsEditingDescription(false); // Ensure description edit mode is also cleared
+                }
+              })}
+            </div>
+          );
+        }
+        return null;
+      })}
     </div>
   );
 }
