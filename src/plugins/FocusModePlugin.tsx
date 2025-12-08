@@ -78,7 +78,7 @@ const ZenModeControls = ({ task, onExit }: { task: Task; onExit?: () => void }) 
   const remainingTime = targetTime - elapsed;
 
   return createPortal(
-    <div className="zen-controls fixed top-2 left-1/2 -translate-x-1/2 flex items-center justify-center z-[10000] animate-[zen-fade-in_0.5s_ease_0.3s_both] pointer-events-none w-full">
+    <div className="zen-controls fixed top-2 left-0 flex items-center justify-center z-[10000] animate-[zen-fade-in_0.5s_ease_0.3s_both] pointer-events-none w-full">
       <div className="bg-base-100/90 backdrop-blur-md shadow-xl border border-base-200 rounded-full px-6 py-2 flex items-center gap-6 pointer-events-auto">
         {/* Stats Section */}
         <div className="flex items-center gap-4 border-r border-base-content/10 pr-6">
