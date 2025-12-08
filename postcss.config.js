@@ -1,3 +1,8 @@
+import tailwind from '@tailwindcss/postcss';
+import autoprefixer from 'autoprefixer';
+
+// Small production-only plugin to remove `@property` at-rules which
+// some CSS optimizers (LightningCSS) flag as unknown and emit warnings.
 const removePropertyAtRule = () => ({
   postcssPlugin: 'remove-property-at-rule',
   AtRule(atRule) {
@@ -7,18 +12,10 @@ const removePropertyAtRule = () => ({
   },
 });
 
-const basePlugins = [
-  require('@tailwindcss/postcss'),
-  require('autoprefixer'),
-];
-
-module.exports = () => {
-  if (process.env.NODE_ENV === 'production') {
-    return {
-      plugins: [removePropertyAtRule(), ...basePlugins],
-    };
-  }
-  return {
-    plugins: basePlugins,
-  };
-};
+export default {
+  plugins: [
+    process.env.NODE_ENV === 'production' && removePropertyAtRule(),
+    tailwind,
+    autoprefixer,
+  ].filter(Boolean),
+}

@@ -10,7 +10,9 @@ export default defineConfig({
     host: true,
   },
   build: {
-    cssMinify: 'lightningcss',
+    // Use esbuild for CSS minification to avoid LightningCSS warnings
+    // about newer at-rules like @property/@theme/@plugin.
+    cssMinify: 'esbuild',
   },
   define: {
     '__APP_VERSION__': JSON.stringify(pkg.version),
