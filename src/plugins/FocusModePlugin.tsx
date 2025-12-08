@@ -2,23 +2,28 @@ import type { Plugin, PluginAPI } from './pluginEngine';
 import type { Task } from '../lib/MarkdownParser';
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Timer, Play, Pause, RotateCcw, Type } from 'lucide-react';
+import { Timer, Play, Pause, RotateCcw, Type, CheckCircle2, X } from 'lucide-react';
 import { useTodoStore } from '../store/useTodoStore';
 
-const ZenModeControls = ({ task }: { task: Task }) => {
+const ZenModeControls = ({ task, onExit }: { task: Task; onExit?: () => void }) => {
   const [elapsed, setElapsed] = useState(0);
-  const [targetTime] = useState(25 * 60); // Default 25 mins
+  const [targetTime, setTargetTime] = useState(25 * 60); // Default 25 mins
+  const [isEditingTime, setIsEditingTime] = useState(false);
+  const [customMinutes, setCustomMinutes] = useState('25');
   const [isRunning, setIsRunning] = useState(false);
   const [wordCount, setWordCount] = useState(0);
   const [readTime, setReadTime] = useState(0);
-  const updateTaskText = useTodoStore(state => state.updateTaskText);
+  const toggleTask = useTodoStore(state => state.toggleTask);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Initialize timer from task tag #time:XXm
+  // Initialize timer - but don't persist to tag unless user wants to
+  // We just use the tag to set initial state if present, but we don't write back constantly
   useEffect(() => {
     const match = task.text.match(/#time:(\d+)m/);
     if (match) {
-      setElapsed(parseInt(match[1]) * 60);
+      const mins = parseInt(match[1]);
+      setTargetTime(mins * 60);
+      setCustomMinutes(mins.toString());
     }
   }, []); // Only on mount
 
@@ -44,28 +49,23 @@ const ZenModeControls = ({ task }: { task: Task }) => {
     };
   }, [isRunning]);
 
-  // Save time to task when pausing or unmounting
-  const saveTime = async () => {
-    const minutes = Math.floor(elapsed / 60);
-    if (minutes === 0) return;
-
-    let newText = task.text;
-    if (newText.match(/#time:\d+m/)) {
-      newText = newText.replace(/#time:\d+m/, `#time:${minutes}m`);
-    } else {
-      newText = `${newText} #time:${minutes}m`;
-    }
-    
-    if (newText !== task.text) {
-      await updateTaskText(task.id, newText);
-    }
+  const toggleTimer = () => {
+    setIsRunning(!isRunning);
   };
 
-  const toggleTimer = () => {
-    if (isRunning) {
-      saveTime();
+  const handleTimeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const mins = parseInt(customMinutes);
+    if (!isNaN(mins) && mins > 0) {
+      setTargetTime(mins * 60);
+      setElapsed(0);
+      setIsRunning(false);
+      setIsEditingTime(false);
+      
+      // We do NOT update the tag in text anymore as per request
+      // "it can be reset evertime the user leave and enter"
+      // So we just keep it in local state for this session
     }
-    setIsRunning(!isRunning);
   };
 
   const formatTime = (seconds: number) => {
@@ -78,7 +78,7 @@ const ZenModeControls = ({ task }: { task: Task }) => {
   const remainingTime = targetTime - elapsed;
 
   return createPortal(
-    <div className="zen-controls fixed top-2 left-1/2 -translate-x-1/2 flex items-center justify-center z-[10000] animate-[zen-fade-in_0.5s_ease_0.3s_forwards] opacity-0 pointer-events-none w-full">
+    <div className="zen-controls fixed top-2 left-1/2 -translate-x-1/2 flex items-center justify-center z-[10000] animate-[zen-fade-in_0.5s_ease_0.3s_both] pointer-events-none w-full">
       <div className="bg-base-100/90 backdrop-blur-md shadow-xl border border-base-200 rounded-full px-6 py-2 flex items-center gap-6 pointer-events-auto">
         {/* Stats Section */}
         <div className="flex items-center gap-4 border-r border-base-content/10 pr-6">
@@ -96,13 +96,31 @@ const ZenModeControls = ({ task }: { task: Task }) => {
 
         {/* Timer Section */}
         <div className="flex items-center gap-4">
-          <div className="flex flex-col items-start">
+          <div className="flex flex-col items-start min-w-[60px]">
             <span className="text-[10px] font-bold text-base-content/40 uppercase tracking-wider flex items-center gap-1">
               <Timer size={10} /> Timer
             </span>
-            <span className={`text-xl font-mono font-bold tabular-nums leading-none ${remainingTime < 0 ? 'text-error' : 'text-primary'}`}>
-              {formatTime(remainingTime)}
-            </span>
+            {isEditingTime ? (
+              <form onSubmit={handleTimeSubmit} className="flex items-center">
+                <input
+                  autoFocus
+                  type="number"
+                  className="input input-xs input-ghost p-0 h-5 w-12 font-mono text-lg font-bold"
+                  value={customMinutes}
+                  onChange={e => setCustomMinutes(e.target.value)}
+                  onBlur={() => setIsEditingTime(false)}
+                />
+                <span className="text-xs font-bold opacity-50">m</span>
+              </form>
+            ) : (
+              <button 
+                onClick={() => setIsEditingTime(true)}
+                className={`text-xl font-mono font-bold tabular-nums leading-none hover:opacity-70 transition-opacity ${remainingTime < 0 ? 'text-error' : 'text-primary'}`}
+                title="Click to edit duration"
+              >
+                {formatTime(remainingTime)}
+              </button>
+            )}
           </div>
           
           <div className="flex gap-1">
@@ -119,7 +137,6 @@ const ZenModeControls = ({ task }: { task: Task }) => {
               onClick={() => {
                 setIsRunning(false);
                 setElapsed(0);
-                saveTime();
               }}
               className="btn btn-xs btn-circle btn-ghost"
               title="Reset"
@@ -127,6 +144,43 @@ const ZenModeControls = ({ task }: { task: Task }) => {
               <RotateCcw size={12} />
             </button>
           </div>
+        </div>
+
+        {/* Complete Button */}
+        <div className="pl-6 border-l border-base-content/10 flex items-center gap-2">
+          <button 
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              toggleTask(task.id);
+              // Optional: Exit on complete? Maybe not, let user admire their work.
+            }}
+            className="btn btn-sm btn-success gap-2 rounded-full text-white shadow-lg hover:scale-105 transition-transform"
+          >
+            <CheckCircle2 size={16} />
+            Complete
+          </button>
+          
+          {/* Exit Button */}
+          <button 
+            onMouseDown={(e) => {
+              // Prevent focus loss which might trigger blur logic (though we have protection now)
+              e.preventDefault();
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('Exit button clicked');
+              if (onExit) {
+                onExit();
+              } else {
+                console.warn('onExit callback missing');
+              }
+            }}
+            className="btn btn-sm btn-circle btn-ghost hover:bg-base-200 ml-2"
+            title="Save & Exit Zen Mode"
+          >
+            <X size={20} />
+          </button>
         </div>
       </div>
     </div>,
@@ -156,9 +210,9 @@ export class FocusModePlugin implements Plugin {
     this.updateStyles();
   }
 
-  onTaskRender(task: Task, context?: { isEditing: boolean }) {
+  onTaskRender(task: Task, context?: { isEditing: boolean; onExit?: () => void }) {
     if (!context?.isEditing) return null;
-    return <ZenModeControls task={task} />;
+    return <ZenModeControls task={task} onExit={context.onExit} />;
   }
 
   private updateStyles() {
@@ -278,17 +332,7 @@ export class FocusModePlugin implements Plugin {
       
       /* Adjust checkbox size in Zen Mode - make it cleaner */
       body.focus-mode-active .task-item.is-editing button[class*="rounded-full"] {
-        margin-top: 0.5rem;
-      }
-      body.focus-mode-active .task-item.is-editing button[class*="rounded-full"] div {
-        width: 1.5rem;
-        height: 1.5rem;
-        border-width: 2px;
-        opacity: 0.8;
-        transition: opacity 0.2s;
-      }
-      body.focus-mode-active .task-item.is-editing button[class*="rounded-full"]:hover div {
-        opacity: 1;
+        display: none !important;
       }
       
       /* Hide action buttons until hover in Zen Mode to reduce clutter */
@@ -301,15 +345,13 @@ export class FocusModePlugin implements Plugin {
       }
 
       /* Show Zen Controls only when editing */
-      body.focus-mode-active .task-item.is-editing .zen-controls {
-        opacity: 1 !important;
-        pointer-events: auto !important;
-        animation: zen-fade-in 0.5s ease 0.3s forwards;
+      body.focus-mode-active .zen-controls {
+        animation: zen-fade-in 0.5s ease 0.3s both;
       }
 
       @keyframes zen-fade-in {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
+        0% { opacity: 0; transform: translateY(10px); }
+        100% { opacity: 1; transform: translateY(0); }
       }
     `;
     

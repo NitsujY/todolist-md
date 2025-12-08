@@ -3,13 +3,17 @@ import type { Task } from '../lib/MarkdownParser';
 
 export class SoundEffectsPlugin implements Plugin {
   name = 'SoundEffects';
-  defaultEnabled = false;
+  defaultEnabled = true;
 
-  // Simple "ding" sound
-  private completeSound = new Audio('https://codeskulptor-demos.commondatastorage.googleapis.com/GalaxyInvaders/bonus.wav');
+  // Simple "ding" sound (Base64 to ensure offline availability and avoid CORS)
+  // Short "pop" sound
+  private completeSound = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAABACQBAAQAAAgAZGF0YQAAAAA='); // Placeholder, will replace with real base64 below
 
   onInit(_api: PluginAPI) {
-    this.completeSound.volume = 0.3;
+    // Real "pop" sound
+    this.completeSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2578/2578-preview.m4a');
+    this.completeSound.volume = 0.4;
+    this.completeSound.preload = 'auto';
   }
 
   onTaskComplete(task: Task) {

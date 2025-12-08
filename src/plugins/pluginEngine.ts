@@ -4,7 +4,7 @@ import type { Task } from '../lib/MarkdownParser';
 export interface Plugin {
   name: string;
   onInit?: (api: PluginAPI) => void;
-  onTaskRender?: (task: Task, context?: { isEditing: boolean }) => ReactNode; // Returns extra UI to render next to task
+  onTaskRender?: (task: Task, context?: { isEditing: boolean; onExit?: () => void }) => ReactNode; // Returns extra UI to render next to task
   transformMarkdown?: (markdown: string) => string;
   onTaskComplete?: (task: Task) => void;
   renderDashboard?: () => ReactNode;
