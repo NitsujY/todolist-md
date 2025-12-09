@@ -93,15 +93,7 @@ The app uses the `StorageProvider` interface to support multiple backends.
     - `ThemePlugin`: Manages theme switching.
     - `FontPlugin`: Manages font switching.
     - `DueDatePlugin`: Highlights due dates.
-        - `FocusModePlugin`: Provides a "Zen Mode" experience. When enabled, editing a task can expand it to a fullscreen view with larger text, while dimming and disabling all other tasks to eliminate distractions.
-            - Entry: Zen Mode must be explicitly requested (UI or keyboard shortcut) and will not automatically claim the `Enter` key used for adding tasks.
-            - Description Auto-Expand: When entering Zen Mode for a task, the task's detailed description is always expanded and placed into edit mode so the user can immediately work on it.
-            - Exit Semantics: Zen Mode is persistent while editing; it will only exit when the user either:
-                - clicks the floating top-bar "Close" (X) button, or
-                - presses the `Escape` key.
-                Clicking elsewhere (including inside the expanded description area or controls) will not exit Zen Mode.
-            - Description Toggle: The description expand/collapse chevron toggles visibility but will not exit Zen Mode. Toggling the description while in Zen Mode preserves the editing state.
-            - Floating Toolbar: The current implementation displays a floating top-bar that contains timer/stats/exit controls. See README for UX notes and tradeoffs.
+    - `FocusModePlugin`: Provides a "Zen Mode" experience. When enabled, editing a task expands it to a fullscreen view with larger text, while dimming and disabling all other tasks to eliminate distractions.
     - `AutoCleanupPlugin`: Archives completed tasks older than X days (configurable).
     - `AutoRefreshPlugin`: Periodically reloads the list (configurable interval).
         - **Constraint**: Must pause/skip refresh if the user is currently editing a task (input focused) to prevent data loss or UI disruption.
