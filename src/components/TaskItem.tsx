@@ -5,7 +5,7 @@ import remarkBreaks from 'remark-breaks';
 import { useSortable } from '@dnd-kit/sortable';
 import { useDndContext } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Plus, ChevronDown, ChevronRight, Calendar, AlignLeft, Copy, Check } from 'lucide-react';
+import { GripVertical, Plus, ChevronDown, ChevronRight, Calendar, AlignLeft, Copy, Check, Sparkles } from 'lucide-react';
 import { pluginRegistry } from '../plugins/pluginEngine';
 import type { FocusModePlugin } from '../plugins/FocusModePlugin';
 import type { Task } from '../lib/MarkdownParser';
@@ -73,7 +73,12 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
   // Check if Zen Mode is active
   const focusPluginMeta = pluginRegistry.getPlugins().find(p => p.name === 'FocusMode');
   const focusPlugin = focusPluginMeta?.instance as FocusModePlugin | undefined;
-  const isZenMode = focusPlugin?.isActive && isEditing;
+  // Zen mode should be entered explicitly to avoid blocking normal Enter behaviour
+  const [isZenRequested, setIsZenRequested] = useState(false);
+  // Transient guard used when entering Zen Mode to prevent blur handlers
+  // from accidentally closing the modal while we flip into Zen state.
+  const [enteringZen, setEnteringZen] = useState(false);
+  const isZenMode = focusPlugin?.isActive && isZenRequested && isEditing && task.type !== 'header';
 
   // Render drop indicator line
   const DropIndicator = () => {
@@ -93,12 +98,18 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
 
   useEffect(() => {
     if (isEditing) {
-      // Check for Focus Mode and auto-expand description
-      const focusPluginMeta = pluginRegistry.getPlugins().find(p => p.name === 'FocusMode');
-      const focusPlugin = focusPluginMeta?.instance as FocusModePlugin | undefined;
-      if (focusPlugin?.isActive) {
+      // Do not auto-enter Zen Mode on edit. Only auto-expand description if Zen was explicitly requested
+      if (focusPlugin?.isActive && isZenRequested) {
+        // Ensure description area is always expanded when Zen Mode is explicitly requested
         setShowDescription(true);
         setIsEditingDescription(true);
+        // Also ensure the textarea resizes to content
+        setTimeout(() => {
+          if (descriptionRef.current) {
+            descriptionRef.current.style.height = 'auto';
+            descriptionRef.current.style.height = descriptionRef.current.scrollHeight + 'px';
+          }
+        }, 0);
       }
 
       if (inputRef.current) {
@@ -110,7 +121,35 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
         headerInputRef.current.focus();
       }
     }
-  }, [isEditing]);
+  }, [isEditing, isZenRequested]);
+
+  // Exit Zen Mode helper that saves changes then clears states
+  const exitZenMode = async () => {
+    if (editText.trim() === '') {
+      onDelete?.(task.id);
+    } else if (editText.trim() !== task.text) {
+      await onUpdate?.(task.id, editText);
+    }
+    if (editDescription !== (task.description || '')) {
+      onUpdateDescription?.(task.id, editDescription);
+    }
+    setIsEditing(false);
+    setIsEditingDescription(false);
+    setIsZenRequested(false);
+  };
+
+  // When in Zen Mode, allow Escape to exit
+  useEffect(() => {
+    if (!isZenMode) return;
+    const handler = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        exitZenMode();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isZenMode, editText, editDescription]);
 
   useEffect(() => {
     if (task.completed && !showCompleted) {
@@ -190,8 +229,13 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
       setIsEditing(false);
       onAddNext?.(currentId);
     } else if (e.key === 'Escape') {
-      setIsEditing(false);
-      setEditText(task.text);
+      // If in Zen Mode, Escape should exit Zen Mode instead
+      if (isZenMode) {
+        exitZenMode();
+      } else {
+        setIsEditing(false);
+        setEditText(task.text);
+      }
     } else if (e.key === 'Backspace' && editText === '') {
       e.preventDefault();
       onDelete?.(task.id);
@@ -206,17 +250,22 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
   };
 
   const handleDescriptionBlur = (e: React.FocusEvent) => {
+    if (enteringZen) return;
     // Check if focus is moving to the title input
     if (e.relatedTarget && (e.relatedTarget === inputRef.current || e.relatedTarget === headerInputRef.current)) {
       return;
     }
 
-    // Check if focus is moving to Zen Mode controls
-    if (e.relatedTarget instanceof Element && e.relatedTarget.closest('.zen-controls')) {
-      return;
+    // If focus is moving to any element inside the Zen Mode controls or inside the current task element,
+    // do not treat it as a blur that should close editing while in Zen Mode. This prevents clicks below
+    // the description (e.g., toolbar controls) from closing the modal.
+    if (e.relatedTarget instanceof Element) {
+      if (e.relatedTarget.closest('.zen-controls')) return;
+      // If clicking somewhere inside the current task's node (which includes the expanded description), keep editing
+      if (e.relatedTarget.closest('.task-item')) return;
     }
 
-    // In Zen Mode, don't auto-close on blur
+    // In Zen Mode, don't auto-close on blur. Only explicit Exit (top X) or Escape should close.
     if (isZenMode) {
       return;
     }
@@ -254,18 +303,19 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
   };
 
   const handleBlur = (e: React.FocusEvent) => {
+    if (enteringZen) return;
     // Check if focus is moving to the description input
     if (e.relatedTarget && e.relatedTarget === descriptionRef.current) {
       return;
     }
 
-    // Check if focus is moving to Zen Mode controls (which are in a portal)
-    if (e.relatedTarget instanceof Element && e.relatedTarget.closest('.zen-controls')) {
-      return;
+    // If focus is moving to any element inside the Zen Mode controls or staying within the task-item, ignore.
+    if (e.relatedTarget instanceof Element) {
+      if (e.relatedTarget.closest('.zen-controls')) return;
+      if (e.relatedTarget.closest('.task-item')) return;
     }
 
-    // In Zen Mode, don't auto-close on blur unless explicitly requested (e.g. via Escape or Close button)
-    // We rely on the "Exit" button or Escape key to close Zen Mode
+    // In Zen Mode, don't auto-close on blur. Only explicit Exit (top X) or Escape should close.
     if (isZenMode) {
       return;
     }
@@ -385,7 +435,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
           />
         ) : (
           <h2 
-            onClick={() => setIsEditing(true)}
+            onMouseDown={(e) => { e.preventDefault(); setIsZenRequested(false); setIsEditing(true); }}
             className={`font-bold text-base-content flex-1 cursor-text ${getHeaderFontSizeClass()}`}
           >
             {getDisplayText(task.text)}
@@ -451,6 +501,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
         ${isAnimating ? 'opacity-0 -translate-y-4 max-h-0 overflow-hidden py-0 border-none' : 'opacity-100 max-h-[2000px]'}
         ${isDragging ? 'opacity-50 bg-base-200' : ''}
         ${(isEditing || isEditingDescription) ? 'is-editing' : ''}
+        ${isZenMode ? 'zen-mode' : ''}
       `}
     >
       <DropIndicator />
@@ -508,9 +559,9 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
             </div>
           ) : (
             <div 
-              onClick={() => setIsEditing(true)}
-              className={`flex-1 break-words cursor-text prose prose-sm max-w-none min-h-[1.5em] ${task.completed ? 'line-through text-base-content/30' : 'text-base-content'} ${compact ? 'leading-snug' : ''} ${getFontSizeClass()}`}
-            >
+                  onMouseDown={(e) => { e.preventDefault(); setIsZenRequested(false); setIsEditing(true); }}
+                  className={`flex-1 break-words cursor-text prose prose-sm max-w-none min-h-[1.5em] ${task.completed ? 'line-through text-base-content/30' : 'text-base-content'} ${compact ? 'leading-snug' : ''} ${getFontSizeClass()}`}
+                >
               <ReactMarkdown 
                 remarkPlugins={[remarkGfm, remarkBreaks]} 
                 components={{ 
@@ -543,16 +594,28 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
             </div>
           )}
           
-          {/* Plugin Extensions */}
-          <div className="flex gap-2 empty:hidden">
-            {pluginRegistry.getPlugins().map(plugin => {
-              if (!plugin.enabled || !plugin.instance.onTaskRender) return null;
-              return (
-                <div key={plugin.name}>
-                  {plugin.instance.onTaskRender(task, { isEditing })}
-                </div>
-              );
-            })}
+          {/* Plugin Extensions (rendered further down with exit handler) */}
+
+          {/* Enter Zen Button (hover visible) */}
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onMouseDown={(e) => {
+                // Prevent the mouse down from blurring the current input
+                e.preventDefault();
+                // Set transient entering flag so blur handlers ignore the temporary focus changes
+                setEnteringZen(true);
+                // Request Zen and ensure editing is active
+                setIsZenRequested(true);
+                setIsEditing(true);
+                // Clear the transient flag shortly after to re-enable normal behavior
+                setTimeout(() => setEnteringZen(false), 200);
+              }}
+              onClick={(e) => { e.stopPropagation(); }}
+              title="Enter Zen Mode"
+              className="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-primary"
+            >
+              <Sparkles size={14} />
+            </button>
           </div>
 
           {/* Copy Button */}
@@ -565,9 +628,19 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
           </button>
 
           {/* Description Toggle */}
-          {(task.description || isEditingDescription) && (
-            <button 
-              onClick={() => setShowDescription(!showDescription)}
+          {(task.description || isEditingDescription) && !isZenMode && (
+          <button 
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => {
+                // Toggle description visibility but do NOT exit Zen Mode.
+                // Prevent click from blurring inputs when in Zen Mode.
+                e.stopPropagation();
+                setShowDescription(prev => !prev);
+                // If entering the description view while editing, keep description edit active
+                if (!showDescription && isEditing) {
+                  setIsEditingDescription(true);
+                }
+              }}
               className={`btn btn-ghost btn-xs btn-circle ${showDescription ? 'text-primary' : 'text-base-content/40'}`}
             >
               {showDescription ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -635,9 +708,9 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
               </div>
             ) : (
               <div 
-                onClick={() => setIsEditingDescription(true)}
+                onMouseDown={(e) => { e.preventDefault(); setIsZenRequested(false); setIsEditingDescription(true); }}
                 className="text-sm text-base-content/70 cursor-text border-l-2 border-base-300 pl-3 py-1 prose prose-sm max-w-none"
-              >
+                    >
                 <ReactMarkdown 
                   remarkPlugins={[remarkGfm, remarkBreaks]}
                   components={{
@@ -668,6 +741,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
             <div key={plugin.name}>
               {plugin.instance.onTaskRender(task, { 
                 isEditing,
+                isZenMode,
                 onExit: () => {
                   console.log('Exiting Zen Mode via callback');
                   // Explicit exit handler for Zen Mode

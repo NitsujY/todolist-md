@@ -1,7 +1,7 @@
 import type { Plugin, PluginAPI } from './pluginEngine';
 import type { Task } from '../lib/MarkdownParser';
 import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
+// Zen controls render inline inside the task-item; no portal needed.
 import { Timer, Play, Pause, RotateCcw, Type, CheckCircle2, X } from 'lucide-react';
 import { useTodoStore } from '../store/useTodoStore';
 
@@ -77,9 +77,9 @@ const ZenModeControls = ({ task, onExit }: { task: Task; onExit?: () => void }) 
 
   const remainingTime = targetTime - elapsed;
 
-  return createPortal(
-    <div className="zen-controls fixed top-2 left-0 flex items-center justify-center z-[10000] animate-[zen-fade-in_0.5s_ease_0.3s_both] pointer-events-none w-full">
-      <div className="bg-base-100/90 backdrop-blur-md shadow-xl border border-base-200 rounded-full px-6 py-2 flex items-center gap-6 pointer-events-auto">
+  return (
+    <div className="zen-controls w-full animate-[zen-fade-in_0.5s_ease_0.3s_both] pointer-events-auto flex justify-center mb-8">
+      <div className="zen-inner bg-base-100/80 backdrop-blur-md shadow-lg border border-base-200 rounded-full px-6 py-2 flex items-center gap-6">
         {/* Stats Section */}
         <div className="flex items-center gap-4 border-r border-base-content/10 pr-6">
           <div className="flex flex-col items-start">
@@ -160,10 +160,9 @@ const ZenModeControls = ({ task, onExit }: { task: Task; onExit?: () => void }) 
             Complete
           </button>
           
-          {/* Exit Button */}
+          {/* Exit Button: trigger full exit callback so task leaves Zen Mode */}
           <button 
             onMouseDown={(e) => {
-              // Prevent focus loss which might trigger blur logic (though we have protection now)
               e.preventDefault();
             }}
             onClick={(e) => {
@@ -171,6 +170,7 @@ const ZenModeControls = ({ task, onExit }: { task: Task; onExit?: () => void }) 
               e.stopPropagation();
               console.log('Exit button clicked');
               if (onExit) {
+                // Call onExit which TaskItem provides to fully save+exit
                 onExit();
               } else {
                 console.warn('onExit callback missing');
@@ -183,8 +183,7 @@ const ZenModeControls = ({ task, onExit }: { task: Task; onExit?: () => void }) 
           </button>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
   );
 };
 
@@ -210,8 +209,8 @@ export class FocusModePlugin implements Plugin {
     this.updateStyles();
   }
 
-  onTaskRender(task: Task, context?: { isEditing: boolean; onExit?: () => void }) {
-    if (!context?.isEditing) return null;
+  onTaskRender(task: Task, context?: { isEditing: boolean; isZenMode?: boolean; onExit?: () => void }) {
+    if (!context?.isEditing || !context?.isZenMode) return null;
     return <ZenModeControls task={task} onExit={context.onExit} />;
   }
 
@@ -251,7 +250,7 @@ export class FocusModePlugin implements Plugin {
       }
 
       /* Zen Mode (Editing) */
-      body.focus-mode-active .task-item.is-editing {
+      body.focus-mode-active .task-item.is-editing.zen-mode {
         position: fixed !important;
         top: 5vh !important;
         left: 50% !important;
@@ -268,7 +267,7 @@ export class FocusModePlugin implements Plugin {
           0 25px 50px -12px rgb(0 0 0 / 0.25) !important;
         border: none !important;
         border-radius: 1.5rem !important;
-        padding: 4rem !important;
+        padding: 8rem 4rem 4rem 4rem !important;
         
         overflow-y: auto !important;
         display: flex !important;
@@ -279,7 +278,7 @@ export class FocusModePlugin implements Plugin {
       }
 
       /* Backdrop for Zen Mode */
-      body.focus-mode-active:has(.task-item.is-editing)::before {
+      body.focus-mode-active:has(.task-item.is-editing.zen-mode)::before {
         content: '';
         position: fixed;
         inset: 0;
@@ -290,25 +289,25 @@ export class FocusModePlugin implements Plugin {
       }
 
       /* Prevent body scroll in Zen Mode */
-      body.focus-mode-active:has(.task-item.is-editing) {
+      body.focus-mode-active:has(.task-item.is-editing.zen-mode) {
         overflow: hidden !important;
       }
 
       /* Hide other items completely when one is editing */
-      body.focus-mode-active:has(.task-item.is-editing) .task-item:not(.is-editing) {
+      body.focus-mode-active:has(.task-item.is-editing.zen-mode) .task-item:not(.is-editing.zen-mode) {
         opacity: 0;
         pointer-events: none;
         transition: opacity 0.2s ease;
       }
 
       /* Hide drag handle in Zen Mode */
-      body.focus-mode-active .task-item.is-editing .cursor-grab {
+      body.focus-mode-active .task-item.is-editing.zen-mode .cursor-grab {
         display: none;
       }
 
       /* Text Zoom and Layout Adjustments */
-      body.focus-mode-active .task-item.is-editing textarea,
-      body.focus-mode-active .task-item.is-editing input[type="text"] {
+      body.focus-mode-active .task-item.is-editing.zen-mode textarea,
+      body.focus-mode-active .task-item.is-editing.zen-mode input[type="text"] {
         font-size: 1.75rem !important;
         line-height: 2.5rem !important;
         padding: 1rem 0 !important;
@@ -316,37 +315,47 @@ export class FocusModePlugin implements Plugin {
         letter-spacing: -0.02em !important;
       }
 
-      body.focus-mode-active .task-item.is-editing .prose {
+      body.focus-mode-active .task-item.is-editing.zen-mode .prose {
         font-size: 1.25rem !important;
       }
 
       /* Ensure description area expands but stays compact to text */
-      body.focus-mode-active .task-item.is-editing textarea[placeholder="Add a description..."] {
-        min-height: auto !important;
+      body.focus-mode-active .task-item.is-editing.zen-mode textarea[placeholder="Add a description..."] {
+        min-height: 150px !important;
+        width: 100% !important;
         font-size: 1.25rem !important;
         line-height: 2rem !important;
         background-color: transparent !important;
         margin-top: 1rem !important;
-        padding-bottom: 2rem !important;
+        padding-bottom: 4rem !important;
       }
       
       /* Adjust checkbox size in Zen Mode - make it cleaner */
-      body.focus-mode-active .task-item.is-editing button[class*="rounded-full"] {
+      body.focus-mode-active .task-item.is-editing.zen-mode button[class*="rounded-full"] {
         display: none !important;
       }
       
       /* Hide action buttons until hover in Zen Mode to reduce clutter */
-      body.focus-mode-active .task-item.is-editing .flex.gap-2.mt-2 {
+      body.focus-mode-active .task-item.is-editing.zen-mode .flex.gap-2.mt-2 {
         opacity: 0.4;
         transition: opacity 0.2s;
       }
-      body.focus-mode-active .task-item.is-editing .flex.gap-2.mt-2:hover {
+      body.focus-mode-active .task-item.is-editing.zen-mode .flex.gap-2.mt-2:hover {
         opacity: 1;
       }
 
-      /* Show Zen Controls only when editing */
-      body.focus-mode-active .zen-controls {
-        animation: zen-fade-in 0.5s ease 0.3s both;
+      /* Show Zen Controls only when editing; make it a sticky header inside the modal */
+      body.focus-mode-active .task-item.is-editing.zen-mode .zen-controls {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        z-index: 10001;
+        display: flex !important;
+        justify-content: center !important;
+        padding-top: 2rem !important;
+        pointer-events: auto;
+        animation: zen-fade-in 0.5s ease 0.15s both;
       }
 
       @keyframes zen-fade-in {
