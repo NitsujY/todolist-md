@@ -89,6 +89,7 @@ Detailed feature specifications are maintained in the `specs/` directory.
         - **Constraint**: Must pause/skip refresh if the user is currently editing a task (input focused) to prevent data loss or UI disruption.
     - `SoundEffectsPlugin`: Plays sounds on task completion.
     - `GamifyPlugin`: (Experimental) XP and leveling system.
+    - `AIAssistantPlugin`: (Submodule) AI features including Voice Mode and Smart Tags. Source: `https://github.com/NitsujY/todolist-ai-assistant.git`.
 
 ## 5. Technical Constraints & Rules
 1.  **No Database**: Do not introduce a backend database. All state must be reconstructible from Markdown files.
