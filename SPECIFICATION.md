@@ -54,23 +54,13 @@ The app uses the `StorageProvider` interface to support multiple backends.
 
 ## 4. Feature Specifications
 
-### 4.1 Task Management
-- **Adding**:
-    - "Add First Task" button when list is empty.
-    - `Enter` key creates a new task below the current one.
-- **Editing**:
-    - Click text to edit.
-    - `Cmd+Enter` / `Ctrl+Enter` to add/edit description.
-    - `Escape` to cancel edit.
-    - `Backspace` on empty task deletes it.
-- **Reordering**:
-    - Drag and drop via handle.
-    - Supports reordering within the same level and nesting (drag right to nest).
-- **Completion**:
-    - Toggling a task triggers a "disappear" animation (if "Show Done" is off).
-    - Completed tasks are hidden after the animation completes.
+Detailed feature specifications are maintained in the `specs/` directory.
 
-### 4.2 Appearance & Settings
+- **[Task Management](specs/features/task-management.md)**: Core task creation, editing, and organization.
+- **[Focus Mode (Zen Mode)](specs/features/focus-mode.md)**: Distraction-free editing experience.
+- **[TaskItem UI](specs/ui/task-item.spec.md)**: Detailed UI states and interactions for the task component.
+
+### 4.1 Appearance & Settings
 - **Themes**: Light, Dark, Auto (system preference).
 - **Fonts**:
     - Options: System UI, Inter, Roboto Mono, Fira Code.
@@ -80,7 +70,7 @@ The app uses the `StorageProvider` interface to support multiple backends.
 - **Font Size**: Adjustable (Small, Normal, Large, XL).
     - **Constraint**: Checkboxes and drag handles must align vertically with the first line of text regardless of font size.
 
-### 4.3 Plugin System
+### 4.2 Plugin System
 - **Architecture**: Plugins are registered in `pluginEngine.ts`.
 - **Capabilities**:
     - `onTaskRender`: Render custom UI next to tasks.
@@ -93,15 +83,7 @@ The app uses the `StorageProvider` interface to support multiple backends.
     - `ThemePlugin`: Manages theme switching.
     - `FontPlugin`: Manages font switching.
     - `DueDatePlugin`: Highlights due dates.
-        - `FocusModePlugin`: Provides a "Zen Mode" experience. When enabled, editing a task can expand it to a fullscreen view with larger text, while dimming and disabling all other tasks to eliminate distractions.
-            - Entry: Zen Mode must be explicitly requested (UI or keyboard shortcut) and will not automatically claim the `Enter` key used for adding tasks.
-            - Description Auto-Expand: When entering Zen Mode for a task, the task's detailed description is always expanded and placed into edit mode so the user can immediately work on it.
-            - Exit Semantics: Zen Mode is persistent while editing; it will only exit when the user either:
-                - clicks the floating top-bar "Close" (X) button, or
-                - presses the `Escape` key.
-                Clicking elsewhere (including inside the expanded description area or controls) will not exit Zen Mode.
-            - Description Toggle: The description expand/collapse chevron toggles visibility but will not exit Zen Mode. Toggling the description while in Zen Mode preserves the editing state.
-            - Floating Toolbar: The current implementation displays a floating top-bar that contains timer/stats/exit controls. See README for UX notes and tradeoffs.
+    - `FocusModePlugin`: See [Focus Mode Spec](specs/features/focus-mode.md).
     - `AutoCleanupPlugin`: Archives completed tasks older than X days (configurable).
     - `AutoRefreshPlugin`: Periodically reloads the list (configurable interval).
         - **Constraint**: Must pause/skip refresh if the user is currently editing a task (input focused) to prevent data loss or UI disruption.
