@@ -48,7 +48,7 @@ A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (
     - **Themes**: Light, Dark, and System preference.
     - **Compact Mode**: For when you want to see more.
     - **Font Size**: Adjustable text size.
-- **Plugin System**: Extensible architecture (includes Due Date, Focus Mode, and Priority Highlighter plugins).
+- **Plugin System**: Extensible architecture (includes Due Date, Focus Mode, etc.) loaded via a manifest.
 - **Storage Options**:
     - **Local Storage**: Quick start, data stays in browser. Persists across reloads.
     - **File System**: Edit real files on your disk. Remembers your last folder/file and prompts to restore access on reload.
@@ -57,6 +57,8 @@ A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (
 ## Plugins
 
 The app features a robust plugin system. You can enable/disable them in Settings.
+
+Built-in plugins are registered via a manifest at `src/plugins/pluginManifest.ts`.
 
 - **Theme Manager**: Switch between Light, Dark, and Auto themes.
 - **Font Manager**: Choose your preferred font (System, Inter, Roboto Mono, Fira Code).

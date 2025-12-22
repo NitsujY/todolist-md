@@ -207,35 +207,9 @@ function App() {
     // Initialize theme state
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'auto';
     if (savedTheme) setCurrentTheme(savedTheme);
-    
-    // Register a demo plugin
-    pluginRegistry.register({
-      name: 'PriorityHighlighter',
-      onTaskRender: (task) => {
-        if (task.text.toLowerCase().includes('urgent')) {
-          return <span className="ml-2 text-xs bg-red-500 text-white px-1 rounded">URGENT</span>;
-        }
-        return null;
-      }
-    });
 
-    // Core plugins are now registered in main.tsx
-    
-    // Register Gamify Plugin (Conditional)
-    if (import.meta.env.VITE_ENABLE_GAMIFY !== 'false') {
-      // Use glob import to make it optional at build time
-      const modules = import.meta.glob('./plugins/gamify-plugin/GamifyPlugin.tsx');
-      for (const path in modules) {
-        modules[path]().then((mod: any) => {
-          if (mod.GamifyPlugin) {
-            pluginRegistry.register(new mod.GamifyPlugin(), false);
-            setPluginUpdate(prev => prev + 1);
-          }
-        });
-      }
-    }
-    
-    // Force re-render to show plugins
+    // Plugins are registered in src/main.tsx via the manifest.
+    // Trigger a re-render so Settings reflects current plugin list.
     setPluginUpdate(prev => prev + 1);
   }, [loadTodos, restoreSession]);
 
