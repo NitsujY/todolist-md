@@ -791,7 +791,7 @@ function App() {
       {/* Settings Modal */}
       {showSettings && (
         <dialog className="modal modal-open">
-          <div className="modal-box max-w-md">
+          <div className="modal-box w-full max-w-none h-full rounded-none overflow-y-auto">
             <form method="dialog">
               <button onClick={() => setShowSettings(false)} className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
             </form>

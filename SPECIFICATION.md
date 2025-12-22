@@ -94,6 +94,19 @@ Detailed feature specifications are maintained in the `specs/` directory.
     - `GamifyPlugin`: (Experimental) XP and leveling system.
     - `AIAssistantPlugin`: (Submodule) AI features including Voice Mode and Smart Tags. Source: `https://github.com/NitsujY/todolist-ai-assistant.git`.
 
+#### 4.2.1 AI Assistant Providers (BYOK)
+
+The AI Assistant supports:
+
+- **OpenAI** (direct from browser)
+- **Azure OpenAI** (direct from browser; requires endpoint + deployment + api-version)
+- **Private Endpoint (Managed)** (recommended when API keys must remain secret)
+
+**Config storage**:
+
+- UI settings are stored in `localStorage` under `ai-plugin-config`.
+- The app may also read Vite env vars (public at build-time) prefixed with `VITE_`.
+
 ## 5. Technical Constraints & Rules
 1.  **No Database**: Do not introduce a backend database. All state must be reconstructible from Markdown files.
 2.  **Vite Config**: The `__APP_VERSION__` global is defined in `vite.config.ts` from `package.json`.
