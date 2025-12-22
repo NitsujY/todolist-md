@@ -1,8 +1,8 @@
-import type { Plugin, PluginAPI } from './pluginEngine';
+import type { Plugin, PluginAPI, TaskItemContext } from './pluginEngine';
 import type { Task } from '../lib/MarkdownParser';
 import { useState, useEffect, useRef } from 'react';
 // Zen controls render inline inside the task-item; no portal needed.
-import { Timer, Play, Pause, RotateCcw, Type, CheckCircle2, X } from 'lucide-react';
+import { Timer, Play, Pause, RotateCcw, Type, CheckCircle2, X, Sparkles } from 'lucide-react';
 import { useTodoStore } from '../store/useTodoStore';
 
 const ZenModeControls = ({ task, onExit }: { task: Task; onExit?: () => void }) => {
@@ -192,6 +192,7 @@ export class FocusModePlugin implements Plugin {
   defaultEnabled = false;
   public isActive = false;
   private styleElement: HTMLStyleElement | null = null;
+  private readonly modeId = 'FocusMode:Zen';
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onInit(_api: PluginAPI) {
@@ -212,6 +213,70 @@ export class FocusModePlugin implements Plugin {
   onTaskRender(task: Task, context?: { isEditing: boolean; isZenMode?: boolean; onExit?: () => void }) {
     if (!context?.isEditing || !context?.isZenMode) return null;
     return <ZenModeControls task={task} onExit={context.onExit} />;
+  }
+
+  renderTaskActionButton(task: Task, context: TaskItemContext) {
+    if (!this.isActive) return null;
+    if (task.type === 'header') return null;
+
+    return (
+      <button
+        onMouseDown={(e) => {
+          e.preventDefault();
+          context.controls.guardAutoClose(200);
+          context.modes.setModeEnabled(this.modeId, true);
+          context.controls.requestEdit();
+          context.controls.requestEditDescription();
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        title="Enter Zen Mode"
+        className="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-primary"
+      >
+        <Sparkles size={14} />
+      </button>
+    );
+  }
+
+  renderDescriptionToolbar(_task: Task, context: TaskItemContext) {
+    const inZen = this.isActive && context.modes.isModeEnabled(this.modeId) && context.isEditingDescription;
+    if (!inZen) return null;
+
+    return (
+      <div className="join">
+        <button
+          className={`join-item btn btn-xs ${context.descriptionView.view === 'write' ? 'btn-active' : ''}`}
+          onClick={() => context.descriptionView.setView('write')}
+        >
+          Write
+        </button>
+        <button
+          className={`join-item btn btn-xs ${context.descriptionView.view === 'preview' ? 'btn-active' : ''}`}
+          onClick={() => context.descriptionView.setView('preview')}
+        >
+          Preview
+        </button>
+      </div>
+    );
+  }
+
+  getTaskItemClassNames(task: Task, context: TaskItemContext) {
+    if (!this.isActive) return [];
+    if (task.type === 'header') return [];
+    if (!context.isEditing && !context.isEditingDescription) return [];
+    if (!context.modes.isModeEnabled(this.modeId)) return [];
+    return ['zen-mode'];
+  }
+
+  shouldPreventTaskEditAutoClose(task: Task, context: TaskItemContext) {
+    if (!this.isActive) return false;
+    if (task.type === 'header') return false;
+    return context.modes.isModeEnabled(this.modeId);
+  }
+
+  shouldHideDescriptionToggle(task: Task, context: TaskItemContext) {
+    return this.shouldPreventTaskEditAutoClose(task, context);
   }
 
   private updateStyles() {

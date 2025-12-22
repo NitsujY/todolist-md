@@ -71,7 +71,7 @@ Detailed feature specifications are maintained in the `specs/` directory.
     - **Constraint**: Checkboxes and drag handles must align vertically with the first line of text regardless of font size.
 
 ### 4.2 Plugin System
-- **Architecture**: Plugins are registered in `pluginEngine.ts`.
+- **Architecture**: Plugins are registered via a manifest in `src/plugins/pluginManifest.ts` and executed through `pluginEngine.ts`.
 - **Capabilities**:
     - `onTaskRender`: Render custom UI next to tasks.
     - `transformMarkdown`: Modify markdown before parsing (hooks).
