@@ -597,26 +597,28 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
           {/* Plugin Extensions (rendered further down with exit handler) */}
 
           {/* Enter Zen Button (hover visible) */}
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              onMouseDown={(e) => {
-                // Prevent the mouse down from blurring the current input
-                e.preventDefault();
-                // Set transient entering flag so blur handlers ignore the temporary focus changes
-                setEnteringZen(true);
-                // Request Zen and ensure editing is active
-                setIsZenRequested(true);
-                setIsEditing(true);
-                // Clear the transient flag shortly after to re-enable normal behavior
-                setTimeout(() => setEnteringZen(false), 200);
-              }}
-              onClick={(e) => { e.stopPropagation(); }}
-              title="Enter Zen Mode"
-              className="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-primary"
-            >
-              <Sparkles size={14} />
-            </button>
-          </div>
+          {focusPluginMeta?.enabled && (
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                onMouseDown={(e) => {
+                  // Prevent the mouse down from blurring the current input
+                  e.preventDefault();
+                  // Set transient entering flag so blur handlers ignore the temporary focus changes
+                  setEnteringZen(true);
+                  // Request Zen and ensure editing is active
+                  setIsZenRequested(true);
+                  setIsEditing(true);
+                  // Clear the transient flag shortly after to re-enable normal behavior
+                  setTimeout(() => setEnteringZen(false), 200);
+                }}
+                onClick={(e) => { e.stopPropagation(); }}
+                title="Enter Zen Mode"
+                className="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-primary"
+              >
+                <Sparkles size={14} />
+              </button>
+            </div>
+          )}
 
           {/* Copy Button */}
           <button 
