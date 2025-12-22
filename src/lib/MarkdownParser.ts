@@ -14,6 +14,20 @@ export interface Task {
   depth: number;
 }
 
+const stripAIVoiceHiddenSections = (markdown: string) => {
+  // Hide AI voice capture blocks from the task/list view.
+  // This keeps raw capture text inside the document without affecting task parsing.
+  return markdown
+    .replace(
+      /<!--\s*AI_VOICE_CAPTURE:START\s*-->[\s\S]*?<!--\s*AI_VOICE_CAPTURE:END\s*-->/g,
+      ''
+    )
+    .replace(
+      /<!--\s*AI_VOICE_SUMMARY:START\s*-->[\s\S]*?<!--\s*AI_VOICE_SUMMARY:END\s*-->/g,
+      ''
+    );
+};
+
 const createProcessor = () => unified()
   .use(remarkParse)
   .use(remarkGfm)
@@ -75,7 +89,7 @@ const parseInline = (text: string): any[] => {
 
 export const parseTasks = (markdown: string): Task[] => {
   const processor = createProcessor();
-  const tree = processor.parse(markdown) as Root;
+  const tree = processor.parse(stripAIVoiceHiddenSections(markdown)) as Root;
   const tasks: Task[] = [];
 
   // Simple traversal to find task list items

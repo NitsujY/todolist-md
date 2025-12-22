@@ -60,13 +60,26 @@ The plugin settings allow users to choose their "Intelligence Source":
 
 ### 4.1 Voice Mode (Priority Feature)
 A "Hands-Free" experience triggered by a button or command.
-- **UI**: Replaces the standard list view with a simplified, high-contrast "Conversational UI".
+- **UI**: Uses a Siri-style floating sheet centered in the list view (does not cover the whole screen).
 - **Interaction**:
     - **Input**: Uses Web Speech API (free) or Whisper (via endpoint) for Speech-to-Text.
     - **Output**: Uses Web Speech API for Text-to-Speech responses.
 - **Commands**: "Add task...", "Read my tasks", "What's due today?".
 - **Visuals**: Audio visualizer or simple "Listening/Thinking/Speaking" state indicators.
 - **Real-time Transcript**: While listening, display interim/final transcript so the user can see what will be written into notes.
+
+#### 4.1.1 Voice Capture Into Document (Hidden Section)
+- While Voice Mode is active, the app appends final transcripts into a hidden capture section inside the current markdown document.
+- The capture section is hidden from the normal task/list view.
+- Format:
+    - Start marker: `<!-- AI_VOICE_CAPTURE:START -->`
+    - End marker: `<!-- AI_VOICE_CAPTURE:END -->`
+    - Session marker line: `[VOICE_SESSION <ISO_TIMESTAMP>]`
+    - Transcript line format: `[<ISO_TIMESTAMP>] <text>`
+
+#### 4.1.2 Stop → Summarize
+- When the user stops Voice Mode, the app summarizes the latest session capture into a hidden summary block (not rendered in list view by default):
+    - Body is managed between `<!-- AI_VOICE_SUMMARY:START -->` and `<!-- AI_VOICE_SUMMARY:END -->`
 
 ### 4.2 Smart Tagger (Background)
 - Analyzes new tasks and suggests or automatically applies tags (e.g., "Buy milk" -> `#personal`, "Fix bug" -> `#work`).
@@ -79,6 +92,13 @@ A "Hands-Free" experience triggered by a button or command.
 #### 4.3.1 Prompt Contract (MVP)
 - Input: Current task text + optional task list context.
 - Output: Plain text lines, one subtask per line (no numbering, no extra prose).
+
+#### 4.3.2 UX Workflow (Concrete)
+1. User clicks the Magic Wand button on a task.
+2. A small modal opens showing the target task and a **Generate** button.
+3. After generation, the modal shows a checklist preview of subtasks.
+4. User selects which subtasks to apply.
+5. User clicks **Apply** to insert selected subtasks directly after the task.
 
 ## 5. Technical Constraints
 - **Privacy**: If using BYOK, keys must be stored in `localStorage` and never sent to the private endpoint.
