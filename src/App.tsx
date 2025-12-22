@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useStore } from 'zustand';
 import { useTodoStore } from './store/useTodoStore';
 import { pluginRegistry } from './plugins/pluginEngine';
@@ -113,6 +113,8 @@ function App() {
     const saved = localStorage.getItem('sidebar-collapsed');
     return saved ? JSON.parse(saved) : true;
   });
+  const [peekSidebar, setPeekSidebar] = useState(false);
+  const peekCloseTimerRef = useRef<number | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(256);
   const [isResizing, setIsResizing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -136,6 +138,38 @@ function App() {
   useEffect(() => {
     localStorage.setItem('sidebar-collapsed', JSON.stringify(showSidebar));
   }, [showSidebar]);
+
+  useEffect(() => {
+    if (showSidebar) setPeekSidebar(false);
+  }, [showSidebar]);
+
+  useEffect(() => {
+    return () => {
+      if (peekCloseTimerRef.current) window.clearTimeout(peekCloseTimerRef.current);
+    };
+  }, []);
+
+  const cancelPeekClose = () => {
+    if (peekCloseTimerRef.current) {
+      window.clearTimeout(peekCloseTimerRef.current);
+      peekCloseTimerRef.current = null;
+    }
+  };
+
+  const openPeekSidebar = () => {
+    if (!isFolderMode) return;
+    if (showSidebar) return;
+    cancelPeekClose();
+    setPeekSidebar(true);
+  };
+
+  const schedulePeekClose = () => {
+    cancelPeekClose();
+    peekCloseTimerRef.current = window.setTimeout(() => {
+      setPeekSidebar(false);
+      peekCloseTimerRef.current = null;
+    }, 150);
+  };
 
   const startResizing = useCallback(() => {
     setIsResizing(true);
@@ -207,35 +241,9 @@ function App() {
     // Initialize theme state
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'auto';
     if (savedTheme) setCurrentTheme(savedTheme);
-    
-    // Register a demo plugin
-    pluginRegistry.register({
-      name: 'PriorityHighlighter',
-      onTaskRender: (task) => {
-        if (task.text.toLowerCase().includes('urgent')) {
-          return <span className="ml-2 text-xs bg-red-500 text-white px-1 rounded">URGENT</span>;
-        }
-        return null;
-      }
-    });
 
-    // Core plugins are now registered in main.tsx
-    
-    // Register Gamify Plugin (Conditional)
-    if (import.meta.env.VITE_ENABLE_GAMIFY !== 'false') {
-      // Use glob import to make it optional at build time
-      const modules = import.meta.glob('./plugins/gamify-plugin/GamifyPlugin.tsx');
-      for (const path in modules) {
-        modules[path]().then((mod: any) => {
-          if (mod.GamifyPlugin) {
-            pluginRegistry.register(new mod.GamifyPlugin(), false);
-            setPluginUpdate(prev => prev + 1);
-          }
-        });
-      }
-    }
-    
-    // Force re-render to show plugins
+    // Plugins are registered in src/main.tsx via the manifest.
+    // Trigger a re-render so Settings reflects current plugin list.
     setPluginUpdate(prev => prev + 1);
   }, [loadTodos, restoreSession]);
 
@@ -389,6 +397,86 @@ function App() {
   // Calculate unique tags
   const allTags = Array.from(new Set(tasks.flatMap(t => t.tags || []))).sort();
 
+  const renderSidebarContent = (opts: { floating: boolean; onSelectFile: (f: string) => void }) => (
+    <>
+      {!opts.floating && (
+        <div
+          className="absolute right-0 top-0 w-1 h-full cursor-col-resize hover:bg-primary/50 active:bg-primary z-50 transition-colors"
+          onMouseDown={startResizing}
+        />
+      )}
+
+      {/* Plugin Dashboards */}
+      {pluginRegistry.getDashboards().length > 0 && (
+        <div className="p-4 pb-0 space-y-4">
+          {pluginRegistry.getDashboards().map((dashboard, i) => (
+            <div key={i}>{dashboard}</div>
+          ))}
+        </div>
+      )}
+
+      <div className="p-4 font-bold text-sm text-base-content/50 uppercase tracking-wider flex justify-between items-center">
+        <span>Files</span>
+        <div className="flex gap-1">
+          <button onClick={handleCreateFile} className="btn btn-ghost btn-xs btn-square" title="New File">
+            <Plus size={14} />
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleFileDragEnd} onDragStart={handleFileDragStart}>
+          <SortableContext items={fileList} strategy={verticalListSortingStrategy}>
+            {fileList.map(file => (
+              <SortableFileItem
+                key={file}
+                file={file}
+                currentFile={currentFile}
+                onSelect={opts.onSelectFile}
+                onRename={handleRenameFile}
+              />
+            ))}
+          </SortableContext>
+          <DragOverlay>
+            {activeFileId ? (
+              <div className="flex items-center gap-1 pr-2 rounded-lg bg-base-200 p-2 opacity-80 shadow-md border border-base-300">
+                <File size={14} />
+                <span className="truncate">{activeFileId}</span>
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+        {fileList.length === 0 && <div className="text-center p-4 text-base-content/40 text-sm">No markdown files found</div>}
+      </div>
+
+      {/* Tags Section */}
+      {allTags.length > 0 && (
+        <>
+          <div className="p-4 pt-2 font-bold text-sm text-base-content/50 uppercase tracking-wider flex justify-between items-center border-t border-base-200 mt-2">
+            <span>Tags</span>
+            {activeTag && (
+              <button onClick={() => setActiveTag(null)} className="btn btn-ghost btn-xs text-xs font-normal normal-case opacity-50 hover:opacity-100">
+                Clear
+              </button>
+            )}
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-1 min-h-[100px]">
+            {allTags.map(tag => (
+              <button
+                key={tag}
+                onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${activeTag === tag ? 'bg-primary/10 text-primary font-medium' : 'text-base-content/70 hover:bg-base-200'}`}
+              >
+                <Tag size={14} />
+                <span className="truncate">#{tag}</span>
+                <span className="ml-auto text-xs opacity-50">{tasks.filter(t => t.tags?.includes(tag)).length}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  );
+
   return (
     <div className="flex flex-col h-screen bg-base-200 font-sans overflow-hidden">
       
@@ -411,7 +499,12 @@ function App() {
       <div className="navbar bg-base-100 shadow-sm z-50 px-4 border-b border-base-300 h-14 min-h-0">
         <div className="flex-none">
           {isFolderMode && (
-            <button onClick={() => setShowSidebar(!showSidebar)} className="btn btn-ghost btn-square btn-sm mr-2">
+            <button
+              onClick={() => setShowSidebar(!showSidebar)}
+              onMouseEnter={openPeekSidebar}
+              onMouseLeave={schedulePeekClose}
+              className="btn btn-ghost btn-square btn-sm mr-2"
+            >
               <Menu size={20} />
             </button>
           )}
@@ -452,95 +545,31 @@ function App() {
             style={{ width: sidebarWidth }}
             className="bg-base-100 border-r border-base-300 flex flex-col overflow-hidden relative group/sidebar flex-shrink-0"
           >
-            {/* Resizer Handle */}
-            <div
-              className="absolute right-0 top-0 w-1 h-full cursor-col-resize hover:bg-primary/50 active:bg-primary z-50 transition-colors"
-              onMouseDown={startResizing}
-            />
-
-            {/* Plugin Dashboards */}
-            {pluginRegistry.getDashboards().length > 0 && (
-              <div className="p-4 pb-0 space-y-4">
-                {pluginRegistry.getDashboards().map((dashboard, i) => (
-                  <div key={i}>{dashboard}</div>
-                ))}
-              </div>
-            )}
-
-            <div className="p-4 font-bold text-sm text-base-content/50 uppercase tracking-wider flex justify-between items-center">
-              <span>Files</span>
-              <div className="flex gap-1">
-                <button onClick={handleCreateFile} className="btn btn-ghost btn-xs btn-square" title="New File">
-                  <Plus size={14} />
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-              <DndContext 
-                sensors={sensors} 
-                collisionDetection={closestCenter} 
-                onDragEnd={handleFileDragEnd}
-                onDragStart={handleFileDragStart}
-              >
-                <SortableContext items={fileList} strategy={verticalListSortingStrategy}>
-                  {fileList.map(file => (
-                    <SortableFileItem 
-                      key={file} 
-                      file={file} 
-                      currentFile={currentFile} 
-                      onSelect={selectFile} 
-                      onRename={handleRenameFile} 
-                    />
-                  ))}
-                </SortableContext>
-                <DragOverlay>
-                  {activeFileId ? (
-                    <div className="flex items-center gap-1 pr-2 rounded-lg bg-base-200 p-2 opacity-80 shadow-md border border-base-300">
-                      <File size={14} />
-                      <span className="truncate">{activeFileId}</span>
-                    </div>
-                  ) : null}
-                </DragOverlay>
-              </DndContext>
-              {fileList.length === 0 && (
-                <div className="text-center p-4 text-base-content/40 text-sm">No markdown files found</div>
-              )}
-            </div>
-
-            {/* Tags Section */}
-            {allTags.length > 0 && (
-              <>
-                <div className="p-4 pt-2 font-bold text-sm text-base-content/50 uppercase tracking-wider flex justify-between items-center border-t border-base-200 mt-2">
-                  <span>Tags</span>
-                  {activeTag && (
-                    <button onClick={() => setActiveTag(null)} className="btn btn-ghost btn-xs text-xs font-normal normal-case opacity-50 hover:opacity-100">
-                      Clear
-                    </button>
-                  )}
-                </div>
-                <div className="flex-1 overflow-y-auto p-2 space-y-1 min-h-[100px]">
-                  {allTags.map(tag => (
-                    <button
-                      key={tag}
-                      onClick={() => setActiveTag(activeTag === tag ? null : tag)}
-                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${activeTag === tag ? 'bg-primary/10 text-primary font-medium' : 'text-base-content/70 hover:bg-base-200'}`}
-                    >
-                      <Tag size={14} />
-                      <span className="truncate">#{tag}</span>
-                      <span className="ml-auto text-xs opacity-50">
-                        {tasks.filter(t => t.tags?.includes(tag)).length}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+            {renderSidebarContent({ floating: false, onSelectFile: selectFile })}
           </aside>
+        )}
+
+        {/* Hover-peek Sidebar */}
+        {isFolderMode && !showSidebar && peekSidebar && (
+          <div className="fixed top-14 left-0 z-40" onMouseEnter={cancelPeekClose} onMouseLeave={schedulePeekClose}>
+            <aside
+              style={{ width: sidebarWidth }}
+              className="bg-base-100 border-r border-base-300 flex flex-col overflow-hidden shadow-xl rounded-r-xl max-h-[calc(100vh-3.5rem)]"
+            >
+              {renderSidebarContent({
+                floating: true,
+                onSelectFile: (f: string) => {
+                  selectFile(f);
+                  setPeekSidebar(false);
+                },
+              })}
+            </aside>
+          </div>
         )}
 
         {/* Main Task View */}
         <main className={`flex-1 overflow-hidden w-full relative p-0 ${compactMode ? 'sm:p-2' : 'sm:p-4'} bg-base-200/50`}>
-          <div className="h-full max-w-5xl mx-auto flex flex-col bg-base-100 sm:rounded-xl sm:shadow-sm sm:border border-base-300 overflow-hidden">
+          <div id="todo-list-shell" className="h-full max-w-5xl mx-auto flex flex-col bg-base-100 sm:rounded-xl sm:shadow-sm sm:border border-base-300 overflow-hidden">
             
             {/* Header & Controls */}
             <div className={`flex justify-between items-center border-b border-base-200 bg-base-50/50 ${compactMode ? 'p-2 h-[56px]' : 'p-4 h-[72px]'}`}>
@@ -762,7 +791,7 @@ function App() {
       {/* Settings Modal */}
       {showSettings && (
         <dialog className="modal modal-open">
-          <div className="modal-box max-w-md">
+          <div className="modal-box w-full max-w-none h-full rounded-none overflow-y-auto">
             <form method="dialog">
               <button onClick={() => setShowSettings(false)} className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
             </form>

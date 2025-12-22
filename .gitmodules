@@ -1,3 +1,6 @@
 [submodule "src/plugins/gamify-plugin"]
 	path = src/plugins/gamify-plugin
 	url = https://github.com/NitsujY/todolist-gamify-plugin.git
+[submodule "src/plugins/ai-assistant"]
+	path = src/plugins/ai-assistant
+	url = https://github.com/NitsujY/todolist-ai-assistant.git
