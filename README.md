@@ -34,6 +34,61 @@ A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (
     npm run build
     ```
 
+## AI Assistant: OpenAI vs Azure OpenAI
+
+This app is a static SPA. Any API key you provide (in Settings or via Vite env vars) is used from the browser.
+
+- If you need to keep keys secret, use **Private Endpoint (Managed)** and proxy calls through a backend you control.
+
+### Option A: Configure in the UI (recommended for quick testing)
+
+1. Open the app.
+2. Open **AI Settings** (gear icon).
+3. In **Provider**, choose:
+    - **OpenAI** (standard OpenAI API), or
+    - **Azure OpenAI** (Microsoft Azure OpenAI).
+
+For **OpenAI**:
+- Enter your **API Key**
+- Optional: set **Model** (default: `gpt-4.1-mini`)
+
+For **Azure OpenAI**:
+- **Azure Endpoint**: `https://<resource>.openai.azure.com`
+- **API Version**: the Azure OpenAI API version you enabled (example: `2024-06-01`)
+- **Deployment**: your deployment name in Azure OpenAI Studio
+- **API Key**: your Azure OpenAI key
+
+### Option B: Configure via `.env.local` (Vite)
+
+Create `.env.local` in the project root:
+
+```bash
+# Standard OpenAI
+VITE_OPENAI_API_KEY=sk-...
+VITE_OPENAI_MODEL=gpt-4.1-mini
+
+# Azure OpenAI
+VITE_AZURE_OPENAI_ENDPOINT=https://<resource>.openai.azure.com
+VITE_AZURE_OPENAI_API_VERSION=2024-06-01
+VITE_AZURE_OPENAI_DEPLOYMENT=<your-deployment-name>
+VITE_AZURE_OPENAI_API_KEY=<your-azure-openai-key>
+```
+
+Restart the dev server after changes:
+
+```bash
+npm run dev
+```
+
+### Which model “works best”?
+
+It depends on your priorities (quality vs cost vs speed). For this app’s use cases (task breakdown, summarization, light assistant prompts):
+
+- **Best default (cost/perf)**: `gpt-4.1-mini` or `gpt-4o-mini`
+- **Best quality**: `gpt-4.1` or `gpt-4o`
+
+On **Azure OpenAI**, you don’t pass a model name in requests here — you select a **deployment**, and that deployment is tied to a model/version.
+
 ## Features
 
 - **Markdown-First**: Your data is just Markdown. Edit it as a list or as raw text.

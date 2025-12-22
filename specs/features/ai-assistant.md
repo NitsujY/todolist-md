@@ -13,9 +13,7 @@ src/plugins/ai-assistant/
 ├── AIAssistantPlugin.tsx       # Main entry point, manages state & settings
 ├── config.ts                   # LLM Provider configuration
 ├── services/
-│   ├── LLMService.ts           # Interface for LLM backends
-│   ├── OpenAIAdapter.ts        # Direct connection to OpenAI
-│   └── PrivateEndpointAdapter.ts # Connection to paid private service
+│   └── LLMService.ts           # Provider calls (OpenAI / Azure OpenAI / Private Endpoint)
 ├── features/
 │   ├── VoiceMode/              # Voice UI implementation
 │   ├── SmartTags/              # Auto-tagging logic
@@ -47,9 +45,17 @@ The plugin settings allow users to choose their "Intelligence Source":
     - Requires a `License Key` (for paid users).
     - Handles authentication and usage quotas.
 2.  **Bring Your Own Key (BYOK)**:
-    - Users can select OpenAI, Google Gemini, or Anthropic.
+    - Users can select OpenAI, Azure OpenAI, Google Gemini, or Anthropic.
     - Requires the user's personal API Key.
     - Direct client-to-provider communication (no middleman).
+
+### 3.2 Azure OpenAI (BYOK)
+
+Azure OpenAI requires 3 extra fields beyond an API key:
+
+- **Endpoint**: `https://<resource>.openai.azure.com`
+- **API Version**: e.g. `2024-06-01` (use the version enabled for your Azure resource)
+- **Deployment**: your deployment name (Azure uses deployments instead of passing model names directly)
 
 ### 3.1 Settings UX
 - The AI plugin exposes a small gear button inside the app's Plugin Settings list.
