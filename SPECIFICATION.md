@@ -38,6 +38,9 @@ The app uses the `StorageProvider` interface to support multiple backends.
 - **Modes**:
     - **Single File**: Opens and edits one `.md` file.
     - **Folder**: Opens a directory, listing all `.md` files.
+        - **Navigation Sidebar**: In Folder mode, the app provides a left sidebar listing files.
+            - Toggled via the burger (menu) button in the top navbar.
+            - When collapsed, hovering the burger button reveals a temporary floating sidebar for quick file navigation; it dismisses on mouse leave.
 - **Permissions**: Must request read/write permission on every session restore (browser security constraint).
 - **Renaming**: Handles case-insensitive file systems (e.g., macOS/Windows) by using a temporary file strategy when renaming files where only the case changes (e.g., `todo.md` -> `Todo.md`).
 
