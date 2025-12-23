@@ -151,6 +151,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
     }
     setIsEditing(false);
     setIsEditingDescription(false);
+    setShowDescription(false);
     setModes({});
   };
 
@@ -306,6 +307,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
     setIsEditingDescription(false);
     // Also close title edit if we are leaving the task completely
     setIsEditing(false);
+    setShowDescription(false);
   };
 
   const handleAddDueDate = () => {
@@ -358,6 +360,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
     setIsEditing(false);
     // Also close description edit if we are leaving
     setIsEditingDescription(false);
+    setShowDescription(false);
   };
 
   // Helper to clean text for display (remove plugin syntax like due:YYYY-MM-DD)
