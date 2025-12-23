@@ -97,7 +97,6 @@ On **Azure OpenAI**, you don’t pass a model name in requests here — you sele
 - **Drag & Drop**: Reorder tasks and subtasks intuitively. Moving a parent task moves all its children.
 - **Undo/Redo**: Mistakes are fine with full history support.
 - **Search**: Quickly find tasks across your list.
-- **Expand/Collapse Details**: One-click expand/collapse of all task descriptions from the top toolbar.
 - **Focus Mode**: Dim distractions and focus on one task at a time (via Plugin).
 - **Google Drive Integration**: Open and edit Markdown files directly from your Google Drive.
 - **Customizable UI**:
