@@ -87,6 +87,15 @@ A "Hands-Free" experience triggered by a button or command.
 - When the user stops Voice Mode, the app summarizes the latest session capture into a hidden summary block (not rendered in list view by default):
     - Body is managed between `<!-- AI_VOICE_SUMMARY:START -->` and `<!-- AI_VOICE_SUMMARY:END -->`
 
+#### 4.1.3 Brain Dump Mode (Context-Aware)
+Voice Mode supports an opinionated workflow optimized for short, fragmented recordings that turn into **clean tasks + mind-clearing summary**.
+
+- **Primary goal**: Extract actionable tasks while preserving context.
+- **Secondary goal**: Provide a small “clear your mind” summary and minimal clarifying questions.
+- **Context-aware**: Uses current markdown + recent captures + optional per-file knowledge base notes.
+
+**Spec**: See [Brain Dump](specs/features/brain-dump.md).
+
 ### 4.2 Smart Tagger (Background)
 - Analyzes new tasks and suggests or automatically applies tags (e.g., "Buy milk" -> `#personal`, "Fix bug" -> `#work`).
 - **Trigger**: On task creation (debounced).
