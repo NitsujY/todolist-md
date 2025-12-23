@@ -107,7 +107,7 @@ On **Azure OpenAI**, you don’t pass a model name in requests here — you sele
 - **Storage Options**:
     - **Local Storage**: Quick start, data stays in browser. Persists across reloads.
     - **File System**: Edit real files on your disk. Remembers your last folder/file and prompts to restore access on reload.
-    - **Google Drive**: Sync with your Google Drive (requires API setup). Automatically reconnects on reload.
+    - **Google Drive**: Sync with your Google Drive (requires API setup). Reuses your session across file switches and reconnects on reload (may prompt again if the token expires).
 
 ## Plugins
 

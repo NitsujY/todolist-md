@@ -47,7 +47,8 @@ The app uses the `StorageProvider` interface to support multiple backends.
 ### 3.3 Google Drive Adapter (`google`)
 - **Auth**: OAuth 2.0 with `https://www.googleapis.com/auth/drive`, `https://www.googleapis.com/auth/drive.install`, and `https://www.googleapis.com/auth/userinfo.email` scopes.
 - **Persistence**:
-    - Access Token is cached in `localStorage` with expiration handling.
+    - Access Token is cached in `localStorage` with expiration handling when available.
+    - If an expiration value is missing/invalid, the app will still restore the token and only prompt again when Google requests it (typically after a 401).
     - User Email is cached to provide `login_hint` for smoother re-authentication.
     - `google-drive-config` stores Client ID and API Key.
 - **File Listing Strategy**:

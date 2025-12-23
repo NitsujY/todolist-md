@@ -24,6 +24,13 @@ export class GoogleDriveAdapter implements StorageProvider {
 
   private driveApiLoaded = false;
 
+  private clearSavedAuth() {
+    this.accessToken = null;
+    this.tokenExpiration = 0;
+    localStorage.removeItem('google-drive-token');
+    localStorage.removeItem('google-drive-token-expires');
+  }
+
   constructor() {
     const savedConfigStr = localStorage.getItem('google-drive-config');
     let savedConfig: GoogleDriveConfig | null = null;
@@ -40,12 +47,26 @@ export class GoogleDriveAdapter implements StorageProvider {
     const savedExpiration = localStorage.getItem('google-drive-token-expires');
     this.userEmail = localStorage.getItem('google-drive-user-email');
 
-    if (savedToken && savedExpiration) {
-      const expiresAt = parseInt(savedExpiration, 10);
-      if (Date.now() < expiresAt) {
+    if (savedToken) {
+      // Some token responses may not include an expiration we can reliably persist.
+      // If expiration is missing/invalid, we still restore the token and rely on 401
+      // responses to trigger a refresh, which avoids unnecessary re-login prompts.
+      let expiresAt: number | null = null;
+      if (savedExpiration) {
+        const parsed = Number.parseInt(savedExpiration, 10);
+        if (Number.isFinite(parsed) && parsed > 0) {
+          expiresAt = parsed;
+        }
+      }
+
+      if (expiresAt && Date.now() < expiresAt) {
         this.accessToken = savedToken;
         this.tokenExpiration = expiresAt;
         console.log('Restored valid Google Drive token, expires in', Math.round((expiresAt - Date.now()) / 1000), 'seconds');
+      } else if (!expiresAt) {
+        this.accessToken = savedToken;
+        this.tokenExpiration = 0;
+        console.log('Restored Google Drive token without a valid expiration; will refresh on 401');
       } else {
         console.log('Stored Google Drive token is expired');
       }
@@ -203,11 +224,21 @@ export class GoogleDriveAdapter implements StorageProvider {
   private handleTokenResponse(resp: any) {
     this.accessToken = resp.access_token;
     // expires_in is in seconds. Subtract a buffer (e.g. 5 mins) to be safe.
-    const expiresIn = parseInt(resp.expires_in, 10);
-    this.tokenExpiration = Date.now() + (expiresIn - 300) * 1000;
-    
+    const expiresInRaw = resp?.expires_in;
+    const expiresIn = Number.isFinite(Number.parseInt(expiresInRaw, 10)) ? Number.parseInt(expiresInRaw, 10) : null;
+
+    if (expiresIn && expiresIn > 0) {
+      // Ensure we don't create a negative/instant-expiry token.
+      const bufferSeconds = Math.min(300, Math.max(0, Math.floor(expiresIn * 0.1)));
+      this.tokenExpiration = Date.now() + Math.max(0, expiresIn - bufferSeconds) * 1000;
+      localStorage.setItem('google-drive-token-expires', this.tokenExpiration.toString());
+    } else {
+      // Unknown expiration; persist token but let requests determine validity.
+      this.tokenExpiration = 0;
+      localStorage.removeItem('google-drive-token-expires');
+    }
+
     localStorage.setItem('google-drive-token', this.accessToken!);
-    localStorage.setItem('google-drive-token-expires', this.tokenExpiration.toString());
 
     // Fetch user info if we don't have it yet
     if (!this.userEmail) {
@@ -240,11 +271,23 @@ export class GoogleDriveAdapter implements StorageProvider {
     if (!this.isInitialized) {
       await this.init();
     }
-    if (!this.accessToken || Date.now() >= this.tokenExpiration) {
-      await this.signIn();
+
+    // If we have a token but no reliable expiration, optimistically use it.
+    // If it's actually invalid/expired, downstream calls will 401 and trigger refresh.
+    if (this.accessToken) {
+      if (window.gapi && window.gapi.client) {
+        window.gapi.client.setToken({ access_token: this.accessToken });
+      }
+      if (!Number.isFinite(this.tokenExpiration) || this.tokenExpiration <= 0) {
+        return;
+      }
+      if (Date.now() < this.tokenExpiration) {
+        return;
+      }
     }
 
-    // Ensure gapi client has the token for requests
+    await this.signIn();
+
     if (this.accessToken && window.gapi && window.gapi.client) {
       window.gapi.client.setToken({ access_token: this.accessToken });
     }
@@ -310,7 +353,7 @@ export class GoogleDriveAdapter implements StorageProvider {
       console.error('Error listing files', e);
       // If token expired
       if ((e as any).status === 401) {
-        this.accessToken = null;
+        this.clearSavedAuth();
         await this.signIn();
         return this.list(path);
       }
@@ -358,7 +401,7 @@ export class GoogleDriveAdapter implements StorageProvider {
       console.error('Error reading file', e);
       if ((e as any).status === 401) {
         console.log('Token expired during read, refreshing...');
-        this.accessToken = null;
+        this.clearSavedAuth();
         await this.signIn();
         return this.read(path);
       }
@@ -458,7 +501,7 @@ export class GoogleDriveAdapter implements StorageProvider {
       console.error('Error writing file', e);
       if ((e as any).status === 401) {
         console.log('Token expired during write, refreshing...');
-        this.accessToken = null;
+        this.clearSavedAuth();
         await this.signIn();
         return this.write(path, content);
       }
