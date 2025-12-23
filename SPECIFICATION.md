@@ -63,6 +63,12 @@ Detailed feature specifications are maintained in the `specs/` directory.
 - **[Focus Mode (Zen Mode)](specs/features/focus-mode.md)**: Distraction-free editing experience.
 - **[TaskItem UI](specs/ui/task-item.spec.md)**: Detailed UI states and interactions for the task component.
 
+### 4.0 Global Details Toggle
+- The top toolbar provides a single **Expand details / Collapse details** control.
+- **Expand details** opens the description/details panels for all tasks that currently have a description.
+- **Collapse details** closes all opened description/details panels.
+- Users can still expand/collapse an individual task after the global action.
+
 ### 4.1 Appearance & Settings
 - **Themes**: Light, Dark, Auto (system preference).
 - **Fonts**:
