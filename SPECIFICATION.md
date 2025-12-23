@@ -122,6 +122,18 @@ The AI Assistant supports:
     - Google Drive API failures should alert the user or log to console, not crash the app.
     - File System permission denials should be handled gracefully (show "Grant Permission" UI).
 
+## 7. Performance & Concurrency
+
+### 7.1 Fast Switching (Stale-While-Revalidate)
+- When switching between markdown files, the app should render cached content immediately when available.
+- The app should refresh the selected file in the background and update the UI only if the content changed.
+- The app should avoid clobbering the UI while the user is actively editing a task (an input/textarea within a task item is focused).
+
+### 7.2 Multi-Writer Conflict Handling
+- In multi-device/multi-user scenarios (primarily Google Drive), the app must avoid silent overwrites.
+- When supported by the storage adapter, writes should use a conditional update (e.g., ETag via `If-Match`).
+- On conflict, the app should preserve the user's local state and reload the latest remote version, prompting via a simple alert.
+
 ## 6. File Structure
 - `src/adapters/`: Storage implementations.
 - `src/lib/MarkdownParser.ts`: Core parsing logic. **Critical File**.

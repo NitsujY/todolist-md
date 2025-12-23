@@ -1,4 +1,4 @@
-import type { StorageProvider } from './StorageProvider';
+import type { FileMeta, StorageProvider } from './StorageProvider';
 
 export interface GoogleDriveConfig {
   clientId: string;
@@ -366,6 +366,67 @@ export class GoogleDriveAdapter implements StorageProvider {
     }
   }
 
+  async readWithMeta(path: string): Promise<{ content: string | null; meta?: FileMeta }> {
+    await this.ensureAuth();
+    await this.ensureDriveApi();
+
+    let fileId = this.fileCache.get(path)?.id;
+
+    if (!fileId) {
+      let query = `name = '${path}' and trashed = false`;
+      if (this.config?.rootFolderId) {
+        query = `'${this.config.rootFolderId}' in parents and ${query}`;
+      }
+
+      const response = await window.gapi.client.drive.files.list({
+        q: query,
+        fields: 'files(id, name)',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true
+      });
+      if (response.result.files && response.result.files.length > 0) {
+        fileId = response.result.files[0].id;
+        if (fileId) {
+          this.fileCache.set(path, { id: fileId, name: path });
+        }
+      }
+    }
+
+    if (!fileId) return { content: null };
+
+    try {
+      const metaResp = await window.gapi.client.drive.files.get({
+        fileId,
+        fields: 'id,name,modifiedTime,version',
+        supportsAllDrives: true
+      });
+
+      const etagHeader = (metaResp as any)?.headers?.etag || (metaResp as any)?.headers?.ETag;
+      const meta: FileMeta = {
+        etag: etagHeader,
+        modifiedTime: metaResp.result?.modifiedTime,
+        version: metaResp.result?.version,
+      };
+
+      const contentResp = await window.gapi.client.drive.files.get({
+        fileId,
+        alt: 'media',
+        supportsAllDrives: true
+      });
+
+      return { content: contentResp.body, meta };
+    } catch (e) {
+      console.error('Error reading file (with meta)', e);
+      if ((e as any).status === 401) {
+        console.log('Token expired during read, refreshing...');
+        this.accessToken = null;
+        await this.signIn();
+        return this.readWithMeta(path);
+      }
+      return { content: null };
+    }
+  }
+
   async write(path: string, content: string): Promise<void> {
     await this.ensureAuth();
     await this.ensureDriveApi();
@@ -462,6 +523,121 @@ export class GoogleDriveAdapter implements StorageProvider {
         await this.signIn();
         return this.write(path, content);
       }
+      if ((e as any).status === 403) {
+        console.error('Permission denied. User might need to grant write access.');
+        alert('Permission denied! Please ensure you have granted the app full Drive access. You may need to sign out and sign in again to update permissions.');
+      }
+      throw e;
+    }
+  }
+
+  async writeWithMeta(
+    path: string,
+    content: string,
+    options?: { ifMatch?: string }
+  ): Promise<{ meta?: FileMeta }> {
+    await this.ensureAuth();
+    await this.ensureDriveApi();
+
+    let fileId = this.fileCache.get(path)?.id;
+
+    if (!fileId) {
+      console.log(`[GoogleDrive] File ID not in cache for ${path}, searching...`);
+      let query = `name = '${path}' and trashed = false`;
+      if (this.config?.rootFolderId) {
+        query = `'${this.config.rootFolderId}' in parents and ${query}`;
+      }
+
+      const listResp = await window.gapi.client.drive.files.list({
+        q: query,
+        fields: 'files(id, name)',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true
+      });
+      if (listResp.result.files && listResp.result.files.length > 0) {
+        fileId = listResp.result.files[0].id;
+        console.log(`[GoogleDrive] Found file ${path} with ID ${fileId}`);
+        if (fileId) {
+          this.fileCache.set(path, { id: fileId, name: path });
+        }
+      } else {
+        console.log(`[GoogleDrive] File ${path} not found, will create new.`);
+      }
+    }
+
+    const metadata: any = {
+      name: path,
+      mimeType: 'text/markdown',
+    };
+    if (!fileId && this.config?.rootFolderId) {
+      metadata.parents = [this.config.rootFolderId];
+    }
+
+    try {
+      if (fileId) {
+        const headers: Record<string, string> = {
+          'Content-Type': 'text/markdown',
+        };
+        if (options?.ifMatch) headers['If-Match'] = options.ifMatch;
+
+        const response = await window.gapi.client.request({
+          path: `/upload/drive/v3/files/${fileId}`,
+          method: 'PATCH',
+          params: {
+            uploadType: 'media',
+            supportsAllDrives: true
+          },
+          headers,
+          body: content,
+        });
+
+        const etagHeader = (response as any)?.headers?.etag || (response as any)?.headers?.ETag;
+        return { meta: { etag: etagHeader } };
+      }
+
+      const multipartRequestBody =
+        `\r\n--foo_bar_baz\r\n` +
+        `Content-Type: application/json\r\n\r\n` +
+        JSON.stringify(metadata) +
+        `\r\n--foo_bar_baz\r\n` +
+        `Content-Type: text/markdown\r\n\r\n` +
+        content +
+        `\r\n--foo_bar_baz--`;
+
+      const response = await window.gapi.client.request({
+        path: '/upload/drive/v3/files',
+        method: 'POST',
+        params: {
+          uploadType: 'multipart',
+          supportsAllDrives: true
+        },
+        headers: {
+          'Content-Type': 'multipart/related; boundary=foo_bar_baz',
+        },
+        body: multipartRequestBody,
+      });
+
+      const newFile = response.result;
+      if (newFile?.id) this.fileCache.set(path, { id: newFile.id, name: path });
+
+      const etagHeader = (response as any)?.headers?.etag || (response as any)?.headers?.ETag;
+      return { meta: { etag: etagHeader } };
+    } catch (e) {
+      console.error('Error writing file (with meta)', e);
+      if ((e as any).status === 401) {
+        console.log('Token expired during write, refreshing...');
+        this.accessToken = null;
+        await this.signIn();
+        return this.writeWithMeta(path, content, options);
+      }
+
+      // 412: precondition failed (ETag mismatch) => conflict
+      if ((e as any).status === 412) {
+        const conflict = new Error('Conflict: remote file changed');
+        (conflict as any).code = 'conflict';
+        throw conflict;
+      }
+
       if ((e as any).status === 403) {
         console.error('Permission denied. User might need to grant write access.');
         alert('Permission denied! Please ensure you have granted the app full Drive access. You may need to sign out and sign in again to update permissions.');
