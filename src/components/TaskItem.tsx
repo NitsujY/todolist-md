@@ -15,6 +15,8 @@ interface TaskItemProps {
   onToggle: (id: string) => void;
   onUpdate?: (id: string, newText: string) => Promise<string | undefined> | void;
   onUpdateDescription?: (id: string, description: string) => void;
+  descriptionExpanded?: boolean;
+  onDescriptionExpandedChange?: (taskId: string, expanded: boolean) => void;
   onAddNext?: (afterId: string) => void;
   onDelete?: (id: string) => void;
   showCompleted: boolean;
@@ -23,7 +25,7 @@ interface TaskItemProps {
   fontSize?: 'small' | 'normal' | 'large' | 'xl';
 }
 
-export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddNext, onDelete, showCompleted, autoFocus, compact, fontSize = 'normal' }: TaskItemProps) {
+export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descriptionExpanded, onDescriptionExpandedChange, onAddNext, onDelete, showCompleted, autoFocus, compact, fontSize = 'normal' }: TaskItemProps) {
   const [isVisible, setIsVisible] = useState(() => {
     if (task.completed && !showCompleted) return false;
     return true;
@@ -31,7 +33,17 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
   const [isAnimating, setIsAnimating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(task.text);
-  const [showDescription, setShowDescription] = useState(false);
+  const [uncontrolledShowDescription, setUncontrolledShowDescription] = useState(false);
+  const isShowDescriptionControlled = descriptionExpanded !== undefined;
+  const showDescription = isShowDescriptionControlled ? descriptionExpanded : uncontrolledShowDescription;
+  const setShowDescription = (value: boolean | ((prev: boolean) => boolean)) => {
+    const nextValue = typeof value === 'function' ? value(showDescription) : value;
+    if (isShowDescriptionControlled) {
+      onDescriptionExpandedChange?.(task.id, nextValue);
+    } else {
+      setUncontrolledShowDescription(nextValue);
+    }
+  };
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [editDescription, setEditDescription] = useState(task.description || '');
   const [justCopied, setJustCopied] = useState(false);

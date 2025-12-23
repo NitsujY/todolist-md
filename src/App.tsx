@@ -122,6 +122,20 @@ function App() {
   const [dragOffset, setDragOffset] = useState(0);
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
 
+  // Controls whether each task's description/details panel is expanded.
+  const [descriptionExpandedById, setDescriptionExpandedById] = useState<Record<string, boolean>>({});
+
+  // Prune expansion state when switching files / reloading tasks.
+  useEffect(() => {
+    setDescriptionExpandedById(prev => {
+      const next: Record<string, boolean> = {};
+      for (const task of tasks) {
+        if (prev[task.id] !== undefined) next[task.id] = prev[task.id];
+      }
+      return next;
+    });
+  }, [tasks]);
+
   const handleFileDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveFileId(null);
@@ -660,6 +674,42 @@ function App() {
                   <Heading size={18} />
                 </button>
 
+                {(() => {
+                  const taskIdsWithDetails = tasks
+                    .filter(t => !!t.description && t.description.trim().length > 0)
+                    .map(t => t.id);
+
+                  const allDetailsExpanded =
+                    taskIdsWithDetails.length > 0 &&
+                    taskIdsWithDetails.every(id => descriptionExpandedById[id] === true);
+
+                  const label = allDetailsExpanded ? 'Collapse details' : 'Expand details';
+                  const title = taskIdsWithDetails.length === 0 ? 'No task details to expand' : label;
+
+                  return (
+                    <button
+                      onClick={() => {
+                        if (taskIdsWithDetails.length === 0) return;
+                        if (allDetailsExpanded) {
+                          setDescriptionExpandedById({});
+                          return;
+                        }
+
+                        setDescriptionExpandedById(prev => {
+                          const next = { ...prev };
+                          for (const id of taskIdsWithDetails) next[id] = true;
+                          return next;
+                        });
+                      }}
+                      className="btn btn-ghost btn-xs btn-square text-base-content/60 hover:text-primary"
+                      disabled={taskIdsWithDetails.length === 0}
+                      title={title}
+                    >
+                      <List size={18} />
+                    </button>
+                  );
+                })()}
+
                 <button 
                   onClick={() => setShowCompleted(!showCompleted)}
                   className="btn btn-xs btn-ghost btn-square text-base-content/60 hover:text-primary"
@@ -746,6 +796,15 @@ function App() {
                               onToggle={toggleTask} 
                               onUpdate={updateTaskText}
                               onUpdateDescription={updateTaskDescription}
+                              descriptionExpanded={descriptionExpandedById[task.id] === true}
+                              onDescriptionExpandedChange={(taskId, expanded) => {
+                                setDescriptionExpandedById(prev => {
+                                  if (expanded) return { ...prev, [taskId]: true };
+                                  if (prev[taskId] === undefined) return prev;
+                                  const { [taskId]: _, ...rest } = prev;
+                                  return rest;
+                                });
+                              }}
                               onAddNext={handleAddNext}
                               onDelete={deleteTask}
                               showCompleted={showCompleted}
