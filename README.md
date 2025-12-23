@@ -100,6 +100,7 @@ On **Azure OpenAI**, you don’t pass a model name in requests here — you sele
 - **Expand/Collapse Details**: One-click expand/collapse of all task descriptions from the top toolbar.
 - **Focus Mode**: Dim distractions and focus on one task at a time (via Plugin).
 - **Google Drive Integration**: Open and edit Markdown files directly from your Google Drive.
+- **Fast File Switching (SWR Cache)**: Recently opened files load instantly from cache, then refresh in the background.
 - **Customizable UI**:
     - **Themes**: Light, Dark, and System preference.
     - **Compact Mode**: For when you want to see more.

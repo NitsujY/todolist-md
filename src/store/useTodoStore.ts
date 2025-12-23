@@ -5,7 +5,15 @@ import { LocalStorageAdapter } from '../adapters/LocalStorageAdapter';
 import { FileSystemAdapter } from '../adapters/FileSystemAdapter';
 import { GoogleDriveAdapter, type GoogleDriveConfig } from '../adapters/GoogleDriveAdapter';
 import { parseTasks, toggleTaskInMarkdown, addTaskToMarkdown, updateTaskTextInMarkdown, insertTaskAfterInMarkdown, reorderTaskInMarkdown, deleteTaskInMarkdown, updateTaskDescriptionInMarkdown, nestTaskInMarkdown, type Task } from '../lib/MarkdownParser';
+import type { FileMeta } from '../adapters/StorageProvider';
 // import { pluginRegistry } from '../plugins/pluginEngine';
+
+type FileCacheEntry = {
+  markdown: string;
+  tasks: Task[];
+  meta?: FileMeta;
+  fetchedAt: number;
+};
 
 interface TodoState {
   markdown: string;
@@ -18,6 +26,9 @@ interface TodoState {
   compactMode: boolean;
   fontSize: 'small' | 'normal' | 'large' | 'xl';
   activeTag: string | null;
+
+  // Fast file switching cache (stale-while-revalidate)
+  fileCache: Record<string, FileCacheEntry>;
   
   // Actions
   setActiveTag: (tag: string | null) => void;
@@ -29,6 +40,7 @@ interface TodoState {
   pickGoogleDriveFile: () => Promise<void>;
   switchGoogleAccount: () => Promise<void>;
   loadTodos: () => Promise<void>;
+  refreshCurrentFile: (opts?: { background?: boolean }) => Promise<void>;
   toggleTask: (taskId: string) => Promise<void>;
   addTask: (text: string) => Promise<void>;
   updateTaskText: (taskId: string, newText: string) => Promise<string | undefined>;
@@ -55,6 +67,15 @@ const adapters = {
   google: new GoogleDriveAdapter(),
 };
 
+const isUserEditingTask = () => {
+  const active = document.activeElement;
+  return !!(
+    active &&
+    (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT') &&
+    (active as Element).closest('.task-item')
+  );
+};
+
 const sortFiles = (files: string[]) => {
   try {
     const savedOrder = JSON.parse(localStorage.getItem('file-order') || '[]');
@@ -78,7 +99,67 @@ import { arrayMove } from '@dnd-kit/sortable';
 
 export const useTodoStore = create<TodoState>()(
   temporal(
-    (set, get) => ({
+    (set, get) => {
+      // Coalesce concurrent reads per file and avoid out-of-order state updates.
+      const inFlightReadByFile = new Map<string, Promise<{ content: string | null; meta?: FileMeta }>>();
+      let activeReadToken = 0;
+
+      const readFileWithMeta = async (filename: string) => {
+        const { storage } = get();
+        if (storage.readWithMeta) {
+          return storage.readWithMeta(filename);
+        }
+        const content = await storage.read(filename);
+        return { content };
+      };
+
+      const persistCurrentFile = async (markdownToWrite: string, tasksToWrite: Task[]) => {
+        const { storage, currentFile, isFolderMode, fileCache } = get();
+
+        const targetFile = isFolderMode ? currentFile : 'todo.md';
+        const cachedMeta = fileCache[targetFile]?.meta;
+
+        try {
+          if (storage.writeWithMeta && cachedMeta?.etag) {
+            const result = await storage.writeWithMeta(targetFile, markdownToWrite, { ifMatch: cachedMeta.etag });
+            set(state => ({
+              fileCache: {
+                ...state.fileCache,
+                [targetFile]: {
+                  markdown: markdownToWrite,
+                  tasks: tasksToWrite,
+                  meta: { ...cachedMeta, ...result.meta },
+                  fetchedAt: Date.now(),
+                },
+              },
+            }));
+            return;
+          }
+
+          await storage.write(targetFile, markdownToWrite);
+          // Without metadata-aware writes, keep existing meta.
+          set(state => ({
+            fileCache: {
+              ...state.fileCache,
+              [targetFile]: {
+                markdown: markdownToWrite,
+                tasks: tasksToWrite,
+                meta: cachedMeta,
+                fetchedAt: Date.now(),
+              },
+            },
+          }));
+        } catch (e: any) {
+          if (e?.code === 'conflict') {
+            alert('This file changed in the cloud while you were editing. Reloading the latest version.');
+            await get().refreshCurrentFile({ background: false });
+            return;
+          }
+          throw e;
+        }
+      };
+
+      return ({
   markdown: '',
   tasks: [],
   storage: adapters.local,
@@ -91,6 +172,7 @@ export const useTodoStore = create<TodoState>()(
   requiresPermission: false,
   restorableName: '',
   activeTag: null,
+  fileCache: {},
 
   setActiveTag: (tag) => set({ activeTag: tag }),
 
@@ -226,50 +308,100 @@ export const useTodoStore = create<TodoState>()(
   },
 
   loadTodos: async () => {
-    set({ isLoading: true, activeTag: null });
-    const { storage, currentFile } = get();
-    const content = await storage.read(currentFile);
-    const markdown = content || '# My Todo List\n\n- [ ] First task';
-    const tasks = parseTasks(markdown);
-    set({ markdown, tasks, isLoading: false });
+    await get().refreshCurrentFile({ background: false });
+  },
+
+  refreshCurrentFile: async (opts) => {
+    const background = !!opts?.background;
+    const token = ++activeReadToken;
+
+    const { currentFile, fileCache } = get();
+
+    if (!background) {
+      set({ isLoading: true, activeTag: null });
+    }
+
+    try {
+      // Coalesce reads per file.
+      let promise = inFlightReadByFile.get(currentFile);
+      if (!promise) {
+        promise = readFileWithMeta(currentFile);
+        inFlightReadByFile.set(currentFile, promise);
+      }
+
+      const { content, meta } = await promise;
+      // Clear inflight once resolved (even if reused).
+      if (inFlightReadByFile.get(currentFile) === promise) {
+        inFlightReadByFile.delete(currentFile);
+      }
+
+      // Ignore stale responses if user switched files while awaiting.
+      if (token !== activeReadToken) return;
+
+      const nextMarkdown = content || '# My Todo List\n\n- [ ] First task';
+      const cached = fileCache[currentFile];
+
+      // If background refresh and content unchanged, just update meta/fetchedAt.
+      if (background && cached && cached.markdown === nextMarkdown) {
+        set(state => ({
+          fileCache: {
+            ...state.fileCache,
+            [currentFile]: { ...cached, meta: meta ?? cached.meta, fetchedAt: Date.now() },
+          },
+          isLoading: false,
+        }));
+        return;
+      }
+
+      // Do not clobber the UI while user is editing a task.
+      if (background && isUserEditingTask()) {
+        return;
+      }
+
+      const nextTasks = parseTasks(nextMarkdown);
+      set(state => ({
+        markdown: nextMarkdown,
+        tasks: nextTasks,
+        isLoading: false,
+        fileCache: {
+          ...state.fileCache,
+          [currentFile]: { markdown: nextMarkdown, tasks: nextTasks, meta, fetchedAt: Date.now() },
+        },
+      }));
+    } catch (e) {
+      console.error('Failed to refresh file', e);
+      set({ isLoading: false });
+    }
   },
 
   toggleTask: async (taskId) => {
-    const { markdown, storage, currentFile } = get();
+    const { markdown } = get();
     const newMarkdown = toggleTaskInMarkdown(markdown, taskId);
     const tasks = parseTasks(newMarkdown);
     
     set({ markdown: newMarkdown, tasks });
-    await storage.write(currentFile, newMarkdown);
+    await persistCurrentFile(newMarkdown, tasks);
   },
 
   addTask: async (text) => {
-    const { markdown, storage, currentFile, isFolderMode } = get();
+    const { markdown } = get();
     const newMarkdown = addTaskToMarkdown(markdown, text);
-    
-    set({ markdown: newMarkdown, tasks: parseTasks(newMarkdown) });
-    
-    if (isFolderMode) {
-      await storage.write(currentFile, newMarkdown);
-    } else {
-      await storage.write('todo.md', newMarkdown);
-    }
+
+    const newTasks = parseTasks(newMarkdown);
+    set({ markdown: newMarkdown, tasks: newTasks });
+    await persistCurrentFile(newMarkdown, newTasks);
   },
 
   updateTaskText: async (taskId, newText) => {
-    const { markdown, storage, currentFile, isFolderMode, tasks: oldTasks } = get();
+    const { markdown, tasks: oldTasks } = get();
     const index = oldTasks.findIndex(t => t.id === taskId);
 
     const newMarkdown = updateTaskTextInMarkdown(markdown, taskId, newText);
     const newTasks = parseTasks(newMarkdown);
     
     set({ markdown: newMarkdown, tasks: newTasks });
-    
-    if (isFolderMode) {
-      await storage.write(currentFile, newMarkdown);
-    } else {
-      await storage.write('todo.md', newMarkdown);
-    }
+
+    await persistCurrentFile(newMarkdown, newTasks);
 
     if (index !== -1 && newTasks[index]) {
       return newTasks[index].id;
@@ -278,29 +410,21 @@ export const useTodoStore = create<TodoState>()(
   },
 
   deleteTask: async (taskId) => {
-    const { markdown, storage, currentFile, isFolderMode } = get();
+    const { markdown } = get();
     const newMarkdown = deleteTaskInMarkdown(markdown, taskId);
-    
-    set({ markdown: newMarkdown, tasks: parseTasks(newMarkdown) });
-    
-    if (isFolderMode) {
-      await storage.write(currentFile, newMarkdown);
-    } else {
-      await storage.write('todo.md', newMarkdown);
-    }
+
+    const newTasks = parseTasks(newMarkdown);
+    set({ markdown: newMarkdown, tasks: newTasks });
+    await persistCurrentFile(newMarkdown, newTasks);
   },
 
   insertTaskAfter: async (taskId, text) => {
-    const { markdown, storage, currentFile, isFolderMode } = get();
+    const { markdown } = get();
     const newMarkdown = insertTaskAfterInMarkdown(markdown, taskId, text);
-    
-    set({ markdown: newMarkdown, tasks: parseTasks(newMarkdown) });
-    
-    if (isFolderMode) {
-      await storage.write(currentFile, newMarkdown);
-    } else {
-      await storage.write('todo.md', newMarkdown);
-    }
+
+    const newTasks = parseTasks(newMarkdown);
+    set({ markdown: newMarkdown, tasks: newTasks });
+    await persistCurrentFile(newMarkdown, newTasks);
   },
 
   reorderFiles: (activeFile, overFile) => {
@@ -317,53 +441,36 @@ export const useTodoStore = create<TodoState>()(
   },
 
   reorderTasks: async (activeId, overId) => {
-    const { markdown, storage, currentFile, isFolderMode } = get();
+    const { markdown } = get();
     const newMarkdown = reorderTaskInMarkdown(markdown, activeId, overId);
-    
-    set({ markdown: newMarkdown, tasks: parseTasks(newMarkdown) });
-    
-    if (isFolderMode) {
-      await storage.write(currentFile, newMarkdown);
-    } else {
-      await storage.write('todo.md', newMarkdown);
-    }
+
+    const newTasks = parseTasks(newMarkdown);
+    set({ markdown: newMarkdown, tasks: newTasks });
+    await persistCurrentFile(newMarkdown, newTasks);
   },
 
   nestTask: async (activeId, overId) => {
-    const { markdown, storage, currentFile, isFolderMode } = get();
+    const { markdown } = get();
     const newMarkdown = nestTaskInMarkdown(markdown, activeId, overId);
-    
-    set({ markdown: newMarkdown, tasks: parseTasks(newMarkdown) });
-    
-    if (isFolderMode) {
-      await storage.write(currentFile, newMarkdown);
-    } else {
-      await storage.write('todo.md', newMarkdown);
-    }
+
+    const newTasks = parseTasks(newMarkdown);
+    set({ markdown: newMarkdown, tasks: newTasks });
+    await persistCurrentFile(newMarkdown, newTasks);
   },
 
   updateMarkdown: async (newMarkdown) => {
-    const { storage, currentFile, isFolderMode } = get();
-    set({ markdown: newMarkdown, tasks: parseTasks(newMarkdown) });
-    
-    if (isFolderMode) {
-      await storage.write(currentFile, newMarkdown);
-    } else {
-      await storage.write('todo.md', newMarkdown);
-    }
+    const newTasks = parseTasks(newMarkdown);
+    set({ markdown: newMarkdown, tasks: newTasks });
+    await persistCurrentFile(newMarkdown, newTasks);
   },
 
   updateTaskDescription: async (taskId, description) => {
-    const { markdown, storage, currentFile, isFolderMode } = get();
+    const { markdown } = get();
     const newMarkdown = updateTaskDescriptionInMarkdown(markdown, taskId, description);
-    
-    set({ markdown: newMarkdown, tasks: parseTasks(newMarkdown) });
-    
-    if (isFolderMode) {
-      await storage.write(currentFile, newMarkdown);
-    } else {
-      await storage.write('todo.md', newMarkdown);
-    }
+
+    const newTasks = parseTasks(newMarkdown);
+    set({ markdown: newMarkdown, tasks: newTasks });
+    await persistCurrentFile(newMarkdown, newTasks);
   },
 
   renameFile: async (oldName, newName) => {
@@ -533,11 +640,21 @@ export const useTodoStore = create<TodoState>()(
   },
 
   selectFile: async (filename) => {
-    set({ currentFile: filename });
-    localStorage.setItem('lastOpenedFile', filename);
-    await get().loadTodos();
+    const nextFile = filename;
+    const cached = get().fileCache[nextFile];
+
+    set({
+      currentFile: nextFile,
+      // If we have cache, switch instantly without spinner.
+      ...(cached ? { markdown: cached.markdown, tasks: cached.tasks, isLoading: false } : { isLoading: true }),
+    });
+    localStorage.setItem('lastOpenedFile', nextFile);
+
+    // Background refresh to update cache/UI if needed.
+    await get().refreshCurrentFile({ background: !!cached });
   },
-    }),
+      });
+    },
     {
       partialize: (state) => ({ 
         markdown: state.markdown,

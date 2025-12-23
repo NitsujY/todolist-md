@@ -1,4 +1,4 @@
-import type { StorageProvider } from './StorageProvider';
+import type { FileMeta, StorageProvider } from './StorageProvider';
 import { get, set, del } from '../lib/db';
 
 export class FileSystemAdapter implements StorageProvider {
@@ -135,6 +135,35 @@ export class FileSystemAdapter implements StorageProvider {
     }
 
     return null;
+  }
+
+  async readWithMeta(filename: string): Promise<{ content: string | null; meta?: FileMeta }> {
+    if (this.isMemoryMode) {
+      const content = await this.read(filename);
+      return { content };
+    }
+
+    // Direct file handle mode
+    if (this.fileHandle && (!filename || filename === this.fileHandle.name)) {
+      await this.verifyPermission(this.fileHandle, false);
+      const file = await this.fileHandle.getFile();
+      return { content: await file.text(), meta: { lastModified: file.lastModified } };
+    }
+
+    // Folder mode
+    if (this.dirHandle) {
+      await this.verifyPermission(this.dirHandle, false);
+      try {
+        const fileHandle = await this.dirHandle.getFileHandle(filename);
+        const file = await fileHandle.getFile();
+        return { content: await file.text(), meta: { lastModified: file.lastModified } };
+      } catch (e) {
+        console.error(`File not found: ${filename}`, e);
+        return { content: null };
+      }
+    }
+
+    return { content: null };
   }
 
   async write(filename: string, content: string): Promise<void> {
