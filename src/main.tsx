@@ -6,7 +6,9 @@ import { pluginRegistry } from './plugins/pluginEngine';
 import { pluginManifest } from './plugins/pluginManifest';
 
 async function registerPluginsFromManifest() {
-  const modules = import.meta.glob('./plugins/**/*.{ts,tsx}');
+  // Only include plugin entry modules referenced by pluginManifest.
+  // This avoids bundling unrelated internal files under src/plugins/.
+  const modules = import.meta.glob('./plugins/**/*Plugin.{ts,tsx}');
 
   for (const entry of pluginManifest) {
     const gate = entry.disableWhenEnvEquals;

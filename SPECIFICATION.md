@@ -61,6 +61,7 @@ Detailed feature specifications are maintained in the `specs/` directory.
 
 - **[Task Management](specs/features/task-management.md)**: Core task creation, editing, and organization.
 - **[Focus Mode (Zen Mode)](specs/features/focus-mode.md)**: Distraction-free editing experience.
+- **[Brain Dump](specs/features/brain-dump.md)**: Context-aware capture (voice or typed) → tasks + mind-clearing summary.
 - **[TaskItem UI](specs/ui/task-item.spec.md)**: Detailed UI states and interactions for the task component.
 
 ### 4.0 Global Details Toggle
