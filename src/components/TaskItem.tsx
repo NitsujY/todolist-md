@@ -292,8 +292,9 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
     // the description (e.g., toolbar controls) from closing the modal.
     if (e.relatedTarget instanceof Element) {
       if (e.relatedTarget.closest('.zen-controls')) return;
-      // If clicking somewhere inside the current task's node (which includes the expanded description), keep editing
-      if (e.relatedTarget.closest('.task-item')) return;
+      // If clicking somewhere inside THIS task's node (which includes the expanded description), keep editing
+      const relatedTaskItem = e.relatedTarget.closest('.task-item');
+      if (relatedTaskItem && relatedTaskItem.getAttribute('data-task-id') === task.id) return;
     }
 
     // If any plugin requests preventing auto-close, do not close on blur.
@@ -344,7 +345,8 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
     // If focus is moving to any element inside the Zen Mode controls or staying within the task-item, ignore.
     if (e.relatedTarget instanceof Element) {
       if (e.relatedTarget.closest('.zen-controls')) return;
-      if (e.relatedTarget.closest('.task-item')) return;
+      const relatedTaskItem = e.relatedTarget.closest('.task-item');
+      if (relatedTaskItem && relatedTaskItem.getAttribute('data-task-id') === task.id) return;
     }
 
     // If any plugin requests preventing auto-close, do not close on blur.
@@ -528,6 +530,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
     <div 
       ref={setNodeRef}
       style={style}
+      data-task-id={task.id}
       className={`
         task-item group flex items-start gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out relative
         ${compact ? 'p-1' : 'p-3'}
