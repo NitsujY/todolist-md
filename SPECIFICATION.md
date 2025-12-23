@@ -66,6 +66,7 @@ Detailed feature specifications are maintained in the `specs/` directory.
 
 ### 4.1 Appearance & Settings
 - **Themes**: Light, Dark, Auto (system preference).
+- **Settings Modal**: Can be closed via the Close button, backdrop click, or `Esc`.
 - **Fonts**:
     - Options: System UI, Inter, Roboto Mono, Fira Code.
     - Implementation: CSS variables and `data-font` attribute on `<html>`.
