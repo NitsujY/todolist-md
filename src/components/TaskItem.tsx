@@ -15,6 +15,8 @@ interface TaskItemProps {
   onToggle: (id: string) => void;
   onUpdate?: (id: string, newText: string) => Promise<string | undefined> | void;
   onUpdateDescription?: (id: string, description: string) => void;
+  descriptionExpanded?: boolean;
+  onDescriptionExpandedChange?: (taskId: string, expanded: boolean) => void;
   onAddNext?: (afterId: string) => void;
   onDelete?: (id: string) => void;
   showCompleted: boolean;
@@ -23,7 +25,7 @@ interface TaskItemProps {
   fontSize?: 'small' | 'normal' | 'large' | 'xl';
 }
 
-export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddNext, onDelete, showCompleted, autoFocus, compact, fontSize = 'normal' }: TaskItemProps) {
+export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descriptionExpanded, onDescriptionExpandedChange, onAddNext, onDelete, showCompleted, autoFocus, compact, fontSize = 'normal' }: TaskItemProps) {
   const [isVisible, setIsVisible] = useState(() => {
     if (task.completed && !showCompleted) return false;
     return true;
@@ -31,7 +33,17 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
   const [isAnimating, setIsAnimating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(task.text);
-  const [showDescription, setShowDescription] = useState(false);
+  const [uncontrolledShowDescription, setUncontrolledShowDescription] = useState(false);
+  const isShowDescriptionControlled = descriptionExpanded !== undefined;
+  const showDescription = isShowDescriptionControlled ? descriptionExpanded : uncontrolledShowDescription;
+  const setShowDescription = (value: boolean | ((prev: boolean) => boolean)) => {
+    const nextValue = typeof value === 'function' ? value(showDescription) : value;
+    if (isShowDescriptionControlled) {
+      onDescriptionExpandedChange?.(task.id, nextValue);
+    } else {
+      setUncontrolledShowDescription(nextValue);
+    }
+  };
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [editDescription, setEditDescription] = useState(task.description || '');
   const [justCopied, setJustCopied] = useState(false);
@@ -139,6 +151,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
     }
     setIsEditing(false);
     setIsEditingDescription(false);
+    setShowDescription(false);
     setModes({});
   };
 
@@ -279,8 +292,9 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
     // the description (e.g., toolbar controls) from closing the modal.
     if (e.relatedTarget instanceof Element) {
       if (e.relatedTarget.closest('.zen-controls')) return;
-      // If clicking somewhere inside the current task's node (which includes the expanded description), keep editing
-      if (e.relatedTarget.closest('.task-item')) return;
+      // If clicking somewhere inside THIS task's node (which includes the expanded description), keep editing
+      const relatedTaskItem = e.relatedTarget.closest('.task-item');
+      if (relatedTaskItem && relatedTaskItem.getAttribute('data-task-id') === task.id) return;
     }
 
     // If any plugin requests preventing auto-close, do not close on blur.
@@ -294,6 +308,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
     setIsEditingDescription(false);
     // Also close title edit if we are leaving the task completely
     setIsEditing(false);
+    setShowDescription(false);
   };
 
   const handleAddDueDate = () => {
@@ -330,7 +345,8 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
     // If focus is moving to any element inside the Zen Mode controls or staying within the task-item, ignore.
     if (e.relatedTarget instanceof Element) {
       if (e.relatedTarget.closest('.zen-controls')) return;
-      if (e.relatedTarget.closest('.task-item')) return;
+      const relatedTaskItem = e.relatedTarget.closest('.task-item');
+      if (relatedTaskItem && relatedTaskItem.getAttribute('data-task-id') === task.id) return;
     }
 
     // If any plugin requests preventing auto-close, do not close on blur.
@@ -346,6 +362,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
     setIsEditing(false);
     // Also close description edit if we are leaving
     setIsEditingDescription(false);
+    setShowDescription(false);
   };
 
   // Helper to clean text for display (remove plugin syntax like due:YYYY-MM-DD)
@@ -513,6 +530,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAddN
     <div 
       ref={setNodeRef}
       style={style}
+      data-task-id={task.id}
       className={`
         task-item group flex items-start gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out relative
         ${compact ? 'p-1' : 'p-3'}
