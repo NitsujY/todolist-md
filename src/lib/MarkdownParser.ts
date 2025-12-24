@@ -14,17 +14,23 @@ export interface Task {
   depth: number;
 }
 
-const stripAIVoiceHiddenSections = (markdown: string) => {
-  // Hide AI voice capture blocks from the task/list view.
-  // This keeps raw capture text inside the document without affecting task parsing.
+const maskAIVoiceHiddenSections = (markdown: string) => {
+  // Hide AI voice capture blocks from the task/list view, but preserve the
+  // original string length and line/offset positions.
+  //
+  // Why: task IDs are derived from `node.position.start.line`.
+  // If we delete hidden sections, line numbers shift and toggling breaks for
+  // tasks that appear after the hidden blocks.
+  const maskKeepNewlines = (s: string) => s.replace(/[^\n]/g, ' ');
+
   return markdown
     .replace(
       /<!--\s*AI_VOICE_CAPTURE:START\s*-->[\s\S]*?<!--\s*AI_VOICE_CAPTURE:END\s*-->/g,
-      ''
+      (m) => maskKeepNewlines(m)
     )
     .replace(
       /<!--\s*AI_VOICE_SUMMARY:START\s*-->[\s\S]*?<!--\s*AI_VOICE_SUMMARY:END\s*-->/g,
-      ''
+      (m) => maskKeepNewlines(m)
     );
 };
 
@@ -89,7 +95,7 @@ const parseInline = (text: string): any[] => {
 
 export const parseTasks = (markdown: string): Task[] => {
   const processor = createProcessor();
-  const tree = processor.parse(stripAIVoiceHiddenSections(markdown)) as Root;
+  const tree = processor.parse(maskAIVoiceHiddenSections(markdown)) as Root;
   const tasks: Task[] = [];
 
   // Simple traversal to find task list items
