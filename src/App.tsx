@@ -492,7 +492,10 @@ function App() {
   );
 
   return (
-    <div className="flex flex-col h-screen bg-base-200 font-sans overflow-hidden">
+    <div
+      className="flex flex-col h-screen bg-base-200 font-sans overflow-hidden"
+      style={{ paddingBottom: 'var(--ai-bottom-bar-offset, 0px)' }}
+    >
       
       {requiresPermission && (
         <div className="bg-warning text-warning-content px-4 py-2 text-sm flex items-center justify-between shadow-md z-[60]">
