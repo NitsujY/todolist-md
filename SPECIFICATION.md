@@ -62,7 +62,14 @@ Detailed feature specifications are maintained in the `specs/` directory.
 
 - **[Task Management](specs/features/task-management.md)**: Core task creation, editing, and organization.
 - **[Focus Mode (Zen Mode)](specs/features/focus-mode.md)**: Distraction-free editing experience.
+- **[Brain Dump](specs/features/brain-dump.md)**: Context-aware capture (voice or typed) → tasks + next actions.
 - **[TaskItem UI](specs/ui/task-item.spec.md)**: Detailed UI states and interactions for the task component.
+
+### 4.0 Global Details Toggle
+- The top toolbar provides a single **Expand details / Collapse details** control.
+- **Expand details** opens the description/details panels for all tasks that currently have a description.
+- **Collapse details** closes all opened description/details panels.
+- Users can still expand/collapse an individual task after the global action.
 
 ### 4.1 Appearance & Settings
 - **Themes**: Light, Dark, Auto (system preference).
@@ -117,6 +124,18 @@ The AI Assistant supports:
 5.  **Error Handling**:
     - Google Drive API failures should alert the user or log to console, not crash the app.
     - File System permission denials should be handled gracefully (show "Grant Permission" UI).
+
+## 7. Performance & Concurrency
+
+### 7.1 Fast Switching (Stale-While-Revalidate)
+- When switching between markdown files, the app should render cached content immediately when available.
+- The app should refresh the selected file in the background and update the UI only if the content changed.
+- The app should avoid clobbering the UI while the user is actively editing a task (an input/textarea within a task item is focused).
+
+### 7.2 Multi-Writer Conflict Handling
+- In multi-device/multi-user scenarios (primarily Google Drive), the app must avoid silent overwrites.
+- When supported by the storage adapter, writes should use a conditional update (e.g., ETag via `If-Match`).
+- On conflict, the app should preserve the user's local state and reload the latest remote version, prompting via a simple alert.
 
 ## 6. File Structure
 - `src/adapters/`: Storage implementations.
