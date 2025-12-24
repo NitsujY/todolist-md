@@ -58,7 +58,11 @@ The design respects the app’s constraints:
 ## 3. UX (MVP)
 
 ### 3.1 Entry
-- A single **Brain Dump** button opens the overlay.
+- Brain Dump is always accessible from a small **bottom bar**.
+- The bottom bar uses a **mic icon** to open Brain Dump.
+- If the current document already has Brain Dump history, opening Brain Dump restores the last session/results **without making a new AI call**.
+- Users can immediately continue by tapping the mic control inside the Brain Dump screen (analysis only happens on **Finish**).
+- The bottom bar provides a way to **clear saved suggestions/history** for the current document.
 - The overlay provides:
   - **Scene picker**
   - Optional record controls
@@ -103,6 +107,9 @@ When the user is ready to analyze (explicit):
   - **Add selected tasks** to the current list (under a target section)
   - **Attach summary** as description/context (see Section 6)
   - Keep transcript/source stored (or delete after processing)
+
+- After **Apply**, Brain Dump returns to the list view.
+- A small **collapsed bar** remains at the bottom so the user can **Reopen** the last Brain Dump session/results, or **Dismiss** it.
 
 ### 3.4 Preview Without Microphone (MVP)
 - Users can paste or type text into a **Preview** box to generate the same Brain Dump result without starting speech recognition.
