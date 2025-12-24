@@ -88,7 +88,7 @@ A "Hands-Free" experience triggered by a button or command.
     - Body is managed between `<!-- AI_VOICE_SUMMARY:START -->` and `<!-- AI_VOICE_SUMMARY:END -->`
 
 #### 4.1.3 Brain Dump Mode (Context-Aware)
-Voice Mode supports an opinionated workflow optimized for short, fragmented recordings that turn into **clean tasks + mind-clearing summary**.
+Voice Mode supports an opinionated workflow optimized for short, fragmented recordings that turn into **clean tasks + next actions**.
 
 - **Primary goal**: Extract actionable tasks while preserving context.
 - **Secondary goal**: Provide a small “clear your mind” summary and minimal clarifying questions.
