@@ -8,13 +8,13 @@
 - On desktop, use a **bottom sheet** (no more than half screen height) and **blur** the list view behind it.
 - The user speaks and sees **voice → text** appear in real time.
 - The user can **Stop** to pause, think, then **Continue** to resume (repeat as needed).
-- When finished (via clear UI hint), the user taps **Analyze** to trigger Brain Dump analysis.
+- When finished (via clear UI hint), the user taps **Finish** to trigger Brain Dump analysis.
 - After results show, the user can **Continue** voice again in the same screen (results should not block continued capture).
 
 ### Post-Finish Review
 
 - After the user taps **Finish**, switch into a **review mode** that can use the full screen (desktop included).
-- Show additional options (scene, include completed, etc.) only in review mode.
+- Keep the review mode clean. Brain Dump options (default scene, include-completed) are configured in **Settings**.
 - Tapping the mic to continue recording exits review mode back to the clean capture screen.
 
 #### Discoverability (Most Important)
@@ -34,7 +34,8 @@
 **Brain Dump** turns short, fragmented inputs (voice or typed text) into:
 
 1. **Suggested Tasks** (action-first)
-2. **Mind-Clearing Summary** (context + intent)
+2. **Short Summary** (context + intent)
+3. **Next Actions** (1–3 concrete steps that are meaningful and do-able)
 3. **Clarifying Prompts** (minimal questions to reduce ambiguity)
 4. **Transcript / Source Text** (trust + searchability)
 
@@ -49,7 +50,7 @@ The design respects the app’s constraints:
 ## 2. User Stories
 
 - As a user, I can speak a messy thought and get clean tasks.
-- As a user, I can paste/type a brain dump (no microphone) and get the same tasks + mind-clearing output.
+- As a user, I can paste/type a brain dump (no microphone) and get the same tasks + next actions.
 - As a user, I can choose a **Scene** (why I’m capturing) so the app formats output appropriately.
 - As a user, I can keep a lightweight **Knowledge Base** for a list/project so extractions use prior context.
 - As a user, I can review and edit suggestions before writing anything into my tasks.
@@ -62,7 +63,7 @@ The design respects the app’s constraints:
   - **Scene picker**
   - Optional record controls
   - Voice capture as the primary input method
-  - A secondary typed input (hidden behind an explicit “Type instead” affordance)
+  - A secondary typed input (available throughout, collapsed behind an explicit “Type instead” affordance)
 
 ### 3.1.1 Mobile-First Requirement (Important)
 On mobile/small screens, Brain Dump is treated as a **full-screen page** (like Settings) so the user gets maximum space.
@@ -73,7 +74,7 @@ On mobile/small screens, Brain Dump is treated as a **full-screen page** (like S
 - Keep the default view minimal:
   - Preview textarea + Generate
   - Tasks + Apply
-  - Clear mind
+  - Next actions
   - Advanced panels stay behind “More”.
 
 This is a core UX constraint for MVP, not a nice-to-have.
@@ -84,15 +85,16 @@ When the user is ready to analyze (explicit):
 - Voice capture supports **pause/continue** in the same overlay.
 - **Stop** pauses recording and keeps the screen clean (no tasks shown yet).
 - User can think for a moment, then **Continue** recording.
-- When ready, user taps **Analyze** to run Brain Dump extraction.
-
-For typed input, user clicks Generate.
+- When ready, user taps **Finish** (UI label) to run Brain Dump extraction.
+- **Finish** is the single action for both:
+  - Voice transcript (default)
+  - Typed input (when the user opens “Type instead” and provides text)
 
 1. App generates a **Context Pack** (Section 4)
 2. App produces **Brain Dump Result**:
    - Suggested tasks (editable checklist)
    - Summary (1–5 bullets)
-   - “To clear your mind” hints (1–3 bullets)
+  - Next actions (1–3 bullets)
    - Clarifying questions (0–2 questions, optional)
    - Transcript / source text
 
@@ -105,6 +107,9 @@ For typed input, user clicks Generate.
 ### 3.4 Preview Without Microphone (MVP)
 - Users can paste or type text into a **Preview** box to generate the same Brain Dump result without starting speech recognition.
 - This is intentionally not the default path when voice capture is enabled; it’s a fallback.
+
+### 3.5 Updating Results
+- Options (default scene/include completed) live in Settings to keep the Brain Dump review screen clean.
 
 ## 4. Context Pack (What the model sees)
 
@@ -219,7 +224,7 @@ Prefer structured output so it can be applied safely.
 ### Output schema (JSON)
 - `sceneId: string`
 - `summaryBullets: string[]`
-- `mindClearingHints: string[]`
+- `nextActions: string[]`
 - `clarifyingQuestions: { question: string; choices?: string[] }[]`
 - `tasks: { title: string; tags?: string[]; dueDate?: string; confidence?: number; rationale?: string }[]`
 - `sourceText: string`
