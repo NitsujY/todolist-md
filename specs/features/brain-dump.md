@@ -3,7 +3,8 @@
 
 ### Primary Flow (Voice-First)
 
-- Click the **bottom bar mic** to open Brain Dump.
+- Tap the **bottom bar** to start Brain Dump voice capture.
+- Tap the small **edit** icon next to the mic to jump directly to typed input.
 - On mobile, use a **clean, full-screen** capture screen.
 - On desktop, use a **bottom sheet** and **blur** the list view behind it.
 - The user speaks and sees **voice → text** appear in real time.
@@ -59,7 +60,8 @@ The design respects the app’s constraints:
 
 ### 3.1 Entry
 - Brain Dump is always accessible from a small **bottom bar**.
-- The bottom bar uses a **mic icon** to open Brain Dump.
+- Tapping the **bottom bar** starts Brain Dump voice capture.
+- A small **edit** icon next to the mic opens Brain Dump directly in typed input mode.
 - If the current document already has Brain Dump history, opening Brain Dump restores the last session/results **without making a new AI call**.
 - Users can immediately continue by tapping the mic control inside the Brain Dump screen (analysis only happens on **Finish**).
 - The bottom bar provides a way to **clear saved suggestions/history** for the current document.
