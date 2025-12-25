@@ -3,7 +3,9 @@
 
 ### Primary Flow (Voice-First)
 
-- Tap the **bottom bar** to start Brain Dump voice capture.
+- Tap the **bottom bar** to open Brain Dump.
+  - If saved results exist, it resumes the **analysis/review** screen.
+  - Otherwise it starts a new **voice capture** session.
 - Tap the small **edit** icon next to the mic to jump directly to typed input.
 - On mobile, use a **clean, full-screen** capture screen.
 - On desktop, use a **bottom sheet** and **blur** the list view behind it.
@@ -60,7 +62,9 @@ The design respects the app’s constraints:
 
 ### 3.1 Entry
 - Brain Dump is always accessible from a small **bottom bar**.
-- Tapping the **bottom bar** starts Brain Dump voice capture.
+- Tapping the **bottom bar** opens Brain Dump.
+  - If saved results exist, it resumes the analysis screen.
+  - Otherwise it starts a new voice capture session.
 - A small **edit** icon next to the mic opens Brain Dump directly in typed input mode.
 - If the current document already has Brain Dump history, opening Brain Dump restores the last session/results **without making a new AI call**.
 - Users can immediately continue by tapping the mic control inside the Brain Dump screen (analysis only happens on **Finish**).
@@ -112,6 +116,10 @@ When the user is ready to analyze (explicit):
 
 - After **Apply**, Brain Dump returns to the list view.
 - A small **collapsed bar** remains at the bottom so the user can **Reopen** the last Brain Dump session/results, or **Dismiss** it.
+
+### 3.3.1 Add Next Actions
+- In review mode, the **Next actions** panel provides an **Add** button.
+- Clicking **Add** writes Next actions into the todo list as a single parent task with subtasks (to avoid task spam).
 
 ### 3.4 Preview Without Microphone (MVP)
 - Users can paste or type text into a **Preview** box to generate the same Brain Dump result without starting speech recognition.
@@ -240,7 +248,7 @@ Prefer structured output so it can be applied safely.
 - `summaryBullets: string[]`
 - `nextActions: string[]`
 - `clarifyingQuestions: { question: string; choices?: string[] }[]`
-- `tasks: { title: string; tags?: string[]; dueDate?: string; confidence?: number; rationale?: string }[]`
+- `tasks: { title: string; subtasks?: string[]; tags?: string[]; dueDate?: string; confidence?: number; rationale?: string }[]`
 - `sourceText: string`
 
 ## 8. Quality Bar (MVP)
