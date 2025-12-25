@@ -66,7 +66,7 @@ Azure OpenAI requires 3 extra fields beyond an API key:
 
 ### 4.1 Voice Mode (Priority Feature)
 A "Hands-Free" experience triggered by a button or command.
-- **UI**: Uses a Siri-style floating sheet centered in the list view (does not cover the whole screen).
+- **UI**: Uses an overlay that is full-screen on small screens and a bottom sheet on desktop.
 - **Interaction**:
     - **Input**: Uses Web Speech API (free) or Whisper (via endpoint) for Speech-to-Text.
     - **Output**: Uses Web Speech API for Text-to-Speech responses.
