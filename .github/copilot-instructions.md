@@ -18,3 +18,39 @@
 - [x] Ensure Documentation is Complete
 
 - [x] Always keep the README.md for high level and SPECIFICATION.md for low level up to date with the latest features and changes.
+
+## Git Submodule Workflow (AI Assistant)
+
+The AI Assistant plugin is a git submodule at `src/plugins/ai-assistant`.
+
+If you modify anything inside the submodule, you **must**:
+
+1) Commit + push the submodule first
+
+```bash
+cd src/plugins/ai-assistant
+git status
+git add -A
+git commit -m "Your change"
+git push origin main
+```
+
+2) Then commit + push the parent repo (this updates the submodule pointer)
+
+```bash
+cd ../..  # back to parent repo root
+git status
+git add src/plugins/ai-assistant
+git commit -m "Bump ai-assistant submodule"
+git push origin develop
+```
+
+Why this order matters: pushing the parent first can break CI with a “not our ref”/missing SHA error because the parent repo references a submodule commit that does not exist on the submodule remote yet.
+
+Quick verification
+
+```bash
+git submodule status
+cd src/plugins/ai-assistant && git rev-parse HEAD
+cd ../.. && git ls-tree HEAD src/plugins/ai-assistant
+```
