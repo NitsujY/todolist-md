@@ -34,6 +34,32 @@ A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (
     npm run build
     ```
 
+## Submodule Workflow (AI Assistant)
+
+The AI Assistant lives in a git submodule at `src/plugins/ai-assistant`. If you change anything under that folder, you must:
+
+1) Commit and push the submodule first (so the commit exists on its remote)
+
+```bash
+cd src/plugins/ai-assistant
+git status
+git add -A
+git commit -m "Your change"
+git push origin main
+```
+
+2) Then commit and push the parent repo (which updates the submodule pointer)
+
+```bash
+cd ../..  # back to repo root
+git status
+git add src/plugins/ai-assistant
+git commit -m "Bump ai-assistant submodule"
+git push origin develop
+```
+
+If you push the parent repo first, CI can fail with a “not our ref” error because the referenced submodule SHA is missing on the submodule remote.
+
 ## AI Assistant: OpenAI vs Azure OpenAI
 
 This app is a static SPA. Any API key you provide (in Settings or via Vite env vars) is used from the browser.
