@@ -34,6 +34,10 @@ A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (
     npm run build
     ```
 
+## Submodule Note (AI Assistant)
+
+The AI Assistant is a git submodule at `src/plugins/ai-assistant`. If you change it, you must push the submodule commit before pushing the parent repo submodule pointer (otherwise CI can fail with a missing ref).
+
 ## AI Assistant: OpenAI vs Azure OpenAI
 
 This app is a static SPA. Any API key you provide (in Settings or via Vite env vars) is used from the browser.
@@ -106,6 +110,7 @@ On **Azure OpenAI**, you don’t pass a model name in requests here — you sele
     - **Compact Mode**: For when you want to see more.
     - **Font Size**: Adjustable text size.
 - **Plugin System**: Extensible architecture (includes Due Date, Focus Mode, etc.) loaded via a manifest.
+- **Brain Dump (AI Assistant)**: Voice-first capture from a persistent bottom bar; optional typed input with scrolling inside the editor.
 - **Storage Options**:
     - **Local Storage**: Quick start, data stays in browser. Persists across reloads.
     - **File System**: Edit real files on your disk. Remembers your last folder/file and prompts to restore access on reload.

@@ -116,6 +116,11 @@ The AI Assistant supports:
 - UI settings are stored in `localStorage` under `ai-plugin-config`.
 - The app may also read Vite env vars (public at build-time) prefixed with `VITE_`.
 
+#### 4.2.2 Brain Dump Typed Input (UX Constraint)
+
+- In Brain Dump, when the user opens typed input (“Use typing”), the textarea should expand to fill available space (up to the overlay’s max height) and remain readable.
+- Long input must scroll inside the textarea; avoid making the entire Brain Dump overlay/page scroll just to edit text.
+
 ## 5. Technical Constraints & Rules
 1.  **No Database**: Do not introduce a backend database. All state must be reconstructible from Markdown files.
 2.  **Vite Config**: The `__APP_VERSION__` global is defined in `vite.config.ts` from `package.json`.
