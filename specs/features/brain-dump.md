@@ -3,9 +3,9 @@
 
 ### Primary Flow (Voice-First)
 
-- Click the bot icon to open a **clean, full-screen voice capture screen**.
-- On mobile, use a **clean, full-screen voice capture screen**.
-- On desktop, use a **bottom sheet** (no more than half screen height) and **blur** the list view behind it.
+- Click the **bottom bar mic** to open Brain Dump.
+- On mobile, use a **clean, full-screen** capture screen.
+- On desktop, use a **bottom sheet** and **blur** the list view behind it.
 - The user speaks and sees **voice → text** appear in real time.
 - The user can **Stop** to pause, think, then **Continue** to resume (repeat as needed).
 - When finished (via clear UI hint), the user taps **Finish** to trigger Brain Dump analysis.
@@ -21,7 +21,7 @@
 
 - The UI should make **Stop / Continue** impossible to miss.
 - Use a **bottom-center fixed primary control** (a circular icon button) that toggles **Pause / Continue**.
-- When paused, show a **Finish** pill/button adjacent to the circle (near the same focal point).
+- When paused, show a clear **Finish** action near the mic controls.
 - Keep the capture screen clean: top bar + transcript + center control only.
 - Show configuration and secondary options only after finishing.
 
@@ -67,14 +67,14 @@ The design respects the app’s constraints:
   - **Scene picker**
   - Optional record controls
   - Voice capture as the primary input method
-  - A secondary typed input (available throughout, collapsed behind an explicit “Type instead” affordance)
+  - A secondary typed input (available throughout, collapsed behind an explicit **Use typing** affordance)
 
 ### 3.1.1 Mobile-First Requirement (Important)
 On mobile/small screens, Brain Dump is treated as a **full-screen page** (like Settings) so the user gets maximum space.
 
 - Full-screen layout on small screens; anchored “bottom sheet” layout only on larger screens.
 - Only **one** obvious close control (no duplicate Close + X).
-- Content area scrolls; primary actions remain easy to reach.
+- Prefer minimal outer scrolling; when typing is open, the **textarea is the scroll container**.
 - Keep the default view minimal:
   - Preview textarea + Generate
   - Tasks + Apply
@@ -117,6 +117,11 @@ When the user is ready to analyze (explicit):
 
 ### 3.5 Updating Results
 - Options (default scene/include completed) live in Settings to keep the Brain Dump review screen clean.
+
+### 3.6 Typed Input Layout (Height + Scroll)
+- When **Use typing** is open, the editor should expand to fill remaining vertical space (up to a max sheet height on desktop).
+- Long text must scroll **inside the textarea** (not the entire Brain Dump page).
+- The editor must not overlap the bottom mic controls.
 
 ## 4. Context Pack (What the model sees)
 
