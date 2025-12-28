@@ -102,7 +102,16 @@ class PluginRegistry {
   togglePlugin(name: string) {
     const meta = this.plugins.get(name);
     if (meta && !meta.isSystem) {
-      meta.enabled = !meta.enabled;
+      this.setPluginState(name, !meta.enabled);
+    }
+  }
+
+  setPluginState(name: string, enabled: boolean) {
+    const meta = this.plugins.get(name);
+    if (meta && !meta.isSystem) {
+      if (meta.enabled === enabled) return; // No change
+
+      meta.enabled = enabled;
       localStorage.setItem(`plugin-enabled-${name}`, JSON.stringify(meta.enabled));
       
       if (meta.enabled && meta.instance.onEnable) {

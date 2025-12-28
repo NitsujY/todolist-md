@@ -6,7 +6,8 @@ import { FileSystemAdapter } from '../adapters/FileSystemAdapter';
 import { GoogleDriveAdapter, type GoogleDriveConfig } from '../adapters/GoogleDriveAdapter';
 import { parseTasks, toggleTaskInMarkdown, addTaskToMarkdown, updateTaskTextInMarkdown, insertTaskAfterInMarkdown, reorderTaskInMarkdown, deleteTaskInMarkdown, updateTaskDescriptionInMarkdown, nestTaskInMarkdown, type Task } from '../lib/MarkdownParser';
 import type { FileMeta } from '../adapters/StorageProvider';
-// import { pluginRegistry } from '../plugins/pluginEngine';
+import { ConfigService } from '../services/ConfigService';
+import { pluginRegistry } from '../plugins/pluginEngine';
 
 type FileCacheEntry = {
   markdown: string;
@@ -19,13 +20,16 @@ interface TodoState {
   markdown: string;
   tasks: Task[];
   storage: StorageProvider;
+  configService: ConfigService;
   isLoading: boolean;
   fileList: string[];
   currentFile: string;
   isFolderMode: boolean;
   compactMode: boolean;
+  sidebarCollapsed: boolean;
   fontSize: 'small' | 'normal' | 'large' | 'xl';
   activeTag: string | null;
+  pluginConfig: Record<string, any>;
 
   // Fast file switching cache (stale-while-revalidate)
   fileCache: Record<string, FileCacheEntry>;
@@ -34,6 +38,9 @@ interface TodoState {
   setActiveTag: (tag: string | null) => void;
   setFontSize: (size: 'small' | 'normal' | 'large' | 'xl') => void;
   setCompactMode: (compact: boolean) => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  togglePlugin: (name: string) => void;
+  setPluginConfig: (name: string, config: any) => void;
   setStorage: (adapterName: 'local' | 'fs' | 'google') => void;
   setGoogleDriveConfig: (config: GoogleDriveConfig) => Promise<void>;
   pickGoogleDriveFolder: () => Promise<void>;
@@ -59,6 +66,9 @@ interface TodoState {
   grantPermission: () => Promise<void>;
   requiresPermission: boolean;
   restorableName: string;
+  
+  // Config Actions
+  syncConfig: () => Promise<void>;
 }
 
 const adapters = {
@@ -103,6 +113,27 @@ export const useTodoStore = create<TodoState>()(
       // Coalesce concurrent reads per file and avoid out-of-order state updates.
       const inFlightReadByFile = new Map<string, Promise<{ content: string | null; meta?: FileMeta }>>();
       let activeReadToken = 0;
+
+      // Initial state
+      const initialState = {
+        markdown: '',
+        tasks: [],
+        storage: adapters.local,
+        configService: new ConfigService(adapters.local),
+        isLoading: false,
+        fileList: [],
+        currentFile: '',
+        isFolderMode: false,
+        compactMode: false,
+        sidebarCollapsed: false,
+        fontSize: 'normal' as const,
+        activeTag: null,
+        pluginConfig: {},
+        fileCache: {},
+        requiresPermission: false,
+        restorableName: '',
+      };
+
 
       const readFileWithMeta = async (filename: string) => {
         const { storage } = get();
@@ -160,28 +191,92 @@ export const useTodoStore = create<TodoState>()(
       };
 
       return ({
-  markdown: '',
-  tasks: [],
-  storage: adapters.local,
-  isLoading: false,
-  fileList: [],
-  currentFile: 'todo.md',
-  isFolderMode: false,
-  compactMode: true,
-  fontSize: 'normal',
-  requiresPermission: false,
-  restorableName: '',
-  activeTag: null,
-  fileCache: {},
+        ...initialState,
 
-  setActiveTag: (tag) => set({ activeTag: tag }),
+        syncConfig: async () => {
+          const { configService } = get();
+          
+          // Migrate local settings if needed (one-time or if missing in config)
+          await configService.migrateFromLocalStorage();
+          
+          const config = await configService.load();
+          
+          // Apply UI settings
+          if (config.ui) {
+            if (config.ui.fontSize) set({ fontSize: config.ui.fontSize });
+            if (config.ui.compactMode !== undefined) set({ compactMode: config.ui.compactMode });
+            if (config.ui.sidebarCollapsed !== undefined) set({ sidebarCollapsed: config.ui.sidebarCollapsed });
+            if (config.ui.theme) {
+               localStorage.setItem('theme', config.ui.theme);
+            }
+            if (config.ui.enabledPlugins) {
+              Object.entries(config.ui.enabledPlugins).forEach(([name, enabled]) => {
+                pluginRegistry.setPluginState(name, enabled);
+              });
+            }
+          }
+          
+          // Apply Plugin settings
+          if (config.plugins) {
+            set({ pluginConfig: config.plugins });
+          }
+        },
 
-  setFontSize: (size) => set({ fontSize: size }),
+        setActiveTag: (tag) => set({ activeTag: tag }),
+        
+        setFontSize: (size) => {
+          set({ fontSize: size });
+          get().configService.update(c => ({ ui: { ...c.ui, fontSize: size } }));
+        },
+        
+        setCompactMode: (compact) => {
+          set({ compactMode: compact });
+          get().configService.update(c => ({ ui: { ...c.ui, compactMode: compact } }));
+        },
 
-  setCompactMode: (compact) => set({ compactMode: compact }),
+        setSidebarCollapsed: (collapsed) => {
+          set({ sidebarCollapsed: collapsed });
+          get().configService.update(c => ({ ui: { ...c.ui, sidebarCollapsed: collapsed } }));
+        },
+
+        togglePlugin: (name) => {
+          pluginRegistry.togglePlugin(name);
+          // Sync new state to config
+          const enabled = pluginRegistry.getPlugins().find(p => p.name === name)?.enabled ?? false;
+          get().configService.update(c => ({ 
+            ui: { 
+              ...c.ui, 
+              enabledPlugins: { 
+                ...(c.ui?.enabledPlugins || {}), 
+                [name]: enabled 
+              } 
+            } 
+          }));
+        },
+
+        setPluginConfig: (name, config) => {
+            set(state => ({
+                pluginConfig: {
+                    ...state.pluginConfig,
+                    [name]: config
+                }
+            }));
+            get().configService.update(c => ({
+                plugins: {
+                    ...(c.plugins || {}),
+                    [name]: config
+                }
+            }));
+        },
+
 
   setStorage: (adapterName) => {
-    set({ storage: adapters[adapterName] });
+    const adapter = adapters[adapterName];
+    set({ 
+      storage: adapter,
+      configService: new ConfigService(adapter)
+    });
+    get().syncConfig();
     localStorage.setItem('active-storage', adapterName);
     
     // Don't auto-load for FS, wait for user action
@@ -525,7 +620,12 @@ export const useTodoStore = create<TodoState>()(
     if (activeStorage === 'google') {
       const config = adapters.google.getConfig();
       if (config) {
-        set({ storage: adapters.google, isFolderMode: true });
+        set({ 
+          storage: adapters.google, 
+          configService: new ConfigService(adapters.google),
+          isFolderMode: true 
+        });
+        get().syncConfig();
         try {
           await adapters.google.init();
           const files = await adapters.google.list('');
@@ -552,7 +652,12 @@ export const useTodoStore = create<TodoState>()(
       const status = await fsAdapter.checkPermissionStatus();
       
       if (status === 'granted') {
-        set({ storage: fsAdapter, isFolderMode: mode === 'folder' });
+        set({ 
+          storage: fsAdapter, 
+          configService: new ConfigService(fsAdapter),
+          isFolderMode: mode === 'folder' 
+        });
+        get().syncConfig();
         if (mode === 'folder') {
           try {
             const files = await fsAdapter.list('');
@@ -578,11 +683,13 @@ export const useTodoStore = create<TodoState>()(
           requiresPermission: true, 
           restorableName: fsAdapter.getHandleName(),
           storage: fsAdapter, // Set storage so we can use it later
+          configService: new ConfigService(fsAdapter),
           isFolderMode: mode === 'folder'
         });
       }
     } else {
       localStorage.setItem('active-storage', 'local');
+      get().syncConfig();
       get().loadTodos();
     }
   },
@@ -593,6 +700,7 @@ export const useTodoStore = create<TodoState>()(
       const granted = await storage.requestPermissionAccess();
       if (granted) {
         set({ requiresPermission: false });
+        get().syncConfig();
         if (isFolderMode) {
           const files = await storage.list('');
           set({ fileList: sortFiles(files) });
