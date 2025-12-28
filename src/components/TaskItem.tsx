@@ -6,8 +6,8 @@ import { useSortable } from '@dnd-kit/sortable';
 import { useDndContext } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Plus, ChevronDown, ChevronRight, Calendar, AlignLeft, Copy, Check } from 'lucide-react';
-import { pluginRegistry } from '../plugins/pluginEngine';
-import type { TaskItemContext } from '../plugins/pluginEngine';
+import { pluginRegistry } from '../plugins/pluginEngine.tsx';
+import type { TaskItemContext } from '../plugins/pluginEngine.tsx';
 import type { Task } from '../lib/MarkdownParser';
 
 interface TaskItemProps {

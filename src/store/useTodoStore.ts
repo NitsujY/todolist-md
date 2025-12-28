@@ -7,7 +7,7 @@ import { GoogleDriveAdapter, type GoogleDriveConfig } from '../adapters/GoogleDr
 import { parseTasks, toggleTaskInMarkdown, addTaskToMarkdown, updateTaskTextInMarkdown, insertTaskAfterInMarkdown, reorderTaskInMarkdown, deleteTaskInMarkdown, updateTaskDescriptionInMarkdown, nestTaskInMarkdown, type Task } from '../lib/MarkdownParser';
 import type { FileMeta } from '../adapters/StorageProvider';
 import { ConfigService } from '../services/ConfigService';
-import { pluginRegistry } from '../plugins/pluginEngine';
+import { pluginRegistry } from '../plugins/pluginEngine.tsx';
 
 type FileCacheEntry = {
   markdown: string;

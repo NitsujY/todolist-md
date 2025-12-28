@@ -88,7 +88,7 @@ This repo may include optional, external utilities (outside the SPA) that operat
     - **Constraint**: Checkboxes and drag handles must align vertically with the first line of text regardless of font size.
 
 ### 4.2 Plugin System
-- **Architecture**: Plugins are registered via a manifest in `src/plugins/pluginManifest.ts` and executed through `pluginEngine.ts`.
+- **Architecture**: Plugins are registered via a manifest in `src/plugins/pluginManifest.ts` and executed through `pluginEngine.tsx`.
 - **Capabilities**:
     - `onTaskRender`: Render custom UI next to tasks.
     - `transformMarkdown`: Modify markdown before parsing (hooks).
