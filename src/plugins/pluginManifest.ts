@@ -90,11 +90,11 @@ export const pluginManifest: PluginManifestEntry[] = [
     exportName: 'AIAssistantPlugin',
     kind: 'value',
   },
-  {
-    id: 'gamify',
-    module: './plugins/gamify-plugin/GamifyPlugin.tsx',
-    exportName: 'GamifyPlugin',
-    kind: 'class',
-    disableWhenEnvEquals: { env: 'VITE_ENABLE_GAMIFY', equals: 'false' },
-  },
+  // {
+  //   id: 'gamify',
+  //   module: './plugins/gamify-plugin/GamifyPlugin.tsx',
+  //   exportName: 'GamifyPlugin',
+  //   kind: 'class',
+  //   disableWhenEnvEquals: { env: 'VITE_ENABLE_GAMIFY', equals: 'false' },
+  // },
 ];
