@@ -203,12 +203,13 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
     }
   }, [task.completed, showCompleted]);
 
-  if (!isVisible) return null;
+  useEffect(() => {
+    if (task.text !== editText && !isEditing) {
+      setEditText(task.text);
+    }
+  }, [task.text, editText, isEditing]);
 
-  // Sync local state with prop when prop changes
-  if (task.text !== editText && !isEditing) {
-    setEditText(task.text);
-  }
+  if (!isVisible) return null;
 
   const handleCopy = async () => {
     const checkbox = task.completed ? '- [x] ' : '- [ ] ';

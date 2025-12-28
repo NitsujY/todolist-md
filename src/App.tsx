@@ -13,7 +13,7 @@ import {
   useSensors,
   DragOverlay,
 } from '@dnd-kit/core';
-import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import type { DragEndEvent, DragStartEvent, DragMoveEvent } from '@dnd-kit/core';
 import {
   SortableContext,
   sortableKeyboardCoordinates,
@@ -94,7 +94,10 @@ function App() {
     setFontSize,
     activeTag,
     setActiveTag,
-    addTask
+    addTask,
+    sidebarCollapsed,
+    setSidebarCollapsed,
+    togglePlugin
   } = useTodoStore();
 
   // Access temporal store for undo/redo
@@ -109,10 +112,10 @@ function App() {
   const [showCompleted, setShowCompleted] = useState(false);
   const [, setPluginUpdate] = useState(0); // Force re-render for plugins
   const [currentTheme, setCurrentTheme] = useState<'light' | 'dark' | 'auto'>('auto');
-  const [showSidebar, setShowSidebar] = useState(() => {
-    const saved = localStorage.getItem('sidebar-collapsed');
-    return saved ? JSON.parse(saved) : true;
-  });
+  
+  // Derived from store state (inverse of collapsed)
+  const showSidebar = !sidebarCollapsed;
+  
   const [peekSidebar, setPeekSidebar] = useState(false);
   const peekCloseTimerRef = useRef<number | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(256);
@@ -148,10 +151,6 @@ function App() {
   const handleFileDragStart = (event: DragStartEvent) => {
     setActiveFileId(event.active.id as string);
   };
-
-  useEffect(() => {
-    localStorage.setItem('sidebar-collapsed', JSON.stringify(showSidebar));
-  }, [showSidebar]);
 
   useEffect(() => {
     if (showSidebar) setPeekSidebar(false);
@@ -198,7 +197,7 @@ function App() {
       if (isResizing) {
         const newWidth = mouseMoveEvent.clientX;
         if (newWidth < 150) {
-          setShowSidebar(false);
+          setSidebarCollapsed(true);
           setIsResizing(false);
         } else if (newWidth >= 200 && newWidth <= 600) {
           setSidebarWidth(newWidth);
@@ -290,7 +289,7 @@ function App() {
   };
 
   const handleTogglePlugin = (name: string) => {
-    pluginRegistry.togglePlugin(name);
+    togglePlugin(name);
     setPluginUpdate(prev => prev + 1);
   };
 
@@ -324,8 +323,9 @@ function App() {
     if (newName && newName !== oldName) {
       try {
         await renameFile(oldName, newName);
-      } catch (e: any) {
-        alert(`Failed to rename file: ${e.message}`);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        alert(`Failed to rename file: ${message}`);
       }
     }
   };
@@ -342,7 +342,7 @@ function App() {
     setDragOffset(0);
   };
 
-  const handleDragMove = (event: any) => {
+  const handleDragMove = (event: DragMoveEvent) => {
     setDragOffset(event.delta.x);
   };
 
@@ -517,7 +517,7 @@ function App() {
         <div className="flex-none">
           {isFolderMode && (
             <button
-              onClick={() => setShowSidebar(!showSidebar)}
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               onMouseEnter={openPeekSidebar}
               onMouseLeave={schedulePeekClose}
               className="btn btn-ghost btn-square btn-sm mr-2"
@@ -804,8 +804,9 @@ function App() {
                                 setDescriptionExpandedById(prev => {
                                   if (expanded) return { ...prev, [taskId]: true };
                                   if (prev[taskId] === undefined) return prev;
-                                  const { [taskId]: _, ...rest } = prev;
-                                  return rest;
+                                  const newPrev = { ...prev };
+                                  delete newPrev[taskId];
+                                  return newPrev;
                                 });
                               }}
                               onAddNext={handleAddNext}

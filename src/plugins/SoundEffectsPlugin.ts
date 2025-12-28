@@ -9,7 +9,7 @@ export class SoundEffectsPlugin implements Plugin {
   // Short "pop" sound
   private completeSound = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAABACQBAAQAAAgAZGF0YQAAAAA='); // Placeholder, will replace with real base64 below
 
-  onInit(_api: PluginAPI) {
+  onInit() {
     // Real "pop" sound
     this.completeSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2578/2578-preview.m4a');
     this.completeSound.volume = 0.4;
