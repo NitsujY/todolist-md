@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import React, { type ReactNode } from 'react';
 import type { Task } from '../lib/MarkdownParser';
 
 export interface TaskItemModeAPI {
@@ -142,19 +142,28 @@ class PluginRegistry {
   renderTaskExtensions(task: Task, context?: { isEditing: boolean }): ReactNode[] {
     return Array.from(this.plugins.values())
       .filter(meta => meta.enabled)
-      .map(meta => meta.instance.onTaskRender ? meta.instance.onTaskRender(task, context) : null)
+      .map(meta => {
+        const node = meta.instance.onTaskRender ? meta.instance.onTaskRender(task, context) : null;
+        return node ? <React.Fragment key={meta.name}>{node}</React.Fragment> : null;
+      })
       .filter(Boolean);
   }
 
   renderTaskActionButtons(task: Task, context: TaskItemContext): ReactNode[] {
     return this.getEnabledPlugins()
-      .map(meta => (meta.instance.renderTaskActionButton ? meta.instance.renderTaskActionButton(task, context) : null))
+      .map(meta => {
+        const node = meta.instance.renderTaskActionButton ? meta.instance.renderTaskActionButton(task, context) : null;
+        return node ? <React.Fragment key={meta.name}>{node}</React.Fragment> : null;
+      })
       .filter(Boolean);
   }
 
   renderDescriptionToolbars(task: Task, context: TaskItemContext): ReactNode[] {
     return this.getEnabledPlugins()
-      .map(meta => (meta.instance.renderDescriptionToolbar ? meta.instance.renderDescriptionToolbar(task, context) : null))
+      .map(meta => {
+        const node = meta.instance.renderDescriptionToolbar ? meta.instance.renderDescriptionToolbar(task, context) : null;
+        return node ? <React.Fragment key={meta.name}>{node}</React.Fragment> : null;
+      })
       .filter(Boolean);
   }
 
@@ -184,7 +193,10 @@ class PluginRegistry {
   renderHeaderButtons(): ReactNode[] {
     return Array.from(this.plugins.values())
       .filter(meta => meta.enabled)
-      .map(meta => meta.instance.renderHeaderButton ? meta.instance.renderHeaderButton() : null)
+      .map(meta => {
+        const node = meta.instance.renderHeaderButton ? meta.instance.renderHeaderButton() : null;
+        return node ? <React.Fragment key={meta.name}>{node}</React.Fragment> : null;
+      })
       .filter(Boolean);
   }
 
@@ -207,7 +219,10 @@ class PluginRegistry {
   getDashboards(): ReactNode[] {
     return Array.from(this.plugins.values())
       .filter(meta => meta.enabled && meta.instance.renderDashboard)
-      .map(meta => meta.instance.renderDashboard!());
+      .map(meta => {
+        const node = meta.instance.renderDashboard!();
+        return node ? <React.Fragment key={meta.name}>{node}</React.Fragment> : null;
+      });
   }
 }
 
