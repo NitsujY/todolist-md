@@ -34,6 +34,58 @@ A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (
     npm run build
     ```
 
+## macOS Reminders Connector (CLI + Background Sync)
+
+This repo includes a small CLI that can sync your Markdown lists into **macOS Reminders**.
+
+How it maps:
+
+- **Folder mode**: each `.md` file becomes a **Reminders list** (named after the filename).
+- Each Markdown task (`- [ ]` / `- [x]`) becomes a reminder in that list.
+
+### 1) Run once (to grant permissions)
+
+```bash
+npm install
+npm run reminders:sync -- --dir /absolute/path/to/your/todo-folder
+```
+
+macOS will likely prompt for permission to allow `osascript`/Terminal to control Reminders.
+
+### 2) Run as a background daemon (launchd)
+
+1. Copy the template:
+
+```bash
+cp scripts/reminders/com.todolistmd.reminders-sync.plist.template \
+    ~/Library/LaunchAgents/com.todolistmd.reminders-sync.plist
+```
+
+2. Edit `~/Library/LaunchAgents/com.todolistmd.reminders-sync.plist` and replace:
+
+- `__REPO_PATH__` with your repo path (example: `/Users/you/Devel/todolist-md`)
+- `__TODO_FOLDER__` with your markdown folder (example: `/Users/you/Todos`)
+- `__HOME__` with your home directory path
+
+3. Load the agent:
+
+```bash
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.todolistmd.reminders-sync.plist 2>/dev/null || true
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.todolistmd.reminders-sync.plist
+launchctl kickstart -k gui/$(id -u)/com.todolistmd.reminders-sync
+```
+
+To check logs:
+
+- `~/Library/Logs/todolistmd-reminders-sync.out.log`
+- `~/Library/Logs/todolistmd-reminders-sync.err.log`
+
+### Notes / limitations
+
+- This sync is **Markdown → Reminders** (one-way).
+- It uses a stable ID stored in each reminder’s notes (`todolist-md:id=...`) to avoid duplicates.
+- It only works with **real markdown files** on disk (File System / folder mode is ideal). LocalStorage-only lists aren’t directly accessible from a CLI.
+
 ## Submodule Note (AI Assistant)
 
 The AI Assistant is a git submodule at `src/plugins/ai-assistant`. If you change it, you must push the submodule commit before pushing the parent repo submodule pointer (otherwise CI can fail with a missing ref).
