@@ -5,9 +5,9 @@ import remarkBreaks from 'remark-breaks';
 import { useSortable } from '@dnd-kit/sortable';
 import { useDndContext } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Plus, ChevronDown, ChevronRight, Calendar, AlignLeft, Copy, Check } from 'lucide-react';
-import { pluginRegistry } from '../plugins/pluginEngine';
-import type { TaskItemContext } from '../plugins/pluginEngine';
+import { GripVertical, Plus, ChevronDown, ChevronRight, Calendar, AlignLeft, Copy, Check, Link2 } from 'lucide-react';
+import { pluginRegistry } from '../plugins/pluginEngine.tsx';
+import type { TaskItemContext } from '../plugins/pluginEngine.tsx';
 import type { Task } from '../lib/MarkdownParser';
 
 interface TaskItemProps {
@@ -53,6 +53,8 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
   const [isPreviewMode, setIsPreviewMode] = useState(false);
+
+  const isRemindersLinked = !!task.reminders;
 
   // Generic per-task modes for plugins (e.g. Zen Mode)
   const [modes, setModes] = useState<Record<string, boolean>>({});
@@ -203,12 +205,13 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
     }
   }, [task.completed, showCompleted]);
 
-  if (!isVisible) return null;
+  useEffect(() => {
+    if (task.text !== editText && !isEditing) {
+      setEditText(task.text);
+    }
+  }, [task.text, editText, isEditing]);
 
-  // Sync local state with prop when prop changes
-  if (task.text !== editText && !isEditing) {
-    setEditText(task.text);
-  }
+  if (!isVisible) return null;
 
   const handleCopy = async () => {
     const checkbox = task.completed ? '- [x] ' : '- [ ] ';
@@ -628,6 +631,16 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
                 {getDisplayText(task.text)}
               </ReactMarkdown>
             </div>
+          )}
+
+          {isRemindersLinked && (
+            <span
+              className="flex items-center text-base-content/40"
+              title="Linked to Reminders"
+              aria-label="Linked to Reminders"
+            >
+              <Link2 size={14} />
+            </span>
           )}
           
           {/* Plugin Extensions (rendered further down with exit handler) */}

@@ -91,10 +91,17 @@ export const pluginManifest: PluginManifestEntry[] = [
     kind: 'value',
   },
   {
-    id: 'gamify',
-    module: './plugins/gamify-plugin/GamifyPlugin.tsx',
-    exportName: 'GamifyPlugin',
+    id: 'reminders-link',
+    module: './plugins/RemindersLinkPlugin.tsx',
+    exportName: 'RemindersLinkPlugin',
     kind: 'class',
-    disableWhenEnvEquals: { env: 'VITE_ENABLE_GAMIFY', equals: 'false' },
+    defaultEnabled: false,
   },
+  // {
+  //   id: 'gamify',
+  //   module: './plugins/gamify-plugin/GamifyPlugin.tsx',
+  //   exportName: 'GamifyPlugin',
+  //   kind: 'class',
+  //   disableWhenEnvEquals: { env: 'VITE_ENABLE_GAMIFY', equals: 'false' },
+  // },
 ];

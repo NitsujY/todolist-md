@@ -17,6 +17,13 @@ dist-ssr
 .env.*
 !.env.example
 
+# Local Config
+reminders.config.json
+todolist.config.json
+.todolist.config.json
+.todolist-md.config.json
+.todolist-md.reminders-index.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

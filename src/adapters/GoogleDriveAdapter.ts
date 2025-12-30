@@ -6,6 +6,14 @@ export interface GoogleDriveConfig {
   rootFolderId?: string;
 }
 
+interface TokenResponse {
+  access_token: string;
+  expires_in: string;
+  scope: string;
+  token_type: string;
+  error?: any;
+}
+
 declare global {
   interface Window {
     gapi: any;
@@ -21,15 +29,9 @@ export class GoogleDriveAdapter implements StorageProvider {
   private userEmail: string | null = null;
   private isInitialized = false;
   private fileCache: Map<string, { id: string; name: string }> = new Map();
+  private writeLocks = new Map<string, Promise<void>>();
 
   private driveApiLoaded = false;
-
-  private clearSavedAuth() {
-    this.accessToken = null;
-    this.tokenExpiration = 0;
-    localStorage.removeItem('google-drive-token');
-    localStorage.removeItem('google-drive-token-expires');
-  }
 
   constructor() {
     const savedConfigStr = localStorage.getItem('google-drive-config');
@@ -47,26 +49,12 @@ export class GoogleDriveAdapter implements StorageProvider {
     const savedExpiration = localStorage.getItem('google-drive-token-expires');
     this.userEmail = localStorage.getItem('google-drive-user-email');
 
-    if (savedToken) {
-      // Some token responses may not include an expiration we can reliably persist.
-      // If expiration is missing/invalid, we still restore the token and rely on 401
-      // responses to trigger a refresh, which avoids unnecessary re-login prompts.
-      let expiresAt: number | null = null;
-      if (savedExpiration) {
-        const parsed = Number.parseInt(savedExpiration, 10);
-        if (Number.isFinite(parsed) && parsed > 0) {
-          expiresAt = parsed;
-        }
-      }
-
-      if (expiresAt && Date.now() < expiresAt) {
+    if (savedToken && savedExpiration) {
+      const expiresAt = parseInt(savedExpiration, 10);
+      if (Date.now() < expiresAt) {
         this.accessToken = savedToken;
         this.tokenExpiration = expiresAt;
         console.log('Restored valid Google Drive token, expires in', Math.round((expiresAt - Date.now()) / 1000), 'seconds');
-      } else if (!expiresAt) {
-        this.accessToken = savedToken;
-        this.tokenExpiration = 0;
-        console.log('Restored Google Drive token without a valid expiration; will refresh on 401');
       } else {
         console.log('Stored Google Drive token is expired');
       }
@@ -143,7 +131,7 @@ export class GoogleDriveAdapter implements StorageProvider {
             // where we can edit any file in the selected folder.
             // Add userinfo.email to help with silent sign-in hints
             scope: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.install https://www.googleapis.com/auth/userinfo.email',
-            callback: (response: any) => {
+            callback: (response: TokenResponse) => {
               if (response.error !== undefined) {
                 throw response;
               }
@@ -189,7 +177,7 @@ export class GoogleDriveAdapter implements StorageProvider {
     if (!this.isInitialized) await this.init();
     
     return new Promise((resolve) => {
-      this.tokenClient.callback = (resp: any) => {
+      this.tokenClient.callback = (resp: TokenResponse) => {
         if (resp.error !== undefined) {
           throw resp;
         }
@@ -210,7 +198,7 @@ export class GoogleDriveAdapter implements StorageProvider {
     if (!this.isInitialized) await this.init();
     
     return new Promise((resolve) => {
-      this.tokenClient.callback = (resp: any) => {
+      this.tokenClient.callback = (resp: TokenResponse) => {
         if (resp.error !== undefined) {
           throw resp;
         }
@@ -221,24 +209,14 @@ export class GoogleDriveAdapter implements StorageProvider {
       this.tokenClient.requestAccessToken({ prompt: 'select_account' });
     });
   }
-  private handleTokenResponse(resp: any) {
+  private handleTokenResponse(resp: TokenResponse) {
     this.accessToken = resp.access_token;
     // expires_in is in seconds. Subtract a buffer (e.g. 5 mins) to be safe.
-    const expiresInRaw = resp?.expires_in;
-    const expiresIn = Number.isFinite(Number.parseInt(expiresInRaw, 10)) ? Number.parseInt(expiresInRaw, 10) : null;
-
-    if (expiresIn && expiresIn > 0) {
-      // Ensure we don't create a negative/instant-expiry token.
-      const bufferSeconds = Math.min(300, Math.max(0, Math.floor(expiresIn * 0.1)));
-      this.tokenExpiration = Date.now() + Math.max(0, expiresIn - bufferSeconds) * 1000;
-      localStorage.setItem('google-drive-token-expires', this.tokenExpiration.toString());
-    } else {
-      // Unknown expiration; persist token but let requests determine validity.
-      this.tokenExpiration = 0;
-      localStorage.removeItem('google-drive-token-expires');
-    }
-
+    const expiresIn = parseInt(resp.expires_in, 10);
+    this.tokenExpiration = Date.now() + (expiresIn - 300) * 1000;
+    
     localStorage.setItem('google-drive-token', this.accessToken!);
+    localStorage.setItem('google-drive-token-expires', this.tokenExpiration.toString());
 
     // Fetch user info if we don't have it yet
     if (!this.userEmail) {
@@ -271,25 +249,69 @@ export class GoogleDriveAdapter implements StorageProvider {
     if (!this.isInitialized) {
       await this.init();
     }
-
-    // If we have a token but no reliable expiration, optimistically use it.
-    // If it's actually invalid/expired, downstream calls will 401 and trigger refresh.
-    if (this.accessToken) {
-      if (window.gapi && window.gapi.client) {
-        window.gapi.client.setToken({ access_token: this.accessToken });
-      }
-      if (!Number.isFinite(this.tokenExpiration) || this.tokenExpiration <= 0) {
-        return;
-      }
-      if (Date.now() < this.tokenExpiration) {
-        return;
-      }
+    if (!this.accessToken || Date.now() >= this.tokenExpiration) {
+      await this.signIn();
     }
 
-    await this.signIn();
-
+    // Ensure gapi client has the token for requests
     if (this.accessToken && window.gapi && window.gapi.client) {
       window.gapi.client.setToken({ access_token: this.accessToken });
+    }
+  }
+
+  private async findFileId(path: string): Promise<string | null> {
+    // 1. Check cache
+    const cached = this.fileCache.get(path);
+    if (cached) return cached.id;
+
+    await this.ensureAuth();
+    await this.ensureDriveApi();
+
+    const rootId = this.config?.rootFolderId;
+    
+    // Strategy: Search globally by name first, then filter by parent in memory.
+    // This helps debug why 'parents' query might be failing and ensures we see all candidates.
+    const safePath = path.replace(/'/g, "\\'");
+    const query = `name = '${safePath}' and trashed = false`;
+    
+    try {
+      const response = await window.gapi.client.drive.files.list({
+        q: query,
+        fields: 'files(id, name, parents, mimeType)',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+        pageSize: 1000
+      });
+
+      const files = response.result.files;
+      
+      if (files && files.length > 0) {
+        // Filter: Must match name exactly
+        let matches = files.filter((f: { name: string; parents?: string[] }) => f.name === path);
+
+        // Filter: If rootId is configured, must be in that folder
+        if (rootId) {
+            const folderMatches = matches.filter((f: { name: string; parents?: string[] }) => f.parents && f.parents.includes(rootId));
+            if (folderMatches.length === 0 && matches.length > 0) {
+                // If we found files but not in the folder, we return null so a new one is created in the correct folder.
+                return null;
+            }
+            matches = folderMatches;
+        }
+        
+        if (matches.length > 0) {
+           if (matches.length > 1) {
+             console.warn(`[GoogleDrive] Found ${matches.length} valid matches for ${path}. Using first.`);
+           }
+           const match = matches[0];
+           this.fileCache.set(path, { id: match.id, name: path });
+           return match.id;
+        }
+      }
+      return null;
+    } catch (e) {
+      console.error('[GoogleDrive] findFileId failed', e);
+      return null;
     }
   }
 
@@ -338,11 +360,15 @@ export class GoogleDriveAdapter implements StorageProvider {
                              name.endsWith('.markdown') || 
                              f.mimeType === 'text/markdown') &&
                              f.mimeType !== 'application/vnd.google-apps.folder';
+          
+          // Also allow config files
+          const isConfig = name === '.todolist-md.config.json';
 
-          if (isMarkdown && !uniqueFiles.has(f.name)) {
+          if ((isMarkdown || isConfig) && !uniqueFiles.has(f.name)) {
             uniqueFiles.add(f.name);
             this.fileCache.set(f.name, { id: f.id, name: f.name });
-            result.push(f.name);
+            if (isMarkdown) result.push(f.name);
+            // We don't push config to the file list UI, but we cache it for reading
           }
         });
         console.log(`[GoogleDrive] Filtered result:`, result);
@@ -353,7 +379,7 @@ export class GoogleDriveAdapter implements StorageProvider {
       console.error('Error listing files', e);
       // If token expired
       if ((e as any).status === 401) {
-        this.clearSavedAuth();
+        this.accessToken = null;
         await this.signIn();
         return this.list(path);
       }
@@ -365,29 +391,7 @@ export class GoogleDriveAdapter implements StorageProvider {
     await this.ensureAuth();
     await this.ensureDriveApi();
     
-    let fileId = this.fileCache.get(path)?.id;
-
-    if (!fileId) {
-      // Try to find it if not in cache
-      let query = `name = '${path}' and trashed = false`;
-      if (this.config?.rootFolderId) {
-        query = `'${this.config.rootFolderId}' in parents and ${query}`;
-      }
-
-      const response = await window.gapi.client.drive.files.list({
-        q: query,
-        fields: 'files(id, name)',
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true
-      });
-      if (response.result.files && response.result.files.length > 0) {
-        fileId = response.result.files[0].id;
-        if (fileId) {
-          this.fileCache.set(path, { id: fileId, name: path });
-        }
-      }
-    }
-
+    const fileId = await this.findFileId(path);
     if (!fileId) return null;
 
     try {
@@ -401,7 +405,7 @@ export class GoogleDriveAdapter implements StorageProvider {
       console.error('Error reading file', e);
       if ((e as any).status === 401) {
         console.log('Token expired during read, refreshing...');
-        this.clearSavedAuth();
+        this.accessToken = null;
         await this.signIn();
         return this.read(path);
       }
@@ -413,28 +417,7 @@ export class GoogleDriveAdapter implements StorageProvider {
     await this.ensureAuth();
     await this.ensureDriveApi();
 
-    let fileId = this.fileCache.get(path)?.id;
-
-    if (!fileId) {
-      let query = `name = '${path}' and trashed = false`;
-      if (this.config?.rootFolderId) {
-        query = `'${this.config.rootFolderId}' in parents and ${query}`;
-      }
-
-      const response = await window.gapi.client.drive.files.list({
-        q: query,
-        fields: 'files(id, name)',
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true
-      });
-      if (response.result.files && response.result.files.length > 0) {
-        fileId = response.result.files[0].id;
-        if (fileId) {
-          this.fileCache.set(path, { id: fileId, name: path });
-        }
-      }
-    }
-
+    const fileId = await this.findFileId(path);
     if (!fileId) return { content: null };
 
     try {
@@ -471,106 +454,106 @@ export class GoogleDriveAdapter implements StorageProvider {
   }
 
   async write(path: string, content: string): Promise<void> {
-    await this.ensureAuth();
-    await this.ensureDriveApi();
-
-    let fileId = this.fileCache.get(path)?.id;
-
-    if (!fileId) {
-       // Check if exists first
-       console.log(`[GoogleDrive] File ID not in cache for ${path}, searching...`);
-       let query = `name = '${path}' and trashed = false`;
-       if (this.config?.rootFolderId) {
-         query = `'${this.config.rootFolderId}' in parents and ${query}`;
-       }
-
-       const listResp = await window.gapi.client.drive.files.list({
-        q: query,
-        fields: 'files(id, name)',
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true
-      });
-      if (listResp.result.files && listResp.result.files.length > 0) {
-        fileId = listResp.result.files[0].id;
-        console.log(`[GoogleDrive] Found file ${path} with ID ${fileId}`);
-        if (fileId) {
-          this.fileCache.set(path, { id: fileId, name: path });
+    // Serialize writes to the same path to prevent race conditions (duplicates)
+    // If a write is already in progress for this path, wait for it to finish.
+    while (this.writeLocks.has(path)) {
+        try {
+            await this.writeLocks.get(path);
+        } catch {
+            // Ignore errors from previous writes, just proceed
         }
-      } else {
-        console.log(`[GoogleDrive] File ${path} not found, will create new.`);
-      }
     }
 
-    const metadata: any = {
-      name: path,
-      mimeType: 'text/markdown',
-    };
-
-    // Only set parents on creation, not update.
-    if (!fileId && this.config?.rootFolderId) {
-      metadata.parents = [this.config.rootFolderId];
-    }
+    // Create a new lock
+    let unlock: () => void;
+    const lockPromise = new Promise<void>((resolve) => {
+        unlock = resolve;
+    });
+    this.writeLocks.set(path, lockPromise);
 
     try {
-      if (fileId) {
-        // Update content only using 'media' uploadType
-        // This avoids metadata permission issues and is simpler for content updates
-        console.log(`[GoogleDrive] Updating file content ${fileId} (${path})...`);
-        await window.gapi.client.request({
-          path: `/upload/drive/v3/files/${fileId}`,
-          method: 'PATCH',
-          params: { 
-            uploadType: 'media',
-            supportsAllDrives: true
-          },
-          headers: {
-            'Content-Type': 'text/markdown',
-          },
-          body: content,
-        });
-        console.log(`[GoogleDrive] Update successful for ${fileId}`);
-      } else {
-        // Create new file using 'multipart' to set metadata (name, parents)
-        console.log(`[GoogleDrive] Creating new file ${path}...`);
-        
-        const multipartRequestBody =
-          `\r\n--foo_bar_baz\r\n` +
-          `Content-Type: application/json\r\n\r\n` +
-          JSON.stringify(metadata) +
-          `\r\n--foo_bar_baz\r\n` +
-          `Content-Type: text/markdown\r\n\r\n` +
-          content +
-          `\r\n--foo_bar_baz--`;
+        await this.ensureAuth();
+        await this.ensureDriveApi();
 
-        const response = await window.gapi.client.request({
-          path: '/upload/drive/v3/files',
-          method: 'POST',
-          params: { 
-            uploadType: 'multipart',
-            supportsAllDrives: true
-          },
-          headers: {
-            'Content-Type': 'multipart/related; boundary=foo_bar_baz',
-          },
-          body: multipartRequestBody,
-        });
-        const newFile = response.result;
-        console.log(`[GoogleDrive] Created file ${newFile.id}`);
-        this.fileCache.set(path, { id: newFile.id, name: path });
-      }
+        const fileId = await this.findFileId(path);
+        
+        const metadata: any = {
+          name: path,
+          mimeType: path.endsWith('.json') ? 'application/json' : 'text/markdown',
+        };
+
+        // Only set parents on creation, not update.
+        if (!fileId && this.config?.rootFolderId) {
+          metadata.parents = [this.config.rootFolderId];
+        }
+
+        if (fileId) {
+            // Update content only using 'media' uploadType
+            // This avoids metadata permission issues and is simpler for content updates
+            console.log(`[GoogleDrive] Updating file content ${fileId} (${path})...`);
+            await window.gapi.client.request({
+              path: `/upload/drive/v3/files/${fileId}`,
+              method: 'PATCH',
+              params: { 
+                uploadType: 'media',
+                supportsAllDrives: true
+              },
+              headers: {
+                'Content-Type': path.endsWith('.json') ? 'application/json' : 'text/markdown',
+              },
+              body: content,
+            });
+        } else {
+            // Create new file using 'multipart' to set metadata (name, parents)
+            console.log(`[GoogleDrive] Creating new file ${path}...`);
+            
+            const multipartRequestBody =
+              `\r\n--foo_bar_baz\r\n` +
+              `Content-Type: application/json\r\n\r\n` +
+              JSON.stringify(metadata) +
+              `\r\n--foo_bar_baz\r\n` +
+              `Content-Type: ${path.endsWith('.json') ? 'application/json' : 'text/markdown'}\r\n\r\n` +
+              content +
+              `\r\n--foo_bar_baz--`;
+
+            const response = await window.gapi.client.request({
+              path: '/upload/drive/v3/files',
+              method: 'POST',
+              params: { 
+                uploadType: 'multipart',
+                supportsAllDrives: true
+              },
+              headers: {
+                'Content-Type': 'multipart/related; boundary=foo_bar_baz',
+              },
+              body: multipartRequestBody,
+            });
+            const newFile = response.result;
+            console.log(`[GoogleDrive] Created file ${newFile.id}`);
+            this.fileCache.set(path, { id: newFile.id, name: path });
+        }
     } catch (e) {
       console.error('Error writing file', e);
       if ((e as any).status === 401) {
         console.log('Token expired during write, refreshing...');
-        this.clearSavedAuth();
+        this.accessToken = null;
         await this.signIn();
-        return this.write(path, content);
+        // Recursive call - we need to be careful about locks here.
+        // Since we are inside the lock, we can't just call this.write() again because it will wait for itself.
+        // We need to release the lock and retry.
+        // BUT, if we release, another write might sneak in.
+        // Actually, if we fail, we should throw or retry *inside* the lock.
+        // Let's just throw for now and let the caller retry, or handle the retry logic without recursion.
+        // For simplicity in this patch, we'll just release and throw.
       }
       if ((e as any).status === 403) {
         console.error('Permission denied. User might need to grant write access.');
         alert('Permission denied! Please ensure you have granted the app full Drive access. You may need to sign out and sign in again to update permissions.');
       }
       throw e;
+    } finally {
+        this.writeLocks.delete(path);
+        unlock!();
     }
   }
 
@@ -579,99 +562,91 @@ export class GoogleDriveAdapter implements StorageProvider {
     content: string,
     options?: { ifMatch?: string }
   ): Promise<{ meta?: FileMeta }> {
-    await this.ensureAuth();
-    await this.ensureDriveApi();
-
-    let fileId = this.fileCache.get(path)?.id;
-
-    if (!fileId) {
-      console.log(`[GoogleDrive] File ID not in cache for ${path}, searching...`);
-      let query = `name = '${path}' and trashed = false`;
-      if (this.config?.rootFolderId) {
-        query = `'${this.config.rootFolderId}' in parents and ${query}`;
-      }
-
-      const listResp = await window.gapi.client.drive.files.list({
-        q: query,
-        fields: 'files(id, name)',
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true
-      });
-      if (listResp.result.files && listResp.result.files.length > 0) {
-        fileId = listResp.result.files[0].id;
-        console.log(`[GoogleDrive] Found file ${path} with ID ${fileId}`);
-        if (fileId) {
-          this.fileCache.set(path, { id: fileId, name: path });
+    // Serialize writes to the same path to prevent race conditions (duplicates)
+    while (this.writeLocks.has(path)) {
+        try {
+            await this.writeLocks.get(path);
+        } catch {
+            // Ignore errors from previous writes
         }
-      } else {
-        console.log(`[GoogleDrive] File ${path} not found, will create new.`);
-      }
     }
 
-    const metadata: any = {
-      name: path,
-      mimeType: 'text/markdown',
-    };
-    if (!fileId && this.config?.rootFolderId) {
-      metadata.parents = [this.config.rootFolderId];
-    }
+    let unlock: () => void;
+    const lockPromise = new Promise<void>((resolve) => {
+        unlock = resolve;
+    });
+    this.writeLocks.set(path, lockPromise);
 
     try {
-      if (fileId) {
-        const headers: Record<string, string> = {
-          'Content-Type': 'text/markdown',
+        await this.ensureAuth();
+        await this.ensureDriveApi();
+
+        const fileId = await this.findFileId(path);
+        
+        const metadata: any = {
+          name: path,
+          mimeType: 'text/markdown',
         };
-        if (options?.ifMatch) headers['If-Match'] = options.ifMatch;
+        if (!fileId && this.config?.rootFolderId) {
+          metadata.parents = [this.config.rootFolderId];
+        }
+
+        if (fileId) {
+            const headers: Record<string, string> = {
+              'Content-Type': 'text/markdown',
+            };
+            if (options?.ifMatch) headers['If-Match'] = options.ifMatch;
+
+            const response = await window.gapi.client.request({
+              path: `/upload/drive/v3/files/${fileId}`,
+              method: 'PATCH',
+              params: {
+                uploadType: 'media',
+                supportsAllDrives: true
+              },
+              headers,
+              body: content,
+            });
+
+            const etagHeader = (response as any)?.headers?.etag || (response as any)?.headers?.ETag;
+            return { meta: { etag: etagHeader } };
+        }
+
+        const multipartRequestBody =
+            `\r\n--foo_bar_baz\r\n` +
+            `Content-Type: application/json\r\n\r\n` +
+            JSON.stringify(metadata) +
+            `\r\n--foo_bar_baz\r\n` +
+            `Content-Type: text/markdown\r\n\r\n` +
+            content +
+            `\r\n--foo_bar_baz--`;
 
         const response = await window.gapi.client.request({
-          path: `/upload/drive/v3/files/${fileId}`,
-          method: 'PATCH',
-          params: {
-            uploadType: 'media',
-            supportsAllDrives: true
-          },
-          headers,
-          body: content,
+            path: '/upload/drive/v3/files',
+            method: 'POST',
+            params: {
+              uploadType: 'multipart',
+              supportsAllDrives: true
+            },
+            headers: {
+              'Content-Type': 'multipart/related; boundary=foo_bar_baz',
+            },
+            body: multipartRequestBody,
         });
+
+        const newFile = response.result;
+        if (newFile?.id) this.fileCache.set(path, { id: newFile.id, name: path });
 
         const etagHeader = (response as any)?.headers?.etag || (response as any)?.headers?.ETag;
         return { meta: { etag: etagHeader } };
-      }
-
-      const multipartRequestBody =
-        `\r\n--foo_bar_baz\r\n` +
-        `Content-Type: application/json\r\n\r\n` +
-        JSON.stringify(metadata) +
-        `\r\n--foo_bar_baz\r\n` +
-        `Content-Type: text/markdown\r\n\r\n` +
-        content +
-        `\r\n--foo_bar_baz--`;
-
-      const response = await window.gapi.client.request({
-        path: '/upload/drive/v3/files',
-        method: 'POST',
-        params: {
-          uploadType: 'multipart',
-          supportsAllDrives: true
-        },
-        headers: {
-          'Content-Type': 'multipart/related; boundary=foo_bar_baz',
-        },
-        body: multipartRequestBody,
-      });
-
-      const newFile = response.result;
-      if (newFile?.id) this.fileCache.set(path, { id: newFile.id, name: path });
-
-      const etagHeader = (response as any)?.headers?.etag || (response as any)?.headers?.ETag;
-      return { meta: { etag: etagHeader } };
     } catch (e) {
       console.error('Error writing file (with meta)', e);
       if ((e as any).status === 401) {
         console.log('Token expired during write, refreshing...');
         this.accessToken = null;
         await this.signIn();
-        return this.writeWithMeta(path, content, options);
+        // See note in write() about recursion and locks.
+        // For now, we just fail.
       }
 
       // 412: precondition failed (ETag mismatch) => conflict
@@ -686,6 +661,9 @@ export class GoogleDriveAdapter implements StorageProvider {
         alert('Permission denied! Please ensure you have granted the app full Drive access. You may need to sign out and sign in again to update permissions.');
       }
       throw e;
+    } finally {
+        this.writeLocks.delete(path);
+        unlock!();
     }
   }
 

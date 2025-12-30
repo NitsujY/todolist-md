@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.todolistmd.reminders-sync</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>/bin/zsh</string>
+      <string>-lc</string>
+      <!--
+        Update paths:
+        - REPO_PATH: where you cloned todolist-md
+        - TODO_FOLDER: the folder containing your .md list files
+
+        Example:
+        cd /Users/you/Devel/todolist-md && npm run reminders:sync -- --dir /Users/you/Todos
+      -->
+      <string>cd __REPO_PATH__ &amp;&amp; npm run reminders:sync -- --dir __TODO_FOLDER__</string>
+    </array>
+
+    <!-- Run every 300 seconds (5 minutes) -->
+    <key>StartInterval</key>
+    <integer>300</integer>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>__HOME__/Library/Logs/todolistmd-reminders-sync.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__HOME__/Library/Logs/todolistmd-reminders-sync.err.log</string>
+  </dict>
+</plist>

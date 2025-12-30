@@ -12,7 +12,64 @@ export interface Task {
   description?: string;
   tags?: string[];
   depth: number;
+
+  // Hidden integration metadata (kept in Markdown as HTML comments).
+  reminders?: {
+    list?: string;
+    uuid?: string; // x-apple-reminder://...
+  };
 }
+
+type RemindersMarker = {
+  v: 1;
+  list?: string;
+  uuid?: string;
+};
+
+const REMINDERS_TASK_MARKER_PREFIX = 'todolistmd-reminders:';
+const REMINDERS_FILE_MARKER_PREFIX = 'todolistmd-reminders-file:';
+
+const parseJsonMarker = <T,>(raw: string): T | null => {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+};
+
+const extractRemindersTaskMarker = (text: string): { cleanText: string; marker: RemindersMarker | null } => {
+  // Marker format: <!--todolistmd-reminders:{"v":1,"list":"Yuhome","uuid":"..."}-->
+  const re = /\s*<!--\s*todolistmd-reminders:([\s\S]*?)\s*-->\s*$/;
+  const m = String(text ?? '').match(re);
+  if (!m) return { cleanText: String(text ?? ''), marker: null };
+  const marker = parseJsonMarker<RemindersMarker>(m[1]);
+  const cleanText = String(text ?? '').replace(re, '').trimEnd();
+  return { cleanText, marker: marker && marker.v === 1 ? marker : null };
+};
+
+const extractRemindersFileMarker = (markdown: string): RemindersMarker | null => {
+  // Marker format (file-level): <!--todolistmd-reminders-file:{"v":1,"list":"Yuhome"}-->
+  const re = /<!--\s*todolistmd-reminders-file:([\s\S]*?)\s*-->/;
+  const m = markdown.match(re);
+  if (!m) return null;
+  const marker = parseJsonMarker<RemindersMarker>(m[1]);
+  return marker && marker.v === 1 ? marker : null;
+};
+
+const upsertRemindersFileMarker = (markdown: string, listName?: string): string => {
+  const marker: RemindersMarker = { v: 1, list: listName };
+  const line = `<!--${REMINDERS_FILE_MARKER_PREFIX}${JSON.stringify(marker)}-->`;
+  const re = new RegExp(`<!--\\s*${REMINDERS_FILE_MARKER_PREFIX}[\\s\\S]*?\\s*-->`, 'g');
+  if (re.test(markdown)) {
+    return markdown.replace(re, line);
+  }
+  // Insert at the very top to keep it discoverable and hidden.
+  return `${line}\n${markdown}`;
+};
+
+const buildRemindersTaskMarker = (marker: RemindersMarker) => {
+  return `<!--${REMINDERS_TASK_MARKER_PREFIX}${JSON.stringify(marker)}-->`;
+};
 
 const maskAIVoiceHiddenSections = (markdown: string) => {
   // Hide AI voice capture blocks from the task/list view, but preserve the
@@ -168,11 +225,12 @@ export const parseTasks = (markdown: string): Task[] => {
       }
 
       if (isTask) {
-        const id = `${node.position?.start.line}-${text.substring(0, 10)}`;
+        const { cleanText, marker } = extractRemindersTaskMarker(text);
+        const id = `${node.position?.start.line}-${cleanText.substring(0, 10)}`;
         const tags: string[] = [];
         const tagRegex = /(?<!\\)#([a-zA-Z0-9_]+)/g;
         let match;
-        while ((match = tagRegex.exec(text)) !== null) {
+        while ((match = tagRegex.exec(cleanText)) !== null) {
           tags.push(match[1]);
         }
 
@@ -197,12 +255,13 @@ export const parseTasks = (markdown: string): Task[] => {
 
         tasks.push({
           id,
-          text,
+          text: cleanText,
           completed: checked,
           type: 'task',
           description: description || undefined,
           tags,
-          depth: currentDepth
+          depth: currentDepth,
+          reminders: marker ? { list: marker.list, uuid: marker.uuid } : undefined,
         });
       }
     }
@@ -260,6 +319,123 @@ export const parseTasks = (markdown: string): Task[] => {
   return tasks;
 };
 
+export const hasRemindersFileMarker = (markdown: string): boolean => {
+  return extractRemindersFileMarker(markdown) !== null;
+};
+
+export const getRemindersListNameFromFileMarker = (markdown: string): string | undefined => {
+  return extractRemindersFileMarker(markdown)?.list;
+};
+
+export const ensureRemindersFileMarker = (markdown: string, listName?: string): string => {
+  return upsertRemindersFileMarker(markdown, listName);
+};
+
+export const setRemindersLinkInMarkdown = (
+  markdown: string,
+  taskId: string,
+  link: { list?: string; uuid?: string } | null,
+): string => {
+  const processor = createProcessor();
+  const tree = processor.parse(markdown) as Root;
+
+  const markerNodeValue = link
+    ? buildRemindersTaskMarker({ v: 1, list: link.list, uuid: link.uuid })
+    : null;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const visit = (node: any) => {
+    if (node.type === 'listItem') {
+      let isTask = false;
+      let text = '';
+
+      if (typeof node.checked === 'boolean') {
+        isTask = true;
+      }
+
+      if (node.children && node.children.length > 0) {
+        const p = node.children[0];
+        if (p.type === 'paragraph' && p.children && p.children.length > 0) {
+          text = p.children.map((c: any) => c.value || '').join('');
+        }
+      }
+
+      if (isTask) {
+        const { cleanText } = extractRemindersTaskMarker(text);
+        const id = `${node.position?.start.line}-${cleanText.substring(0, 10)}`;
+        if (id === taskId) {
+          const p = node.children?.[0];
+          if (!p || p.type !== 'paragraph') return;
+
+          // Remove existing reminders marker html nodes.
+          p.children = (p.children || []).filter((c: any) => {
+            if (c.type !== 'html') return true;
+            return !String(c.value || '').includes(REMINDERS_TASK_MARKER_PREFIX);
+          });
+
+          if (markerNodeValue) {
+            // Ensure a space before the marker so it's stable in markdown.
+            const last = p.children[p.children.length - 1];
+            if (!last || last.type !== 'text' || !String(last.value || '').endsWith(' ')) {
+              p.children.push({ type: 'text', value: ' ' });
+            }
+            p.children.push({ type: 'html', value: markerNodeValue });
+          }
+        }
+      }
+    }
+
+    if (node.children) node.children.forEach(visit);
+  };
+
+  visit(tree);
+  return processor.stringify(tree);
+};
+
+export const linkAllTasksToRemindersInMarkdown = (
+  markdown: string,
+  taskIds: string[],
+  listName?: string,
+): string => {
+  const processor = createProcessor();
+  const tree = processor.parse(markdown) as Root;
+  const idSet = new Set(taskIds);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const visit = (node: any) => {
+    if (node.type === 'listItem') {
+      let isTask = false;
+      let text = '';
+      if (typeof node.checked === 'boolean') isTask = true;
+      if (node.children && node.children.length > 0) {
+        const p = node.children[0];
+        if (p.type === 'paragraph' && p.children && p.children.length > 0) {
+          text = p.children.map((c: any) => c.value || '').join('');
+        }
+      }
+      if (isTask) {
+        const { cleanText, marker } = extractRemindersTaskMarker(text);
+        const id = `${node.position?.start.line}-${cleanText.substring(0, 10)}`;
+        if (idSet.has(id) && !marker) {
+          const p = node.children?.[0];
+          if (p && p.type === 'paragraph') {
+            const markerNodeValue = buildRemindersTaskMarker({ v: 1, list: listName, uuid: '' });
+            const last = p.children[p.children.length - 1];
+            if (!last || last.type !== 'text' || !String(last.value || '').endsWith(' ')) {
+              p.children.push({ type: 'text', value: ' ' });
+            }
+            p.children.push({ type: 'html', value: markerNodeValue });
+          }
+        }
+      }
+    }
+    if (node.children) node.children.forEach(visit);
+  };
+
+  visit(tree);
+  return processor.stringify(tree);
+};
+
 export const toggleTaskInMarkdown = (markdown: string, taskId: string): string => {
   const processor = createProcessor();
   const tree = processor.parse(markdown) as Root;
@@ -290,7 +466,8 @@ export const toggleTaskInMarkdown = (markdown: string, taskId: string): string =
       }
 
       if (isTask) {
-        const id = `${node.position?.start.line}-${text.substring(0, 10)}`;
+        const { cleanText } = extractRemindersTaskMarker(text);
+        const id = `${node.position?.start.line}-${cleanText.substring(0, 10)}`;
         if (id === taskId) {
           const wasChecked = node.checked;
           node.checked = !wasChecked;
@@ -425,7 +602,8 @@ export const updateTaskTextInMarkdown = (markdown: string, taskId: string, newTe
       }
 
       if (isTask) {
-        const id = `${node.position?.start.line}-${text.substring(0, 10)}`;
+        const { cleanText } = extractRemindersTaskMarker(text);
+        const id = `${node.position?.start.line}-${cleanText.substring(0, 10)}`;
         if (id === taskId) {
           // Update text
           if (node.children && node.children.length > 0) {
@@ -502,7 +680,8 @@ export const deleteTaskInMarkdown = (markdown: string, taskId: string): string =
       }
 
       if (isTask) {
-        const id = `${node.position?.start.line}-${text.substring(0, 10)}`;
+        const { cleanText } = extractRemindersTaskMarker(text);
+        const id = `${node.position?.start.line}-${cleanText.substring(0, 10)}`;
         if (id === taskId) {
           parent.children.splice(index, 1);
           return true;
@@ -594,7 +773,8 @@ export const insertTaskAfterInMarkdown = (markdown: string, targetTaskId: string
           }
 
           if (isTask) {
-            const id = `${child.position?.start.line}-${text.substring(0, 10)}`;
+            const { cleanText } = extractRemindersTaskMarker(text);
+            const id = `${child.position?.start.line}-${cleanText.substring(0, 10)}`;
             if (id === targetTaskId) {
               // Found the target task, insert new task after it
               node.children.splice(i + 1, 0, newTaskNode);
@@ -694,7 +874,8 @@ export const reorderTaskInMarkdown = (markdown: string, activeId: string, overId
       }
 
       if (isTask) {
-        return `${node.position?.start.line}-${text.substring(0, 10)}`;
+        const { cleanText } = extractRemindersTaskMarker(text);
+        return `${node.position?.start.line}-${cleanText.substring(0, 10)}`;
       }
     }
     return null;
@@ -926,7 +1107,8 @@ export const nestTaskInMarkdown = (markdown: string, activeId: string, overId: s
       }
 
       if (isTask) {
-        return `${node.position?.start.line}-${text.substring(0, 10)}`;
+        const { cleanText } = extractRemindersTaskMarker(text);
+        return `${node.position?.start.line}-${cleanText.substring(0, 10)}`;
       }
     }
     return null;
@@ -1013,7 +1195,8 @@ export const updateTaskDescriptionInMarkdown = (markdown: string, taskId: string
       }
 
       if (isTask) {
-        const id = `${node.position?.start.line}-${text.substring(0, 10)}`;
+        const { cleanText } = extractRemindersTaskMarker(text);
+        const id = `${node.position?.start.line}-${cleanText.substring(0, 10)}`;
         if (id === taskId) {
           // Find existing blockquote
           // eslint-disable-next-line @typescript-eslint/no-explicit-any

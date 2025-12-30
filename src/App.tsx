@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useStore } from 'zustand';
 import { useTodoStore } from './store/useTodoStore';
-import { pluginRegistry } from './plugins/pluginEngine';
-import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading, Plus, Search, X, Tag } from 'lucide-react';
+import { pluginRegistry } from './plugins/pluginEngine.tsx';
+import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading, Plus, Search, X, Tag, Bell } from 'lucide-react';
 import { TaskItem } from './components/TaskItem';
 import {
   DndContext, 
@@ -13,7 +13,7 @@ import {
   useSensors,
   DragOverlay,
 } from '@dnd-kit/core';
-import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import type { DragEndEvent, DragStartEvent, DragMoveEvent } from '@dnd-kit/core';
 import {
   SortableContext,
   sortableKeyboardCoordinates,
@@ -22,8 +22,9 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { hasRemindersFileMarker } from './lib/MarkdownParser';
 
-function SortableFileItem({ file, currentFile, onSelect, onRename }: { file: string, currentFile: string, onSelect: (f: string) => void, onRename: (f: string) => void }) {
+function SortableFileItem({ file, currentFile, onSelect, onRename, isRemindersLinked }: { file: string, currentFile: string, onSelect: (f: string) => void, onRename: (f: string) => void, isRemindersLinked: boolean }) {
   const {
     attributes,
     listeners,
@@ -47,6 +48,11 @@ function SortableFileItem({ file, currentFile, onSelect, onRename }: { file: str
       >
         <File size={14} />
         <span className="truncate">{file}</span>
+        {isRemindersLinked && currentFile === file && (
+          <span className="ml-1 text-primary/70" title="This file is linked to Reminders">
+            <Bell size={14} />
+          </span>
+        )}
       </button>
       <button 
         onClick={(e) => {
@@ -94,7 +100,11 @@ function App() {
     setFontSize,
     activeTag,
     setActiveTag,
-    addTask
+    addTask,
+    sidebarCollapsed,
+    setSidebarCollapsed,
+    togglePlugin,
+    remindersLinkedByFile
   } = useTodoStore();
 
   // Access temporal store for undo/redo
@@ -109,10 +119,10 @@ function App() {
   const [showCompleted, setShowCompleted] = useState(false);
   const [, setPluginUpdate] = useState(0); // Force re-render for plugins
   const [currentTheme, setCurrentTheme] = useState<'light' | 'dark' | 'auto'>('auto');
-  const [showSidebar, setShowSidebar] = useState(() => {
-    const saved = localStorage.getItem('sidebar-collapsed');
-    return saved ? JSON.parse(saved) : true;
-  });
+  
+  // Derived from store state (inverse of collapsed)
+  const showSidebar = !sidebarCollapsed;
+  
   const [peekSidebar, setPeekSidebar] = useState(false);
   const peekCloseTimerRef = useRef<number | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(256);
@@ -148,10 +158,6 @@ function App() {
   const handleFileDragStart = (event: DragStartEvent) => {
     setActiveFileId(event.active.id as string);
   };
-
-  useEffect(() => {
-    localStorage.setItem('sidebar-collapsed', JSON.stringify(showSidebar));
-  }, [showSidebar]);
 
   useEffect(() => {
     if (showSidebar) setPeekSidebar(false);
@@ -198,7 +204,7 @@ function App() {
       if (isResizing) {
         const newWidth = mouseMoveEvent.clientX;
         if (newWidth < 150) {
-          setShowSidebar(false);
+          setSidebarCollapsed(true);
           setIsResizing(false);
         } else if (newWidth >= 200 && newWidth <= 600) {
           setSidebarWidth(newWidth);
@@ -249,20 +255,6 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo]);
 
-  // Allow Escape to close the Settings modal while it is open.
-  useEffect(() => {
-    if (!showSettings) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (e.defaultPrevented) return;
-      setShowSettings(false);
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showSettings]);
-
   useEffect(() => {
     restoreSession();
     
@@ -304,7 +296,7 @@ function App() {
   };
 
   const handleTogglePlugin = (name: string) => {
-    pluginRegistry.togglePlugin(name);
+    togglePlugin(name);
     setPluginUpdate(prev => prev + 1);
   };
 
@@ -338,8 +330,9 @@ function App() {
     if (newName && newName !== oldName) {
       try {
         await renameFile(oldName, newName);
-      } catch (e: any) {
-        alert(`Failed to rename file: ${e.message}`);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        alert(`Failed to rename file: ${message}`);
       }
     }
   };
@@ -356,7 +349,7 @@ function App() {
     setDragOffset(0);
   };
 
-  const handleDragMove = (event: any) => {
+  const handleDragMove = (event: DragMoveEvent) => {
     setDragOffset(event.delta.x);
   };
 
@@ -461,6 +454,7 @@ function App() {
                 currentFile={currentFile}
                 onSelect={opts.onSelectFile}
                 onRename={handleRenameFile}
+                isRemindersLinked={remindersLinkedByFile?.[file] ?? (currentFile === file ? hasRemindersFileMarker(markdown) : false)}
               />
             ))}
           </SortableContext>
@@ -531,7 +525,7 @@ function App() {
         <div className="flex-none">
           {isFolderMode && (
             <button
-              onClick={() => setShowSidebar(!showSidebar)}
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               onMouseEnter={openPeekSidebar}
               onMouseLeave={schedulePeekClose}
               className="btn btn-ghost btn-square btn-sm mr-2"
@@ -818,8 +812,9 @@ function App() {
                                 setDescriptionExpandedById(prev => {
                                   if (expanded) return { ...prev, [taskId]: true };
                                   if (prev[taskId] === undefined) return prev;
-                                  const { [taskId]: _, ...rest } = prev;
-                                  return rest;
+                                  const newPrev = { ...prev };
+                                  delete newPrev[taskId];
+                                  return newPrev;
                                 });
                               }}
                               onAddNext={handleAddNext}

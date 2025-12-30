@@ -1,8 +1,9 @@
 import { StrictMode } from 'react'
+// Force HMR
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
-import { pluginRegistry } from './plugins/pluginEngine';
+import { pluginRegistry } from './plugins/pluginEngine.tsx';
 import { pluginManifest } from './plugins/pluginManifest';
 
 async function registerPluginsFromManifest() {

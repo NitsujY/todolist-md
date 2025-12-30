@@ -47,8 +47,7 @@ The app uses the `StorageProvider` interface to support multiple backends.
 ### 3.3 Google Drive Adapter (`google`)
 - **Auth**: OAuth 2.0 with `https://www.googleapis.com/auth/drive`, `https://www.googleapis.com/auth/drive.install`, and `https://www.googleapis.com/auth/userinfo.email` scopes.
 - **Persistence**:
-    - Access Token is cached in `localStorage` with expiration handling when available.
-    - If an expiration value is missing/invalid, the app will still restore the token and only prompt again when Google requests it (typically after a 401).
+    - Access Token is cached in `localStorage` with expiration handling.
     - User Email is cached to provide `login_hint` for smoother re-authentication.
     - `google-drive-config` stores Client ID and API Key.
 - **File Listing Strategy**:
@@ -65,6 +64,13 @@ Detailed feature specifications are maintained in the `specs/` directory.
 - **[Brain Dump](specs/features/brain-dump.md)**: Context-aware capture (voice or typed) → tasks + next actions.
 - **[TaskItem UI](specs/ui/task-item.spec.md)**: Detailed UI states and interactions for the task component.
 
+### 4.x Optional External Connectors
+
+This repo may include optional, external utilities (outside the SPA) that operate on Markdown files.
+
+- **macOS Reminders sync**: A CLI (`npm run reminders:sync`) that reads Markdown files from disk and mirrors tasks into macOS Reminders lists.
+    - This is intentionally **out-of-browser** and does not change the app’s serverless/SPAs-only constraint.
+
 ### 4.0 Global Details Toggle
 - The top toolbar provides a single **Expand details / Collapse details** control.
 - **Expand details** opens the description/details panels for all tasks that currently have a description.
@@ -73,7 +79,6 @@ Detailed feature specifications are maintained in the `specs/` directory.
 
 ### 4.1 Appearance & Settings
 - **Themes**: Light, Dark, Auto (system preference).
-- **Settings Modal**: Can be closed via the Close button, backdrop click, or `Esc`.
 - **Fonts**:
     - Options: System UI, Inter, Roboto Mono, Fira Code.
     - Implementation: CSS variables and `data-font` attribute on `<html>`.
@@ -83,7 +88,7 @@ Detailed feature specifications are maintained in the `specs/` directory.
     - **Constraint**: Checkboxes and drag handles must align vertically with the first line of text regardless of font size.
 
 ### 4.2 Plugin System
-- **Architecture**: Plugins are registered via a manifest in `src/plugins/pluginManifest.ts` and executed through `pluginEngine.ts`.
+- **Architecture**: Plugins are registered via a manifest in `src/plugins/pluginManifest.ts` and executed through `pluginEngine.tsx`.
 - **Capabilities**:
     - `onTaskRender`: Render custom UI next to tasks.
     - `transformMarkdown`: Modify markdown before parsing (hooks).
@@ -93,6 +98,49 @@ Detailed feature specifications are maintained in the `specs/` directory.
     - `renderDashboard`: Render background controllers or UI elements (e.g., for auto-refresh).
 - **Built-in Plugins**:
     - `ThemePlugin`: Manages theme switching.
+
+## 5. Configuration System
+
+The application uses a unified configuration strategy to support both the web application and external tools (like the macOS Reminders sync script).
+
+### 5.1 Unified Config File
+- **Path**: `.todolist-md.config.json` (located in the root of the data folder/storage).
+- **Purpose**: Single source of truth for cross-device settings and tool configuration.
+- **Structure**:
+  ```json
+  {
+    "ui": {
+      "fontSize": "normal",
+      "compactMode": true,
+      "theme": "auto"
+    },
+    "plugins": {
+      "reminders": {
+        "mappings": [
+          { "file": "todo.md", "list": "Reminders" }
+        ]
+      }
+    }
+  }
+  ```
+
+### 5.2 Synchronization Strategy
+- **Read-Modify-Write**: The `ConfigService` reads the latest config, merges local changes, and writes it back to prevent overwriting concurrent updates.
+- **Safe Sync**: The web app only modifies the `ui` section, leaving `plugins` and other sections intact.
+- **Persistence**:
+    - **Load**: On app startup and storage switch, the config is loaded and applied to the store.
+    - **Save**: Changing UI settings (Font Size, Compact Mode) triggers an immediate write to the config file.
+
+### 5.3 Configuration Scopes
+
+To ensure a seamless experience across devices while respecting device-specific constraints, configuration is divided into three scopes:
+
+| Scope | Storage Location | Examples | Purpose |
+| :--- | :--- | :--- | :--- |
+| **Global (Synced)** | `.todolist.config.json` (in data root) | Theme, Font Size, Compact Mode, Sidebar State, Plugin Status (Enabled/Disabled) | User preferences that should follow the user across devices. |
+| **Local (Per-Device)** | Browser `localStorage` | Active Storage Adapter (Local/FS/Drive), Last Opened File, Font Family (System/Inter/etc) | Device-specific state or bootstrap settings needed *before* loading the main config. |
+| **Session (Ephemeral)** | React State / Memory | Search Query, Undo/Redo Stack, Scroll Position, UI Panel Sizes | Temporary state relevant only to the current active session. |
+
     - `FontPlugin`: Manages font switching.
     - `DueDatePlugin`: Highlights due dates.
     - `FocusModePlugin`: See [Focus Mode Spec](specs/features/focus-mode.md).

@@ -19,42 +19,36 @@
 
 - [x] Always keep the README.md for high level and SPECIFICATION.md for low level up to date with the latest features and changes.
 
-## Branching & Release Workflow
+## Commit/Push Policy (Avoid Wasting Credits)
 
-- Default to working on `develop` for normal feature/fix commits.
-- Avoid committing/pushing directly to `main` unless explicitly asked to do a release.
-- If the user says "commit" or "commit and push" without specifying a branch:
-	- Checkout `develop` (or create a feature branch off `develop` if appropriate).
-	- Commit there and push there.
-	- Ask before pushing if branch intent is ambiguous.
-- Release flow:
-	- Merge/squash `develop` into `main` for releases.
-	- Prefer non-destructive history changes (revert) over force-push unless explicitly approved.
+- Do **not** run `git commit` or `git push` unless the user explicitly asks (e.g. “commit”, “commit and push”, “release to main”).
+- Batch related work into **fewer commits** (prefer 1 commit per coherent request).
+- When you do commit/push, prefer chaining commands with `&&` so it’s a single, easy-to-audit step.
 
 ## Git Submodule Workflow (AI Assistant)
 
 The AI Assistant plugin is a git submodule at `src/plugins/ai-assistant`.
 
-If you modify anything inside the submodule, you **must**:
+If you modify anything inside the submodule, you **must** (when the user asks you to commit/push):
 
 1) Commit + push the submodule first
 
 ```bash
-cd src/plugins/ai-assistant
-git status
-git add -A
-git commit -m "Your change"
-git push origin main
+cd src/plugins/ai-assistant && \
+	git status && \
+	git add -A && \
+	git commit -m "Your change" && \
+	git push origin main
 ```
 
 2) Then commit + push the parent repo (this updates the submodule pointer)
 
 ```bash
-cd ../..  # back to parent repo root
-git status
-git add src/plugins/ai-assistant
-git commit -m "Bump ai-assistant submodule"
-git push origin develop
+cd ../.. && \
+	git status && \
+	git add src/plugins/ai-assistant && \
+	git commit -m "Bump ai-assistant submodule" && \
+	git push origin develop
 ```
 
 Why this order matters: pushing the parent first can break CI with a “not our ref”/missing SHA error because the parent repo references a submodule commit that does not exist on the submodule remote yet.
