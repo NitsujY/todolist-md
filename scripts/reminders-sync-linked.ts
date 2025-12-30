@@ -222,7 +222,7 @@ function syncItems(listName, items) {
   if (!list) return JSON.stringify([]);
 
   // Optimization: Fetch ALL IDs from the list in one batch.
-  // This avoids N separate Apple Events for `byId` or `whose`, which can hang.
+  // This avoids N separate Apple Events for 'byId' or 'whose', which can hang.
   // It also avoids scanning properties of all items.
   const allIds = list.reminders.id();
   const uuidToIndex = {};
