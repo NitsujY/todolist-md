@@ -16,16 +16,40 @@ The easiest way to sync is using the command line tool included in this project.
     npm run reminders:sync -- --dir .
     ```
 
-2.  **Watch Mode (Recommended)**:
+2.  **Link tasks in the UI (Recommended)**
+
+This sync mode is **linked-task only**:
+
+- Enable the `RemindersLink` plugin in Settings.
+- Use the per-task Link/Unlink buttons (or the header “Link all”) to add hidden markers.
+- The CLI will only touch tasks with the marker.
+
+3.  **Dry Run (Recommended First)**:
+
+Prints what would change without writing to Reminders or Markdown.
+
+```bash
+npm run reminders:sync -- --dry-run --verbose --dir .
+```
+
+Dry run for a single file/list:
+
+```bash
+npm run reminders:sync -- --file texture/project-alpha.md --list "Project Alpha" --dry-run --verbose
+```
+
+4.  **Watch Mode (Recommended)**:
     Keeps running and syncs changes every 60 seconds.
     ```bash
     npm run reminders:sync -- --dir . --watch
     ```
 
-3.  **Configuration File (Unified)**:
-    The tool now looks for a `todolist.config.json` in your project root. If it doesn't exist, it will be created automatically when you run the script without arguments.
+5.  **Configuration File (Optional)**:
+  The tool looks for a config file in your project root:
+  - Preferred: `.todolist-md.config.json`
+  - Legacy fallback: `todolist.config.json`
 
-    **Example `todolist.config.json`:**
+  **Example `.todolist-md.config.json`:**
     ```json
     {
       "plugins": {
@@ -45,6 +69,11 @@ The easiest way to sync is using the command line tool included in this project.
     npm run reminders:sync -- --watch
     ```
     (No arguments needed, it will find the config automatically)
+
+    Dry run with config:
+    ```bash
+    npm run reminders:sync -- --dry-run --verbose
+    ```
 
 ## Background Service (Set and Forget)
 
@@ -83,25 +112,61 @@ tail -f ~/Library/Logs/todolistmd-reminders-sync.out.log
 
 To prevent data loss due to formatting differences (the "Translation Gap"), the sync engine uses a **Safe Sync** strategy by default:
 
-1.  **Markdown is the Source of Truth for Content**:
-    - If you rename a task in Markdown, it updates in Reminders.
-    - If you rename a task in Reminders, **it does NOT update Markdown** by default. This protects your Markdown links and formatting from being stripped by Reminders.
+1.  **Linked tasks only** (fast path):
 
-2.  **Bi-directional Status**:
-    - Checking off a task on your phone **WILL** update the Markdown file (`[ ]` -> `[x]`).
+- Only tasks with a hidden marker are synced.
+- The marker stores the Reminders UUID so the CLI doesn’t need to scan lists.
 
-3.  **Bi-directional Creation/Deletion**:
-    - Creating a new task on your phone adds it to the Markdown file.
-    - Deleting a task in Markdown deletes it from your phone.
+2.  **Markdown is the Source of Truth for Content**:
 
-### Force Options
+- Markdown task title syncs to Reminders title.
+- Markdown task description syncs to Reminders body.
+- Renaming in Reminders does not overwrite Markdown.
 
-If you want to override this behavior, you can use force flags:
+3.  **Bi-directional Status (Sticky)**:
 
-- `--force-push`: Forces Reminders titles to match Markdown (overwrites changes made on phone).
-- `--force-pull`: Forces Markdown titles to match Reminders (RISKY: may lose Markdown formatting like links).
+- If either side is completed, both become completed.
+- (This avoids “who changed last?” ambiguity without relying on timestamps.)
 
-Example:
+### What this mode does NOT do
+
+- It does not import arbitrary reminders into Markdown.
+- It does not scan whole lists.
+
+If you need “import everything from Reminders”, that’s a different (scan-heavy) mode and is intentionally not the default.
+
+### “Markdown → Reminders” (Your Main Use Case)
+
+The default behavior already prioritizes Markdown as the source of truth for content (title + description/body).
+
+Dry run (recommended first):
 ```bash
-npm run reminders:sync -- --dir . --force-push
+npm run reminders:sync -- --dry-run --verbose --dir .
+```
+
+Real run (writes to Reminders / Markdown as needed):
+```bash
+npm run reminders:sync -- --verbose --dir .
+```
+
+### If you see `spawnSync osascript ETIMEDOUT`
+
+Shared/iCloud Reminders lists can intermittently stall. You can increase the JXA timeout:
+
+```bash
+TODOLIST_MD_JXA_TIMEOUT_MS=60000 npm run reminders:sync -- --config .todolist-md.config.json --verbose
+```
+
+Or for watch mode:
+
+```bash
+TODOLIST_MD_JXA_TIMEOUT_MS=120000 npm run reminders:sync -- --dir . --watch --verbose
+```
+
+### Dry Run With Watch Mode
+
+Yes — `--dry-run` also works with `--watch` (it will loop and log what it would do, but won’t write changes):
+
+```bash
+npm run reminders:sync -- --watch --dry-run --verbose
 ```

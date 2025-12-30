@@ -82,8 +82,15 @@ To check logs:
 
 ### Notes / limitations
 
-- This sync is **Markdown → Reminders** (one-way).
-- It uses a stable ID stored in each reminder’s notes (`todolist-md:id=...`) to avoid duplicates.
+- This sync is **linked-task only** for speed and reliability.
+    - In the UI, enable the `RemindersLink` plugin.
+    - Use the Link/Unlink buttons (or “Link all”) to add hidden markers to the tasks you want synced.
+    - The CLI only syncs tasks that have the marker.
+- Content direction:
+    - Markdown task **title** syncs to Reminders title.
+    - Markdown task **description** (blockquote under a task) syncs to the Reminders reminder **body**.
+- Completion is **bi-directional (sticky)**: if either side is completed, both become completed.
+- The CLI stores the Reminders UUID in the hidden marker (no scanning/index file required).
 - It only works with **real markdown files** on disk (File System / folder mode is ideal). LocalStorage-only lists aren’t directly accessible from a CLI.
 
 ## Submodule Note (AI Assistant)

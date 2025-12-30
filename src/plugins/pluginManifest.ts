@@ -90,6 +90,13 @@ export const pluginManifest: PluginManifestEntry[] = [
     exportName: 'AIAssistantPlugin',
     kind: 'value',
   },
+  {
+    id: 'reminders-link',
+    module: './plugins/RemindersLinkPlugin.tsx',
+    exportName: 'RemindersLinkPlugin',
+    kind: 'class',
+    defaultEnabled: false,
+  },
   // {
   //   id: 'gamify',
   //   module: './plugins/gamify-plugin/GamifyPlugin.tsx',

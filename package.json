@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "prod": "npm run build && npm run preview",
-    "reminders:sync": "tsx scripts/reminders-sync-bidirectional.ts"
+    "reminders:sync": "tsx scripts/reminders-sync-linked.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.45",

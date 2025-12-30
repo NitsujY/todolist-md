@@ -4,7 +4,7 @@ import type { StorageProvider } from '../adapters/StorageProvider';
 import { LocalStorageAdapter } from '../adapters/LocalStorageAdapter';
 import { FileSystemAdapter } from '../adapters/FileSystemAdapter';
 import { GoogleDriveAdapter, type GoogleDriveConfig } from '../adapters/GoogleDriveAdapter';
-import { parseTasks, toggleTaskInMarkdown, addTaskToMarkdown, updateTaskTextInMarkdown, insertTaskAfterInMarkdown, reorderTaskInMarkdown, deleteTaskInMarkdown, updateTaskDescriptionInMarkdown, nestTaskInMarkdown, type Task } from '../lib/MarkdownParser';
+import { parseTasks, toggleTaskInMarkdown, addTaskToMarkdown, updateTaskTextInMarkdown, insertTaskAfterInMarkdown, reorderTaskInMarkdown, deleteTaskInMarkdown, updateTaskDescriptionInMarkdown, nestTaskInMarkdown, hasRemindersFileMarker, type Task } from '../lib/MarkdownParser';
 import type { FileMeta } from '../adapters/StorageProvider';
 import { ConfigService } from '../services/ConfigService';
 import { pluginRegistry } from '../plugins/pluginEngine.tsx';
@@ -33,6 +33,9 @@ interface TodoState {
 
   // Fast file switching cache (stale-while-revalidate)
   fileCache: Record<string, FileCacheEntry>;
+
+  // Sidebar indicator support: file -> has reminders file marker
+  remindersLinkedByFile: Record<string, boolean>;
   
   // Actions
   setActiveTag: (tag: string | null) => void;
@@ -130,6 +133,7 @@ export const useTodoStore = create<TodoState>()(
         activeTag: null,
         pluginConfig: {},
         fileCache: {},
+        remindersLinkedByFile: {},
         requiresPermission: false,
         restorableName: '',
       };
@@ -163,6 +167,10 @@ export const useTodoStore = create<TodoState>()(
                   fetchedAt: Date.now(),
                 },
               },
+              remindersLinkedByFile: {
+                ...state.remindersLinkedByFile,
+                [targetFile]: hasRemindersFileMarker(markdownToWrite),
+              },
             }));
             return;
           }
@@ -178,6 +186,10 @@ export const useTodoStore = create<TodoState>()(
                 meta: cachedMeta,
                 fetchedAt: Date.now(),
               },
+            },
+            remindersLinkedByFile: {
+              ...state.remindersLinkedByFile,
+              [targetFile]: hasRemindersFileMarker(markdownToWrite),
             },
           }));
         } catch (e: any) {
@@ -443,6 +455,10 @@ export const useTodoStore = create<TodoState>()(
             ...state.fileCache,
             [currentFile]: { ...cached, meta: meta ?? cached.meta, fetchedAt: Date.now() },
           },
+          remindersLinkedByFile: {
+            ...state.remindersLinkedByFile,
+            [currentFile]: hasRemindersFileMarker(nextMarkdown),
+          },
           isLoading: false,
         }));
         return;
@@ -461,6 +477,10 @@ export const useTodoStore = create<TodoState>()(
         fileCache: {
           ...state.fileCache,
           [currentFile]: { markdown: nextMarkdown, tasks: nextTasks, meta, fetchedAt: Date.now() },
+        },
+        remindersLinkedByFile: {
+          ...state.remindersLinkedByFile,
+          [currentFile]: hasRemindersFileMarker(nextMarkdown),
         },
       }));
     } catch (e) {

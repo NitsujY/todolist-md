@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useStore } from 'zustand';
 import { useTodoStore } from './store/useTodoStore';
 import { pluginRegistry } from './plugins/pluginEngine.tsx';
-import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading, Plus, Search, X, Tag } from 'lucide-react';
+import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading, Plus, Search, X, Tag, Bell } from 'lucide-react';
 import { TaskItem } from './components/TaskItem';
 import {
   DndContext, 
@@ -22,8 +22,9 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { hasRemindersFileMarker } from './lib/MarkdownParser';
 
-function SortableFileItem({ file, currentFile, onSelect, onRename }: { file: string, currentFile: string, onSelect: (f: string) => void, onRename: (f: string) => void }) {
+function SortableFileItem({ file, currentFile, onSelect, onRename, isRemindersLinked }: { file: string, currentFile: string, onSelect: (f: string) => void, onRename: (f: string) => void, isRemindersLinked: boolean }) {
   const {
     attributes,
     listeners,
@@ -47,6 +48,11 @@ function SortableFileItem({ file, currentFile, onSelect, onRename }: { file: str
       >
         <File size={14} />
         <span className="truncate">{file}</span>
+        {isRemindersLinked && currentFile === file && (
+          <span className="ml-1 text-primary/70" title="This file is linked to Reminders">
+            <Bell size={14} />
+          </span>
+        )}
       </button>
       <button 
         onClick={(e) => {
@@ -97,7 +103,8 @@ function App() {
     addTask,
     sidebarCollapsed,
     setSidebarCollapsed,
-    togglePlugin
+    togglePlugin,
+    remindersLinkedByFile
   } = useTodoStore();
 
   // Access temporal store for undo/redo
@@ -447,6 +454,7 @@ function App() {
                 currentFile={currentFile}
                 onSelect={opts.onSelectFile}
                 onRename={handleRenameFile}
+                isRemindersLinked={remindersLinkedByFile?.[file] ?? (currentFile === file ? hasRemindersFileMarker(markdown) : false)}
               />
             ))}
           </SortableContext>

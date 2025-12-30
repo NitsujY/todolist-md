@@ -1,4 +1,4 @@
-import type { Plugin, PluginAPI } from './pluginEngine';
+import type { Plugin } from './pluginEngine';
 import type { Task } from '../lib/MarkdownParser';
 
 export class SoundEffectsPlugin implements Plugin {
