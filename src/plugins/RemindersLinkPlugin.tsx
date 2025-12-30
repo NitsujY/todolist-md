@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Link2, Link2Off } from 'lucide-react';
+import { Link2, Link2Off, Info } from 'lucide-react';
 import type { Plugin } from './pluginEngine';
 import type { Task } from '../lib/MarkdownParser';
 import {
@@ -79,6 +79,33 @@ export class RemindersLinkPlugin implements Plugin {
       >
         <Link2 size={18} />
       </button>
+    );
+  }
+
+  renderSettings(): ReactNode {
+    return (
+      <div className="p-4">
+        <div className="flex items-center justify-between">
+          <span className="font-medium">Reminders Sync</span>
+          <div className="dropdown dropdown-hover dropdown-end">
+            <div tabIndex={0} role="button" className="btn btn-circle btn-ghost btn-sm text-info">
+              <Info size={20} />
+            </div>
+            <div tabIndex={0} className="dropdown-content z-[1] card card-compact w-64 p-2 shadow bg-base-100 text-base-content">
+              <div className="card-body">
+                <h3 className="card-title text-sm">How to Sync</h3>
+                <p className="text-xs">Run this command in your terminal:</p>
+                <pre className="bg-base-300 p-2 rounded text-xs font-mono select-all">
+                  npm run reminders:sync
+                </pre>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p className="text-sm opacity-70 mt-2">
+          Links tasks to Apple Reminders. Syncing is manual via CLI.
+        </p>
+      </div>
     );
   }
 
