@@ -77,6 +77,13 @@ This repo may include optional, external utilities (outside the SPA) that operat
 - **Collapse details** closes all opened description/details panels.
 - Users can still expand/collapse an individual task after the global action.
 
+#### Header Controls UX (Clutter Control)
+
+To keep the header usable (especially on small screens) and avoid an ever-growing row of icons as features/plugins grow:
+
+- Keep **Search** and the frequently used **View controls** visible (sections collapse/expand, details expand/collapse, show/hide completed).
+- Move all less-frequent actions into a single overflow (`...`) dropdown.
+
 ### 4.1 Appearance & Settings
 - **Themes**: Light, Dark, Auto (system preference).
 - **Fonts**:
