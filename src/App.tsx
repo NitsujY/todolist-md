@@ -467,7 +467,24 @@ function App() {
             ) : null}
           </DragOverlay>
         </DndContext>
-        {fileList.length === 0 && <div className="text-center p-4 text-base-content/40 text-sm">No markdown files found</div>}
+        {fileList.length === 0 && (
+          <div className="flex flex-col items-center justify-center p-6 text-center space-y-3">
+            <div className="text-base-content/40 text-sm">
+              {activeStorage === 'google' 
+                ? "No files authorized yet." 
+                : "No markdown files found"}
+            </div>
+            {activeStorage === 'google' && (
+              <button 
+                onClick={() => useTodoStore.getState().importGoogleDriveFiles()}
+                className="btn btn-sm btn-primary btn-outline gap-2"
+              >
+                <FileText size={14} />
+                Import Files
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Tags Section */}
@@ -619,8 +636,8 @@ function App() {
                         <a onClick={() => useTodoStore.getState().pickGoogleDriveFolder()} className="text-xs">
                           <FolderOpen size={14} /> Select Folder
                         </a>
-                        <a onClick={() => useTodoStore.getState().pickGoogleDriveFile()} className="text-xs">
-                          <FileText size={14} /> Open File
+                        <a onClick={() => useTodoStore.getState().importGoogleDriveFiles()} className="text-xs">
+                          <FileText size={14} /> Import Files
                         </a>
                         <a onClick={() => useTodoStore.getState().switchGoogleAccount()} className="text-xs">
                           <RefreshCw size={14} /> Switch Account

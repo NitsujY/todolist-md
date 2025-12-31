@@ -127,10 +127,10 @@ export class GoogleDriveAdapter implements StorageProvider {
 
           this.tokenClient = window.google.accounts.oauth2.initTokenClient({
             client_id: this.config!.clientId,
-            // Use 'drive' scope to allow full access to all files, enabling the "Open Folder" workflow
-            // where we can edit any file in the selected folder.
+            // Use 'drive.file' scope as required by Google for verification.
+            // This means we only see files we created or opened via Picker.
             // Add userinfo.email to help with silent sign-in hints
-            scope: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.install https://www.googleapis.com/auth/userinfo.email',
+            scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.install https://www.googleapis.com/auth/userinfo.email',
             callback: (response: TokenResponse) => {
               if (response.error !== undefined) {
                 throw response;
@@ -764,6 +764,57 @@ export class GoogleDriveAdapter implements StorageProvider {
 
           picker.setVisible(true);
         } catch (err) {
+          reject(err);
+        }
+    });
+  }
+
+  async pickFiles(): Promise<{ id: string; name: string }[]> {
+    console.log('pickFiles: Starting...');
+    try {
+      await this.ensureAuth();
+    } catch (e) {
+      console.error('pickFiles: Auth failed', e);
+      throw e;
+    }
+    
+    return new Promise((resolve, reject) => {
+      if (!window.google || !window.google.picker) {
+        reject(new Error('Google Picker API not loaded'));
+        return;
+      }
+
+      try {
+        const pickerCallback = (data: any) => {
+            if (data.action === window.google.picker.Action.PICKED) {
+              const docs = data.docs;
+              console.log('pickFiles: Files picked', docs.length);
+              const results = docs.map((doc: any) => {
+                  // Update cache
+                  this.fileCache.set(doc.name, { id: doc.id, name: doc.name });
+                  return { id: doc.id, name: doc.name };
+              });
+              resolve(results);
+            } else if (data.action === window.google.picker.Action.CANCEL) {
+              resolve([]);
+            }
+          };
+
+          const view = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
+            .setIncludeFolders(true)
+            .setMimeTypes('text/markdown,text/plain');
+
+          const picker = new window.google.picker.PickerBuilder()
+            .addView(view)
+            .enableFeature(window.google.picker.Feature.MULTISELECT_ENABLED)
+            .setOAuthToken(this.accessToken)
+            .setDeveloperKey(this.config!.apiKey)
+            .setCallback(pickerCallback)
+            .build();
+
+          picker.setVisible(true);
+        } catch (err) {
+          console.error('pickFiles: Error building/showing picker', err);
           reject(err);
         }
     });

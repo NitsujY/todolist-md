@@ -48,6 +48,7 @@ interface TodoState {
   setGoogleDriveConfig: (config: GoogleDriveConfig) => Promise<void>;
   pickGoogleDriveFolder: () => Promise<void>;
   pickGoogleDriveFile: () => Promise<void>;
+  importGoogleDriveFiles: () => Promise<void>;
   switchGoogleAccount: () => Promise<void>;
   loadTodos: () => Promise<void>;
   refreshCurrentFile: (opts?: { background?: boolean }) => Promise<void>;
@@ -360,8 +361,14 @@ export const useTodoStore = create<TodoState>()(
             const files = await adapters.google.list('');
             console.log('Store: Files listed:', files.length);
             set({ fileList: sortFiles(files) });
-            if (files.length > 0) {
-              get().selectFile(files[0]);
+            
+            if (files.length === 0) {
+                // Prompt user to import files
+                // We now show a UI hint in the sidebar instead of a blocking alert
+                // But we can still auto-trigger the import if we want to be helpful
+                // Let's stick to the UI hint for now as it's less intrusive
+            } else {
+                get().selectFile(files[0]);
             }
           } catch (listErr) {
             console.error('Store: Failed to list files after picking folder', listErr);
@@ -377,6 +384,22 @@ export const useTodoStore = create<TodoState>()(
         alert('Failed to connect to Google Drive. Please check the console for details.');
       }
     }
+  },
+
+  importGoogleDriveFiles: async () => {
+      try {
+          const files = await adapters.google.pickFiles();
+          if (files.length > 0) {
+              // Refresh list
+              const currentFiles = await adapters.google.list('');
+              set({ fileList: sortFiles(currentFiles) });
+              if (currentFiles.length > 0 && !get().currentFile) {
+                  get().selectFile(currentFiles[0]);
+              }
+          }
+      } catch (e) {
+          console.error('Failed to import files', e);
+      }
   },
 
   pickGoogleDriveFile: async () => {
