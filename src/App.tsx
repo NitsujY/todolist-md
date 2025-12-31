@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useStore } from 'zustand';
 import { useTodoStore } from './store/useTodoStore';
 import { pluginRegistry } from './plugins/pluginEngine.tsx';
-import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading, Plus, Search, X, Tag, Bell } from 'lucide-react';
+import { Settings, FileText, Cloud, RefreshCw, FolderOpen, Eye, EyeOff, Trash2, Power, Package, Save, Code, List, HardDrive, Menu, File, Edit2, Heading, Plus, Search, X, Tag, Bell, ChevronsDownUp, ChevronsUpDown, MoreHorizontal } from 'lucide-react';
 import { TaskItem } from './components/TaskItem';
 import {
   DndContext, 
@@ -135,6 +135,12 @@ function App() {
   // Controls whether each task's description/details panel is expanded.
   const [descriptionExpandedById, setDescriptionExpandedById] = useState<Record<string, boolean>>({});
 
+  // Controls whether each header section is collapsed (hides tasks until next header).
+  const [sectionCollapsedByHeaderId, setSectionCollapsedByHeaderId] = useState<Record<string, boolean>>({});
+
+  // Tracks the last header the user interacted with (used for scroll anchoring).
+  const [activeHeaderId, setActiveHeaderId] = useState<string | null>(null);
+
   // Prune expansion state when switching files / reloading tasks.
   useEffect(() => {
     setDescriptionExpandedById(prev => {
@@ -145,6 +151,33 @@ function App() {
       return next;
     });
   }, [tasks]);
+
+  useEffect(() => {
+    setSectionCollapsedByHeaderId(prev => {
+      const headerIds = new Set(tasks.filter(t => t.type === 'header').map(t => t.id));
+      const next: Record<string, boolean> = {};
+      for (const [id, collapsed] of Object.entries(prev)) {
+        if (headerIds.has(id)) next[id] = collapsed;
+      }
+      return next;
+    });
+
+    setActiveHeaderId(prev => {
+      if (!prev) return prev;
+      const exists = tasks.some(t => t.type === 'header' && t.id === prev);
+      return exists ? prev : null;
+    });
+  }, [tasks]);
+
+  const scrollTaskIntoView = (taskId: string) => {
+    const nodes = document.querySelectorAll<HTMLElement>('[data-task-id]');
+    for (const el of nodes) {
+      if (el.dataset.taskId === taskId) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        break;
+      }
+    }
+  };
 
   const handleFileDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -405,7 +438,7 @@ function App() {
     }
   }, [tasks, focusId]);
 
-     const filteredTasks = tasks.filter(t => {
+  const filteredTasks = tasks.filter(t => {
     if (activeTag && (!t.tags || !t.tags.includes(activeTag))) return false;
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
@@ -414,6 +447,32 @@ function App() {
       (t.description && t.description.toLowerCase().includes(query))
     );
   });
+
+  const headerIdsInView = Array.from(new Set(tasks.filter(t => t.type === 'header').map(t => t.id)));
+  const allSectionsCollapsed = headerIdsInView.length > 0 && headerIdsInView.every(id => sectionCollapsedByHeaderId[id] === true);
+
+  const pluginHeaderButtons = pluginRegistry.renderHeaderButtons();
+
+  const visibleTasks = (() => {
+    // During search, don't hide matches behind collapsed sections.
+    if (searchQuery) return filteredTasks;
+
+    const out: typeof filteredTasks = [];
+    let currentSectionCollapsed = false;
+
+    for (const t of filteredTasks) {
+      if (t.type === 'header') {
+        currentSectionCollapsed = sectionCollapsedByHeaderId[t.id] === true;
+        out.push(t);
+        continue;
+      }
+
+      if (currentSectionCollapsed) continue;
+      out.push(t);
+    }
+
+    return out;
+  })();
 
   // Calculate unique tags
   const allTags = Array.from(new Set(tasks.flatMap(t => t.tags || []))).sort();
@@ -692,14 +751,33 @@ function App() {
                     <Search size={18} />
                   </button>
                 )}
+
                 <button
                   onClick={() => {
-                    updateMarkdown(markdown + '\n\n# New Section\n');
+                    if (headerIdsInView.length === 0) return;
+                    if (allSectionsCollapsed) {
+                      const targetHeaderId = activeHeaderId;
+                      setSectionCollapsedByHeaderId({});
+
+                      if (targetHeaderId) {
+                        // Wait for the expanded items to render so we can anchor back to the header.
+                        requestAnimationFrame(() => {
+                          requestAnimationFrame(() => scrollTaskIntoView(targetHeaderId));
+                        });
+                      }
+                      return;
+                    }
+                    setSectionCollapsedByHeaderId(() => {
+                      const next: Record<string, boolean> = {};
+                      for (const id of headerIdsInView) next[id] = true;
+                      return next;
+                    });
                   }}
                   className="btn btn-ghost btn-xs btn-square text-base-content/60 hover:text-primary"
-                  title="Add Section"
+                  disabled={headerIdsInView.length === 0}
+                  title={headerIdsInView.length === 0 ? 'No sections to collapse' : (allSectionsCollapsed ? 'Expand all sections' : 'Collapse all sections')}
                 >
-                  <Heading size={18} />
+                  {allSectionsCollapsed ? <ChevronsUpDown size={18} /> : <ChevronsDownUp size={18} />}
                 </button>
 
                 {(() => {
@@ -746,8 +824,35 @@ function App() {
                   {showCompleted ? <Eye size={18} /> : <EyeOff size={18} />}
                 </button>
 
-                {/* Plugin Header Buttons */}
-                {pluginRegistry.renderHeaderButtons()}
+                {/* Overflow Menu */}
+                <div className="dropdown dropdown-end">
+                  <button
+                    tabIndex={0}
+                    role="button"
+                    className="btn btn-ghost btn-xs btn-square text-base-content/60 hover:text-primary"
+                    title="More"
+                  >
+                    <MoreHorizontal size={18} />
+                  </button>
+                  <ul tabIndex={0} className="dropdown-content z-[50] menu p-2 shadow bg-base-100 rounded-box w-60 border border-base-200">
+                    <li>
+                      <a onClick={() => updateMarkdown(markdown + '\n\n# New Section\n')}>
+                        <Heading size={16} />
+                        Add Section
+                      </a>
+                    </li>
+                    {pluginHeaderButtons.length > 0 && (
+                      <>
+                        <li className="menu-title"><span>Plugins</span></li>
+                        <li>
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {pluginHeaderButtons}
+                          </div>
+                        </li>
+                      </>
+                    )}
+                  </ul>
+                </div>
               </div>
             </div>
 
@@ -774,7 +879,7 @@ function App() {
               <div className="flex flex-col flex-1 overflow-hidden relative">
                 {/* Task List */}
                 <div className="flex-1 overflow-y-auto">
-                  {filteredTasks.length === 0 ? (
+                  {visibleTasks.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-base-content/40">
                       {tasks.length === 0 ? (
                         isFolderMode && fileList.length === 0 ? (
@@ -813,11 +918,11 @@ function App() {
                       onDragEnd={handleDragEnd}
                     >
                       <SortableContext 
-                        items={filteredTasks.map(t => t.id)}
+                        items={visibleTasks.map(t => t.id)}
                         strategy={verticalListSortingStrategy}
                       >
                         <div className="flex flex-col divide-y divide-base-200 pb-20">
-                          {filteredTasks.map(task => (
+                          {visibleTasks.map(task => (
                             <TaskItem 
                               key={task.id} 
                               task={task} 
@@ -835,6 +940,14 @@ function App() {
                                 });
                               }}
                               onAddNext={handleAddNext}
+                              onToggleSection={(headerId) => {
+                                setSectionCollapsedByHeaderId(prev => ({
+                                  ...prev,
+                                  [headerId]: !(prev[headerId] === true),
+                                }));
+                              }}
+                              sectionCollapsed={task.type === 'header' ? (sectionCollapsedByHeaderId[task.id] === true) : undefined}
+                              onHeaderEditStart={(headerId) => setActiveHeaderId(headerId)}
                               onDelete={deleteTask}
                               showCompleted={showCompleted}
                               autoFocus={task.id === targetFocusId}

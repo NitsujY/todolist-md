@@ -18,6 +18,9 @@ interface TaskItemProps {
   descriptionExpanded?: boolean;
   onDescriptionExpandedChange?: (taskId: string, expanded: boolean) => void;
   onAddNext?: (afterId: string) => void;
+  onToggleSection?: (headerId: string) => void;
+  sectionCollapsed?: boolean;
+  onHeaderEditStart?: (headerId: string) => void;
   onDelete?: (id: string) => void;
   showCompleted: boolean;
   autoFocus?: boolean;
@@ -25,7 +28,7 @@ interface TaskItemProps {
   fontSize?: 'small' | 'normal' | 'large' | 'xl';
 }
 
-export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descriptionExpanded, onDescriptionExpandedChange, onAddNext, onDelete, showCompleted, autoFocus, compact, fontSize = 'normal' }: TaskItemProps) {
+export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descriptionExpanded, onDescriptionExpandedChange, onAddNext, onToggleSection, sectionCollapsed, onHeaderEditStart, onDelete, showCompleted, autoFocus, compact, fontSize = 'normal' }: TaskItemProps) {
   const [isVisible, setIsVisible] = useState(() => {
     if (task.completed && !showCompleted) return false;
     return true;
@@ -451,6 +454,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
       <div 
         ref={setNodeRef}
         style={style}
+        data-task-id={task.id}
         className={`
           task-item group flex items-center gap-3 border-b border-base-300 last:border-none transition-all duration-500 ease-in-out relative
           ${compact ? 'p-1 pt-2' : 'p-3 pt-6'}
@@ -462,18 +466,33 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
         <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 transition-opacity">
           <GripVertical size={16} />
         </div>
+
+        <button
+          onClick={() => onToggleSection?.(task.id)}
+          className="btn btn-ghost btn-xs btn-square text-base-content/50 hover:text-primary"
+          title={sectionCollapsed ? 'Expand section' : 'Collapse section'}
+        >
+          {sectionCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+        </button>
+
         {isEditing ? (
           <input
             ref={headerInputRef}
             value={editText}
             onChange={(e) => setEditText(e.target.value)}
+            onFocus={() => onHeaderEditStart?.(task.id)}
             onKeyDown={handleKeyDown}
             onBlur={handleBlur}
             className={`flex-1 bg-transparent border-none outline-none font-bold text-base-content p-0 ${getHeaderFontSizeClass()}`}
           />
         ) : (
           <h2 
-            onMouseDown={(e) => { e.preventDefault(); setModes({}); setIsEditing(true); }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onHeaderEditStart?.(task.id);
+              setModes({});
+              setIsEditing(true);
+            }}
             className={`font-bold text-base-content flex-1 cursor-text ${getHeaderFontSizeClass()}`}
           >
             {getDisplayText(task.text)}
