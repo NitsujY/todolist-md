@@ -617,7 +617,13 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
             </div>
           ) : (
             <div 
-              onMouseDown={(e) => { e.preventDefault(); setModes({}); setIsEditing(true); }}
+              onMouseDown={(e) => {
+                const el = e.target instanceof Element ? e.target : null;
+                if (el?.closest('a')) return;
+                e.preventDefault();
+                setModes({});
+                setIsEditing(true);
+              }}
                   className={`flex-1 break-words cursor-text prose prose-sm max-w-none min-h-[1.5em] ${task.completed ? 'line-through text-base-content/30' : 'text-base-content'} ${compact ? 'leading-snug' : ''} ${getFontSizeClass()}`}
                 >
               <ReactMarkdown 
@@ -641,6 +647,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
                         target="_blank" 
                         rel="noopener noreferrer" 
                         className="text-primary hover:underline cursor-pointer relative z-10"
+                        onMouseDown={(e) => e.stopPropagation()}
                         onClick={(e) => e.stopPropagation()} 
                       />
                     );
@@ -722,7 +729,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
                       remarkPlugins={[remarkGfm, remarkBreaks]}
                       components={{
                         p: ({children}) => <span className="block mb-2 last:mb-0">{children}</span>,
-                        a: ({node, ...props}) => <a {...props} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} />,
+                        a: ({node, ...props}) => <a {...props} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} />,
                         ul: ({children}) => <ul className="list-disc pl-4 mb-2">{children}</ul>,
                         ol: ({children}) => <ol className="list-decimal pl-4 mb-2">{children}</ol>,
                         li: ({children}) => <li className="mb-1">{children}</li>,
@@ -752,7 +759,13 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
               </div>
             ) : (
               <div 
-                onMouseDown={(e) => { e.preventDefault(); setModes({}); setIsEditingDescription(true); }}
+                onMouseDown={(e) => {
+                  const el = e.target instanceof Element ? e.target : null;
+                  if (el?.closest('a')) return;
+                  e.preventDefault();
+                  setModes({});
+                  setIsEditingDescription(true);
+                }}
                 className="text-sm text-base-content/70 cursor-text border-l-2 border-base-300 pl-3 py-1 prose prose-sm max-w-none"
                     >
                 <ReactMarkdown 
@@ -765,6 +778,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
                         target="_blank" 
                         rel="noopener noreferrer" 
                         className="text-primary hover:underline cursor-pointer"
+                        onMouseDown={(e) => e.stopPropagation()}
                         onClick={(e) => e.stopPropagation()} 
                       />
                     )
