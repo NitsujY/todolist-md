@@ -545,7 +545,7 @@ function App() {
                     Connect Google Drive
                   </button>
                 )}
-                <button 
+                <button
                   onClick={() => useTodoStore.getState().importGoogleDriveFiles()}
                   className="btn btn-sm btn-primary btn-outline gap-2"
                 >
