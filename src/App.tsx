@@ -104,7 +104,9 @@ function App() {
     sidebarCollapsed,
     setSidebarCollapsed,
     togglePlugin,
-    remindersLinkedByFile
+    remindersLinkedByFile,
+    googleAuthRequired,
+    connectGoogleDrive
   } = useTodoStore();
 
   // Access temporal store for undo/redo
@@ -530,17 +532,27 @@ function App() {
           <div className="flex flex-col items-center justify-center p-6 text-center space-y-3">
             <div className="text-base-content/40 text-sm">
               {activeStorage === 'google' 
-                ? "No files authorized yet." 
+                ? (googleAuthRequired ? 'Google Drive not connected.' : 'No files authorized yet.')
                 : "No markdown files found"}
             </div>
             {activeStorage === 'google' && (
-              <button 
-                onClick={() => useTodoStore.getState().importGoogleDriveFiles()}
-                className="btn btn-sm btn-primary btn-outline gap-2"
-              >
-                <FileText size={14} />
-                Import Files
-              </button>
+              <div className="flex flex-col items-center gap-2">
+                {googleAuthRequired && (
+                  <button
+                    onClick={() => connectGoogleDrive()}
+                    className="btn btn-sm btn-primary btn-outline"
+                  >
+                    Connect Google Drive
+                  </button>
+                )}
+                <button
+                  onClick={() => useTodoStore.getState().importGoogleDriveFiles()}
+                  className="btn btn-sm btn-primary btn-outline gap-2"
+                >
+                  <FileText size={14} />
+                  Import Files
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -596,6 +608,21 @@ function App() {
         </div>
       )}
 
+      {activeStorage === 'google' && googleAuthRequired && (
+        <div className="bg-warning text-warning-content px-4 py-2 text-sm flex items-center justify-between shadow-md z-[60]">
+          <div className="flex items-center gap-2">
+            <Cloud size={16} />
+            <span className="font-medium">Google Drive needs reconnect.</span>
+          </div>
+          <button
+            onClick={() => connectGoogleDrive()}
+            className="btn btn-sm btn-ghost bg-warning-content/10 hover:bg-warning-content/20 border-0 text-warning-content"
+          >
+            Connect
+          </button>
+        </div>
+      )}
+
       {/* Top Navigation Bar */}
       <div className="navbar bg-base-100 shadow-sm z-50 px-4 border-b border-base-300 h-14 min-h-0">
         <div className="flex-none">
@@ -646,7 +673,7 @@ function App() {
             style={{ width: sidebarWidth }}
             className="bg-base-100 border-r border-base-300 flex flex-col overflow-hidden relative group/sidebar flex-shrink-0"
           >
-            {renderSidebarContent({ floating: false, onSelectFile: selectFile })}
+            {renderSidebarContent({ floating: false, onSelectFile: (f: string) => selectFile(f, { interactiveAuth: true }) })}
           </aside>
         )}
 
@@ -660,7 +687,7 @@ function App() {
               {renderSidebarContent({
                 floating: true,
                 onSelectFile: (f: string) => {
-                  selectFile(f);
+                  selectFile(f, { interactiveAuth: true });
                   setPeekSidebar(false);
                 },
               })}
@@ -692,6 +719,11 @@ function App() {
                     <li><a onClick={() => handleStorageChange('google')} className={activeStorage === 'google' ? 'active' : ''}><Cloud size={16} /> Google Drive</a></li>
                     {activeStorage === 'google' && (
                       <li className="ml-4 border-l border-base-200">
+                        {googleAuthRequired && (
+                          <a onClick={() => connectGoogleDrive()} className="text-xs">
+                            <Cloud size={14} /> Connect
+                          </a>
+                        )}
                         <a onClick={() => useTodoStore.getState().pickGoogleDriveFolder()} className="text-xs">
                           <FolderOpen size={14} /> Select Folder
                         </a>

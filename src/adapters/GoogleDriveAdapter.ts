@@ -30,8 +30,15 @@ export class GoogleDriveAdapter implements StorageProvider {
   private isInitialized = false;
   private fileCache: Map<string, { id: string; name: string }> = new Map();
   private writeLocks = new Map<string, Promise<void>>();
+  private inFlightSignIn: Promise<void> | null = null;
 
   private driveApiLoaded = false;
+
+  private createAuthRequiredError(message = 'Google Drive authentication required') {
+    const err = new Error(message) as Error & { code?: string };
+    err.code = 'google_auth_required';
+    return err;
+  }
 
   constructor() {
     const savedConfigStr = localStorage.getItem('google-drive-config');
@@ -175,32 +182,57 @@ export class GoogleDriveAdapter implements StorageProvider {
 
   async signIn(): Promise<void> {
     if (!this.isInitialized) await this.init();
-    
-    return new Promise((resolve) => {
+
+    // If we already have a valid token, don't prompt.
+    if (this.accessToken && Date.now() < this.tokenExpiration) {
+      if (window.gapi?.client) {
+        window.gapi.client.setToken({ access_token: this.accessToken });
+      }
+      return;
+    }
+
+    // Coalesce concurrent sign-in attempts so we don't open multiple popups.
+    if (this.inFlightSignIn) {
+      await this.inFlightSignIn;
+      return;
+    }
+
+    this.inFlightSignIn = new Promise<void>((resolve, reject) => {
       this.tokenClient.callback = (resp: TokenResponse) => {
         if (resp.error !== undefined) {
-          throw resp;
+          reject(resp);
+          return;
         }
-        this.handleTokenResponse(resp);
-        resolve();
+        try {
+          this.handleTokenResponse(resp);
+          resolve();
+        } catch (e) {
+          reject(e);
+        }
       };
-      // Don't force consent every time. This allows silent sign-in if already authorized.
-      // Use login_hint to help skip account chooser if we know the email
+
+      // Don't force consent every time. Allows silent sign-in if already authorized.
+      // Use login_hint to help skip account chooser if we know the email.
       const config: any = { prompt: '' };
-      if (this.userEmail) {
-        config.login_hint = this.userEmail;
-      }
+      if (this.userEmail) config.login_hint = this.userEmail;
       this.tokenClient.requestAccessToken(config);
     });
+
+    try {
+      await this.inFlightSignIn;
+    } finally {
+      this.inFlightSignIn = null;
+    }
   }
 
   async switchAccount(): Promise<void> {
     if (!this.isInitialized) await this.init();
     
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       this.tokenClient.callback = (resp: TokenResponse) => {
         if (resp.error !== undefined) {
-          throw resp;
+          reject(resp);
+          return;
         }
         this.handleTokenResponse(resp);
         resolve();
@@ -221,6 +253,11 @@ export class GoogleDriveAdapter implements StorageProvider {
     // Fetch user info if we don't have it yet
     if (!this.userEmail) {
       this.fetchUserInfo();
+    }
+
+    // Ensure gapi client has the token for requests
+    if (this.accessToken && window.gapi?.client) {
+      window.gapi.client.setToken({ access_token: this.accessToken });
     }
   }
 
@@ -245,16 +282,23 @@ export class GoogleDriveAdapter implements StorageProvider {
     }
   }
 
-  private async ensureAuth() {
+  private async ensureAuth(options?: { interactive?: boolean }) {
+    const interactive = options?.interactive === true;
+
     if (!this.isInitialized) {
       await this.init();
     }
-    if (!this.accessToken || Date.now() >= this.tokenExpiration) {
+
+    const hasValidToken = !!(this.accessToken && Date.now() < this.tokenExpiration);
+    if (!hasValidToken) {
+      if (!interactive) {
+        throw this.createAuthRequiredError('Google Drive session expired. Please reconnect.');
+      }
       await this.signIn();
     }
 
     // Ensure gapi client has the token for requests
-    if (this.accessToken && window.gapi && window.gapi.client) {
+    if (this.accessToken && window.gapi?.client) {
       window.gapi.client.setToken({ access_token: this.accessToken });
     }
   }
@@ -264,8 +308,7 @@ export class GoogleDriveAdapter implements StorageProvider {
     const cached = this.fileCache.get(path);
     if (cached) return cached.id;
 
-    await this.ensureAuth();
-    await this.ensureDriveApi();
+    // Callers must ensure auth + Drive API.
 
     const rootId = this.config?.rootFolderId;
     
@@ -315,8 +358,9 @@ export class GoogleDriveAdapter implements StorageProvider {
     }
   }
 
-  async list(path: string): Promise<string[]> {
-    await this.ensureAuth();
+  async list(_path: string): Promise<string[]> {
+    void _path;
+    await this.ensureAuth({ interactive: false });
     await this.ensureDriveApi();
     
     try {
@@ -377,18 +421,17 @@ export class GoogleDriveAdapter implements StorageProvider {
       return [];
     } catch (e) {
       console.error('Error listing files', e);
-      // If token expired
+      // If token expired/invalid, do not auto-prompt from background operations.
       if ((e as any).status === 401) {
         this.accessToken = null;
-        await this.signIn();
-        return this.list(path);
+        throw this.createAuthRequiredError('Google Drive session expired. Please reconnect.');
       }
       return [];
     }
   }
 
   async read(path: string): Promise<string | null> {
-    await this.ensureAuth();
+    await this.ensureAuth({ interactive: false });
     await this.ensureDriveApi();
     
     const fileId = await this.findFileId(path);
@@ -404,17 +447,15 @@ export class GoogleDriveAdapter implements StorageProvider {
     } catch (e) {
       console.error('Error reading file', e);
       if ((e as any).status === 401) {
-        console.log('Token expired during read, refreshing...');
         this.accessToken = null;
-        await this.signIn();
-        return this.read(path);
+        throw this.createAuthRequiredError('Google Drive session expired. Please reconnect.');
       }
       return null;
     }
   }
 
   async readWithMeta(path: string): Promise<{ content: string | null; meta?: FileMeta }> {
-    await this.ensureAuth();
+    await this.ensureAuth({ interactive: false });
     await this.ensureDriveApi();
 
     const fileId = await this.findFileId(path);
@@ -444,10 +485,8 @@ export class GoogleDriveAdapter implements StorageProvider {
     } catch (e) {
       console.error('Error reading file (with meta)', e);
       if ((e as any).status === 401) {
-        console.log('Token expired during read, refreshing...');
         this.accessToken = null;
-        await this.signIn();
-        return this.readWithMeta(path);
+        throw this.createAuthRequiredError('Google Drive session expired. Please reconnect.');
       }
       return { content: null };
     }
@@ -472,7 +511,7 @@ export class GoogleDriveAdapter implements StorageProvider {
     this.writeLocks.set(path, lockPromise);
 
     try {
-        await this.ensureAuth();
+      await this.ensureAuth({ interactive: true });
         await this.ensureDriveApi();
 
         const fileId = await this.findFileId(path);
@@ -535,16 +574,8 @@ export class GoogleDriveAdapter implements StorageProvider {
     } catch (e) {
       console.error('Error writing file', e);
       if ((e as any).status === 401) {
-        console.log('Token expired during write, refreshing...');
         this.accessToken = null;
-        await this.signIn();
-        // Recursive call - we need to be careful about locks here.
-        // Since we are inside the lock, we can't just call this.write() again because it will wait for itself.
-        // We need to release the lock and retry.
-        // BUT, if we release, another write might sneak in.
-        // Actually, if we fail, we should throw or retry *inside* the lock.
-        // Let's just throw for now and let the caller retry, or handle the retry logic without recursion.
-        // For simplicity in this patch, we'll just release and throw.
+        throw this.createAuthRequiredError('Google Drive session expired. Please reconnect.');
       }
       if ((e as any).status === 403) {
         console.error('Permission denied. User might need to grant write access.');
@@ -578,7 +609,7 @@ export class GoogleDriveAdapter implements StorageProvider {
     this.writeLocks.set(path, lockPromise);
 
     try {
-        await this.ensureAuth();
+      await this.ensureAuth({ interactive: true });
         await this.ensureDriveApi();
 
         const fileId = await this.findFileId(path);
@@ -642,11 +673,8 @@ export class GoogleDriveAdapter implements StorageProvider {
     } catch (e) {
       console.error('Error writing file (with meta)', e);
       if ((e as any).status === 401) {
-        console.log('Token expired during write, refreshing...');
         this.accessToken = null;
-        await this.signIn();
-        // See note in write() about recursion and locks.
-        // For now, we just fail.
+        throw this.createAuthRequiredError('Google Drive session expired. Please reconnect.');
       }
 
       // 412: precondition failed (ETag mismatch) => conflict
@@ -670,7 +698,7 @@ export class GoogleDriveAdapter implements StorageProvider {
   async pickFolder(): Promise<string | null> {
     console.log('pickFolder: Starting...');
     try {
-      await this.ensureAuth();
+      await this.ensureAuth({ interactive: true });
       console.log('pickFolder: Auth ensured');
     } catch (e) {
       console.error('pickFolder: Auth failed', e);
@@ -726,7 +754,7 @@ export class GoogleDriveAdapter implements StorageProvider {
   async pickFile(): Promise<{ id: string; name: string } | null> {
     console.log('pickFile: Starting...');
     try {
-      await this.ensureAuth();
+      await this.ensureAuth({ interactive: true });
     } catch (e) {
       console.error('pickFile: Auth failed', e);
       throw e;
@@ -772,7 +800,7 @@ export class GoogleDriveAdapter implements StorageProvider {
   async pickFiles(): Promise<{ id: string; name: string }[]> {
     console.log('pickFiles: Starting...');
     try {
-      await this.ensureAuth();
+      await this.ensureAuth({ interactive: true });
     } catch (e) {
       console.error('pickFiles: Auth failed', e);
       throw e;

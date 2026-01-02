@@ -31,6 +31,9 @@ interface TodoState {
   activeTag: string | null;
   pluginConfig: Record<string, any>;
 
+  // Google Drive: avoid surprise auth popups during background reads.
+  googleAuthRequired: boolean;
+
   // Fast file switching cache (stale-while-revalidate)
   fileCache: Record<string, FileCacheEntry>;
 
@@ -46,12 +49,13 @@ interface TodoState {
   setPluginConfig: (name: string, config: any) => void;
   setStorage: (adapterName: 'local' | 'fs' | 'google') => void;
   setGoogleDriveConfig: (config: GoogleDriveConfig) => Promise<void>;
+  connectGoogleDrive: () => Promise<void>;
   pickGoogleDriveFolder: () => Promise<void>;
   pickGoogleDriveFile: () => Promise<void>;
   importGoogleDriveFiles: () => Promise<void>;
   switchGoogleAccount: () => Promise<void>;
   loadTodos: () => Promise<void>;
-  refreshCurrentFile: (opts?: { background?: boolean }) => Promise<void>;
+  refreshCurrentFile: (opts?: { background?: boolean; throwOnAuthRequired?: boolean }) => Promise<void>;
   toggleTask: (taskId: string) => Promise<void>;
   addTask: (text: string) => Promise<void>;
   updateTaskText: (taskId: string, newText: string) => Promise<string | undefined>;
@@ -63,7 +67,7 @@ interface TodoState {
   nestTask: (activeId: string, overId: string) => Promise<void>;
   updateMarkdown: (newMarkdown: string) => Promise<void>;
   openFileOrFolder: (type: 'file' | 'folder') => Promise<boolean>;
-  selectFile: (filename: string) => Promise<void>;
+  selectFile: (filename: string, opts?: { interactiveAuth?: boolean }) => Promise<void>;
   renameFile: (oldName: string, newName: string) => Promise<void>;
   createFile: (filename: string) => Promise<void>;
   restoreSession: () => Promise<void>;
@@ -80,6 +84,8 @@ const adapters = {
   fs: new FileSystemAdapter(),
   google: new GoogleDriveAdapter(),
 };
+
+const isGoogleAuthRequiredError = (e: any) => e?.code === 'google_auth_required';
 
 const isUserEditingTask = () => {
   const active = document.activeElement;
@@ -133,6 +139,7 @@ export const useTodoStore = create<TodoState>()(
         fontSize: 'normal' as const,
         activeTag: null,
         pluginConfig: {},
+        googleAuthRequired: false,
         fileCache: {},
         remindersLinkedByFile: {},
         requiresPermission: false,
@@ -287,7 +294,8 @@ export const useTodoStore = create<TodoState>()(
     const adapter = adapters[adapterName];
     set({ 
       storage: adapter,
-      configService: new ConfigService(adapter)
+      configService: new ConfigService(adapter),
+      googleAuthRequired: false,
     });
     get().syncConfig();
     localStorage.setItem('active-storage', adapterName);
@@ -300,7 +308,7 @@ export const useTodoStore = create<TodoState>()(
         adapters.google.init().then(() => {
           set({ isFolderMode: true });
           adapters.google.list('').then(files => {
-            set({ fileList: sortFiles(files), isLoading: false });
+            set({ fileList: sortFiles(files), isLoading: false, googleAuthRequired: false });
             const lastFile = localStorage.getItem('lastOpenedFile');
             if (lastFile && files.includes(lastFile)) {
               get().selectFile(lastFile);
@@ -309,6 +317,10 @@ export const useTodoStore = create<TodoState>()(
             }
           }).catch(e => {
             console.error(e);
+            if (isGoogleAuthRequiredError(e)) {
+              set({ fileList: [], isLoading: false, googleAuthRequired: true, isFolderMode: true });
+              return;
+            }
             set({ isLoading: false });
           });
         }).catch(e => {
@@ -327,12 +339,31 @@ export const useTodoStore = create<TodoState>()(
     adapters.google.setConfig(config);
   },
 
+  connectGoogleDrive: async () => {
+    set({ isLoading: true });
+    try {
+      await adapters.google.signIn();
+      const files = await adapters.google.list('');
+      set({ fileList: sortFiles(files), googleAuthRequired: false, isLoading: false, isFolderMode: true });
+
+      const lastFile = localStorage.getItem('lastOpenedFile');
+      if (lastFile && files.includes(lastFile)) {
+        await get().selectFile(lastFile);
+      } else if (files.length > 0) {
+        await get().selectFile(files[0]);
+      }
+    } catch (e) {
+      console.error('Failed to connect Google Drive', e);
+      set({ isLoading: false, googleAuthRequired: isGoogleAuthRequiredError(e) });
+    }
+  },
+
   switchGoogleAccount: async () => {
     try {
       await adapters.google.switchAccount();
       // After switching, refresh the list
       const files = await adapters.google.list('');
-      set({ fileList: sortFiles(files) });
+      set({ fileList: sortFiles(files), googleAuthRequired: false });
       if (files.length > 0) {
         get().selectFile(files[0]);
       } else {
@@ -508,6 +539,11 @@ export const useTodoStore = create<TodoState>()(
       }));
     } catch (e) {
       console.error('Failed to refresh file', e);
+      if (isGoogleAuthRequiredError(e)) {
+        set({ isLoading: false, googleAuthRequired: true });
+        if (opts?.throwOnAuthRequired) throw e;
+        return;
+      }
       set({ isLoading: false });
     }
   },
@@ -666,7 +702,8 @@ export const useTodoStore = create<TodoState>()(
         set({ 
           storage: adapters.google, 
           configService: new ConfigService(adapters.google),
-          isFolderMode: true 
+          isFolderMode: true,
+          googleAuthRequired: false,
         });
         get().syncConfig();
         try {
@@ -683,7 +720,11 @@ export const useTodoStore = create<TodoState>()(
           return; // Successfully restored Google session
         } catch (e) {
           console.error('Failed to restore Google Drive session', e);
-          // Fall through to FS restore if Google fails
+          if (isGoogleAuthRequiredError(e)) {
+            set({ fileList: [], googleAuthRequired: true, isFolderMode: true });
+            return;
+          }
+          // Fall through to FS restore if Google fails for non-auth reasons
         }
       }
     }
@@ -768,7 +809,7 @@ export const useTodoStore = create<TodoState>()(
     if (type === 'folder') {
       const success = await adapter.openDirectory();
       if (success) {
-        set({ storage: adapter, isFolderMode: true });
+        set({ storage: adapter, isFolderMode: true, googleAuthRequired: false });
         const files = await adapter.list('');
         set({ fileList: sortFiles(files) });
         if (files.length > 0) {
@@ -779,7 +820,7 @@ export const useTodoStore = create<TodoState>()(
     } else {
       const success = await adapter.openFile();
       if (success) {
-        set({ storage: adapter, isFolderMode: false });
+        set({ storage: adapter, isFolderMode: false, googleAuthRequired: false });
         const files = await adapter.list('');
         if (files.length > 0) {
           set({ currentFile: files[0] });
@@ -790,19 +831,57 @@ export const useTodoStore = create<TodoState>()(
     }
   },
 
-  selectFile: async (filename) => {
+  selectFile: async (filename, opts) => {
+    const previousFile = get().currentFile;
+    const previousCached = previousFile ? get().fileCache[previousFile] : undefined;
+
     const nextFile = filename;
     const cached = get().fileCache[nextFile];
 
     set({
       currentFile: nextFile,
+      googleAuthRequired: false,
       // If we have cache, switch instantly without spinner.
       ...(cached ? { markdown: cached.markdown, tasks: cached.tasks, isLoading: false } : { isLoading: true }),
     });
     localStorage.setItem('lastOpenedFile', nextFile);
 
-    // Background refresh to update cache/UI if needed.
-    await get().refreshCurrentFile({ background: !!cached });
+    try {
+      // Background refresh to update cache/UI if needed.
+      await get().refreshCurrentFile({ background: !!cached, throwOnAuthRequired: !cached });
+    } catch (e) {
+      if (isGoogleAuthRequiredError(e)) {
+        // If the user explicitly initiated the file switch, try to re-auth once.
+        if (opts?.interactiveAuth) {
+          try {
+            set({ isLoading: true });
+            await adapters.google.signIn();
+            set({ googleAuthRequired: false });
+            await get().refreshCurrentFile({ background: !!cached, throwOnAuthRequired: true });
+            return;
+          } catch (reauthErr) {
+            console.error('Google Drive re-auth failed', reauthErr);
+          } finally {
+            set({ isLoading: false });
+          }
+        }
+
+        set({
+          googleAuthRequired: true,
+          isLoading: false,
+          ...(previousFile
+            ? {
+                currentFile: previousFile,
+                ...(previousCached
+                  ? { markdown: previousCached.markdown, tasks: previousCached.tasks }
+                  : {}),
+              }
+            : {}),
+        });
+        return;
+      }
+      throw e;
+    }
   },
       });
     },
