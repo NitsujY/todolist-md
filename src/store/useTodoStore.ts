@@ -342,7 +342,7 @@ export const useTodoStore = create<TodoState>()(
   connectGoogleDrive: async () => {
     set({ isLoading: true });
     try {
-      await adapters.google.signIn();
+      await adapters.google.signIn({ interactive: true });
       const files = await adapters.google.list('');
       set({ fileList: sortFiles(files), googleAuthRequired: false, isLoading: false, isFolderMode: true });
 
@@ -855,7 +855,7 @@ export const useTodoStore = create<TodoState>()(
         if (opts?.interactiveAuth) {
           try {
             set({ isLoading: true });
-            await adapters.google.signIn();
+            await adapters.google.signIn({ interactive: true });
             set({ googleAuthRequired: false });
             await get().refreshCurrentFile({ background: !!cached, throwOnAuthRequired: true });
             return;

@@ -180,7 +180,7 @@ export class GoogleDriveAdapter implements StorageProvider {
     }
   }
 
-  async signIn(): Promise<void> {
+  async signIn(options?: { interactive?: boolean }): Promise<void> {
     if (!this.isInitialized) await this.init();
 
     // If we already have a valid token, don't prompt.
@@ -211,9 +211,11 @@ export class GoogleDriveAdapter implements StorageProvider {
         }
       };
 
-      // Don't force consent every time. Allows silent sign-in if already authorized.
-      // Use login_hint to help skip account chooser if we know the email.
-      const config: any = { prompt: '' };
+      const interactive = options?.interactive === true;
+
+      // Default behavior: silent token refresh (no UI). This is important for background reads.
+      // When user explicitly clicks "Connect" or triggers an interactive action, allow UI.
+      const config: any = { prompt: interactive ? 'consent' : '' };
       if (this.userEmail) config.login_hint = this.userEmail;
       this.tokenClient.requestAccessToken(config);
     });
@@ -294,7 +296,7 @@ export class GoogleDriveAdapter implements StorageProvider {
       if (!interactive) {
         throw this.createAuthRequiredError('Google Drive session expired. Please reconnect.');
       }
-      await this.signIn();
+      await this.signIn({ interactive: true });
     }
 
     // Ensure gapi client has the token for requests
