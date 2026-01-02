@@ -45,7 +45,7 @@ The app uses the `StorageProvider` interface to support multiple backends.
 - **Renaming**: Handles case-insensitive file systems (e.g., macOS/Windows) by using a temporary file strategy when renaming files where only the case changes (e.g., `todo.md` -> `Todo.md`).
 
 ### 3.3 Google Drive Adapter (`google`)
-- **Auth**: OAuth 2.0 with `https://www.googleapis.com/auth/drive`, `https://www.googleapis.com/auth/drive.install`, and `https://www.googleapis.com/auth/userinfo.email` scopes.
+- **Auth**: OAuth 2.0 with `https://www.googleapis.com/auth/drive.file` scope.
 - **Auth UX**:
     - The app should avoid triggering OAuth popups from background operations (e.g., file switching, auto-refresh).
     - If the cached token is missing/expired, the UI should present an explicit **Connect** action to re-authenticate.

@@ -68,6 +68,13 @@ export class ConfigService {
       await this.storage.write(CONFIG_FILENAME, JSON.stringify(newConfig, null, 2));
       this.cachedConfig = newConfig;
     } catch (e) {
+      // For Google Drive, background writes (like config migration on startup) should not
+      // trigger OAuth popups. If auth is required, let the app surface a reconnect action.
+      if ((e as any)?.code === 'google_auth_required') {
+        console.warn('Config save skipped: Google Drive auth required');
+        this.cachedConfig = newConfig;
+        return;
+      }
       console.error('Failed to save config', e);
       throw e;
     }

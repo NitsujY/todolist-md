@@ -302,34 +302,10 @@ export const useTodoStore = create<TodoState>()(
     
     // Don't auto-load for FS, wait for user action
     if (adapterName === 'google') {
-      set({ isLoading: true });
-      const config = adapters.google.getConfig();
-      if (config) {
-        adapters.google.init().then(() => {
-          set({ isFolderMode: true });
-          adapters.google.list('').then(files => {
-            set({ fileList: sortFiles(files), isLoading: false, googleAuthRequired: false });
-            const lastFile = localStorage.getItem('lastOpenedFile');
-            if (lastFile && files.includes(lastFile)) {
-              get().selectFile(lastFile);
-            } else if (files.length > 0) {
-              get().selectFile(files[0]);
-            }
-          }).catch(e => {
-            console.error(e);
-            if (isGoogleAuthRequiredError(e)) {
-              set({ fileList: [], isLoading: false, googleAuthRequired: true, isFolderMode: true });
-              return;
-            }
-            set({ isLoading: false });
-          });
-        }).catch(e => {
-          console.error(e);
-          set({ isLoading: false });
-        });
-      } else {
-        set({ isLoading: false });
-      }
+      // Keep storage switch lightweight.
+      // We trigger interactive sign-in from an explicit user gesture (the storage switch click)
+      // in App.tsx, which is iOS "Add to Home Screen" PWA friendly.
+      set({ isFolderMode: true, fileList: [], currentFile: '' });
     } else if (adapterName !== 'fs') {
       get().loadTodos();
     }
@@ -702,6 +678,19 @@ export const useTodoStore = create<TodoState>()(
     get().selectFile(filename);
   },
   restoreSession: async () => {
+    // Warm Google Drive scripts/token client in the background.
+    // This improves the chance that user-initiated auth popups are allowed in iOS A2HS PWAs
+    // because requestAccessToken() can run immediately on tap without awaiting init.
+    const activeStoragePref = localStorage.getItem('active-storage');
+    if (activeStoragePref !== 'google') {
+      const config = adapters.google.getConfig();
+      if (config?.clientId && config.apiKey) {
+        adapters.google.init().catch(e => {
+          console.error('Failed to pre-initialize Google Drive on startup', e);
+        });
+      }
+    }
+
     // Try to restore Google Drive session first
     const activeStorage = localStorage.getItem('active-storage');
     if (activeStorage === 'google') {

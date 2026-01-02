@@ -318,6 +318,10 @@ function App() {
     } else if (type === 'google') {
       setActiveStorage('google');
       setStorage('google');
+
+      // User explicitly chose Google Drive, so we can immediately kick off
+      // the interactive connect flow (iOS A2HS PWA-friendly: initiated by tap).
+      void connectGoogleDrive();
     } else {
       setActiveStorage(type);
       setStorage(type);
