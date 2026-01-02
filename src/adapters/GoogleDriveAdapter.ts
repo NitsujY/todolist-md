@@ -26,13 +26,82 @@ export class GoogleDriveAdapter implements StorageProvider {
   private tokenClient: any;
   private accessToken: string | null = null;
   private tokenExpiration: number = 0;
-  private userEmail: string | null = null;
   private isInitialized = false;
   private fileCache: Map<string, { id: string; name: string }> = new Map();
   private writeLocks = new Map<string, Promise<void>>();
   private inFlightSignIn: Promise<void> | null = null;
 
   private driveApiLoaded = false;
+
+  private isIosStandalone(): boolean {
+    // iOS Safari exposes navigator.standalone for Home Screen apps.
+    // Some environments only expose display-mode: standalone.
+    const navAny = navigator as any;
+    if (navAny?.standalone === true) return true;
+    try {
+      return window.matchMedia?.('(display-mode: standalone)')?.matches === true;
+    } catch {
+      return false;
+    }
+  }
+
+  private consumeTokenFromUrlIfPresent() {
+    try {
+      const url = new URL(window.location.href);
+
+      // GIS redirect-mode commonly returns tokens in the URL hash.
+      const hash = url.hash?.startsWith('#') ? url.hash.slice(1) : '';
+      const hashParams = new URLSearchParams(hash);
+
+      const accessToken = hashParams.get('access_token') || url.searchParams.get('access_token');
+      const expiresIn = hashParams.get('expires_in') || url.searchParams.get('expires_in');
+      const scope = hashParams.get('scope') || url.searchParams.get('scope');
+      const tokenType = hashParams.get('token_type') || url.searchParams.get('token_type');
+
+      if (accessToken && expiresIn && tokenType) {
+        this.handleTokenResponse({
+          access_token: accessToken,
+          expires_in: expiresIn,
+          scope: scope || '',
+          token_type: tokenType,
+        });
+
+        // Clean sensitive token info from the URL.
+        url.hash = '';
+        url.searchParams.delete('access_token');
+        url.searchParams.delete('expires_in');
+        url.searchParams.delete('scope');
+        url.searchParams.delete('token_type');
+        window.history.replaceState({}, document.title, url.toString());
+      }
+    } catch {
+      // Ignore parse errors.
+    }
+  }
+
+  private createTokenClient(uxMode: 'popup' | 'redirect') {
+    return window.google.accounts.oauth2.initTokenClient({
+      client_id: this.config!.clientId,
+      // Use 'drive.file' scope as required by Google for verification.
+      // This means we only see files we created or opened via Picker.
+      scope: 'https://www.googleapis.com/auth/drive.file',
+      include_granted_scopes: false,
+      ux_mode: uxMode,
+      // For redirect mode, return to the current origin.
+      redirect_uri: window.location.origin,
+      callback: (response: TokenResponse) => {
+        if (response.error !== undefined) {
+          throw response;
+        }
+        this.handleTokenResponse(response);
+      },
+      error_callback: (err: any) => {
+        // The popup flow can fail in iOS "Add to Home Screen" PWAs.
+        // We surface the error via the Promise in signIn().
+        throw err;
+      },
+    });
+  }
 
   private createAuthRequiredError(message = 'Google Drive authentication required') {
     const err = new Error(message) as Error & { code?: string };
@@ -41,6 +110,9 @@ export class GoogleDriveAdapter implements StorageProvider {
   }
 
   constructor() {
+    // If we returned from an OAuth redirect, consume the token ASAP.
+    this.consumeTokenFromUrlIfPresent();
+
     const savedConfigStr = localStorage.getItem('google-drive-config');
     let savedConfig: GoogleDriveConfig | null = null;
     try {
@@ -54,7 +126,6 @@ export class GoogleDriveAdapter implements StorageProvider {
     // Try to restore token
     const savedToken = localStorage.getItem('google-drive-token');
     const savedExpiration = localStorage.getItem('google-drive-token-expires');
-    this.userEmail = localStorage.getItem('google-drive-user-email');
 
     if (savedToken && savedExpiration) {
       const expiresAt = parseInt(savedExpiration, 10);
@@ -132,19 +203,8 @@ export class GoogleDriveAdapter implements StorageProvider {
           });
           console.log('GAPI client initialized (minimal)');
 
-          this.tokenClient = window.google.accounts.oauth2.initTokenClient({
-            client_id: this.config!.clientId,
-            // Use 'drive.file' scope as required by Google for verification.
-            // This means we only see files we created or opened via Picker.
-            // Add userinfo.email to help with silent sign-in hints
-            scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.install https://www.googleapis.com/auth/userinfo.email',
-            callback: (response: TokenResponse) => {
-              if (response.error !== undefined) {
-                throw response;
-              }
-              this.handleTokenResponse(response);
-            },
-          });
+          // Default to popup; iOS A2HS will use a redirect client in signIn().
+          this.tokenClient = this.createTokenClient('popup');
 
           this.isInitialized = true;
           
@@ -198,26 +258,85 @@ export class GoogleDriveAdapter implements StorageProvider {
     }
 
     this.inFlightSignIn = new Promise<void>((resolve, reject) => {
-      this.tokenClient.callback = (resp: TokenResponse) => {
-        if (resp.error !== undefined) {
-          reject(resp);
+      const interactive = options?.interactive === true;
+
+      const config: any = { prompt: interactive ? 'consent' : '' };
+
+      // iOS A2HS PWAs frequently block popups. Use redirect for interactive auth.
+      const useRedirect = interactive && this.isIosStandalone();
+      const client = useRedirect ? this.createTokenClient('redirect') : this.tokenClient;
+
+      const startedAt = Date.now();
+      let redirectFallbackTriggered = false;
+
+      let settled = false;
+      const timeoutMs = interactive ? 2 * 60 * 1000 : 20 * 1000;
+      const timeoutId = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(new Error('google_auth_timeout'));
+      }, timeoutMs);
+
+      const settle = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        fn();
+      };
+
+      // Ensure auth failures reject the Promise rather than throwing asynchronously.
+      (client as any).error_callback = (err: any) => {
+        const type = err?.type ?? err?.error;
+        const msg = String(err?.message ?? '');
+        const isPopupClosed = type === 'popup_closed' || msg.toLowerCase().includes('popup window closed');
+        const isPopupFailed = type === 'popup_failed_to_open' || msg.toLowerCase().includes('failed to open popup');
+        const isPopupError = isPopupClosed || isPopupFailed;
+
+        // If the popup closes almost immediately, it's often a popup-block / COOP-related failure.
+        // Redirect does not rely on opener/popup communication, so it's a good fallback.
+        if (interactive && !useRedirect && !redirectFallbackTriggered && isPopupError) {
+          const elapsedMs = Date.now() - startedAt;
+          if (elapsedMs < 1000) {
+            redirectFallbackTriggered = true;
+            try {
+              this.createTokenClient('redirect').requestAccessToken(config);
+              return;
+            } catch {
+              // Fall through to rejection.
+            }
+          }
+        }
+
+        settle(() => reject(err));
+      };
+
+      client.callback = (resp: TokenResponse) => {
+        if (resp?.error !== undefined) {
+          settle(() => reject(resp));
           return;
         }
         try {
           this.handleTokenResponse(resp);
-          resolve();
+          settle(() => resolve());
         } catch (e) {
-          reject(e);
+          settle(() => reject(e));
         }
       };
 
-      const interactive = options?.interactive === true;
-
-      // Default behavior: silent token refresh (no UI). This is important for background reads.
-      // When user explicitly clicks "Connect" or triggers an interactive action, allow UI.
-      const config: any = { prompt: interactive ? 'consent' : '' };
-      if (this.userEmail) config.login_hint = this.userEmail;
-      this.tokenClient.requestAccessToken(config);
+      // If popup fails to open (common on iOS A2HS), fallback to redirect.
+      try {
+        client.requestAccessToken(config);
+      } catch (e: any) {
+        if (interactive && !useRedirect) {
+          try {
+            this.createTokenClient('redirect').requestAccessToken(config);
+            return;
+          } catch {
+            // Ignore; we'll reject below.
+          }
+        }
+        settle(() => reject(e));
+      }
     });
 
     try {
@@ -252,35 +371,9 @@ export class GoogleDriveAdapter implements StorageProvider {
     localStorage.setItem('google-drive-token', this.accessToken!);
     localStorage.setItem('google-drive-token-expires', this.tokenExpiration.toString());
 
-    // Fetch user info if we don't have it yet
-    if (!this.userEmail) {
-      this.fetchUserInfo();
-    }
-
     // Ensure gapi client has the token for requests
     if (this.accessToken && window.gapi?.client) {
       window.gapi.client.setToken({ access_token: this.accessToken });
-    }
-  }
-
-  private async fetchUserInfo() {
-    try {
-      // Ensure gapi client has the token
-      if (this.accessToken && window.gapi && window.gapi.client) {
-        window.gapi.client.setToken({ access_token: this.accessToken });
-        
-        const response = await window.gapi.client.request({
-          path: 'https://www.googleapis.com/oauth2/v3/userinfo',
-        });
-        
-        if (response.result && response.result.email) {
-          this.userEmail = response.result.email;
-          localStorage.setItem('google-drive-user-email', this.userEmail!);
-          console.log('Fetched user email:', this.userEmail);
-        }
-      }
-    } catch (e) {
-      console.error('Failed to fetch user info', e);
     }
   }
 
@@ -513,7 +606,9 @@ export class GoogleDriveAdapter implements StorageProvider {
     this.writeLocks.set(path, lockPromise);
 
     try {
-      await this.ensureAuth({ interactive: true });
+      // Writes should not trigger OAuth UI automatically (especially in background, e.g. config sync).
+      // If auth is required, throw and let the UI prompt the user to reconnect.
+      await this.ensureAuth({ interactive: false });
         await this.ensureDriveApi();
 
         const fileId = await this.findFileId(path);
@@ -611,7 +706,8 @@ export class GoogleDriveAdapter implements StorageProvider {
     this.writeLocks.set(path, lockPromise);
 
     try {
-      await this.ensureAuth({ interactive: true });
+      // Writes should not trigger OAuth UI automatically.
+      await this.ensureAuth({ interactive: false });
         await this.ensureDriveApi();
 
         const fileId = await this.findFileId(path);
