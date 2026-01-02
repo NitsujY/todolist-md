@@ -337,6 +337,14 @@ export const useTodoStore = create<TodoState>()(
 
   setGoogleDriveConfig: async (config) => {
     adapters.google.setConfig(config);
+
+    // iOS "Add to Home Screen" PWAs can be very strict about popups.
+    // If sign-in needs to show a consent UI, we want requestAccessToken()
+    // to run immediately on the user's tap without first awaiting script/init.
+    // Pre-initialize in the background so the Connect button stays "user-gesture safe".
+    adapters.google.init().catch(e => {
+      console.error('Failed to pre-initialize Google Drive after config change', e);
+    });
   },
 
   connectGoogleDrive: async () => {
