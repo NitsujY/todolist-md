@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, isValidElement } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -184,6 +184,14 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
   const preventAutoClose = pluginRegistry.shouldPreventTaskEditAutoClose(task, taskItemContext);
   const shouldHideDescriptionToggle = pluginRegistry.shouldHideDescriptionToggle(task, taskItemContext);
   const taskItemPluginClassNames = pluginRegistry.getTaskItemClassNames(task, taskItemContext);
+
+  const allTaskActionButtons = pluginRegistry.renderTaskActionButtons(task, taskItemContext);
+  const breakdownTaskActionButtons = allTaskActionButtons.filter(
+    (node) => isValidElement(node) && (node.props as Record<string, unknown>)?.['data-task-action'] === 'breakdown'
+  );
+  const inlineTaskActionButtons = allTaskActionButtons.filter(
+    (node) => !(isValidElement(node) && (node.props as Record<string, unknown>)?.['data-task-action'] === 'breakdown')
+  );
 
   useEffect(() => {
     if (task.completed && !showCompleted) {
@@ -581,7 +589,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
       </div>
       
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 relative">
           {isEditing ? (
             <div className="w-full">
               <textarea
@@ -616,7 +624,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
               </div>
             </div>
           ) : (
-            <div 
+            <div
               onMouseDown={(e) => {
                 const el = e.target instanceof Element ? e.target : null;
                 if (el?.closest('a')) return;
@@ -624,8 +632,8 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
                 setModes({});
                 setIsEditing(true);
               }}
-                  className={`flex-1 break-words cursor-text prose prose-sm max-w-none min-h-[1.5em] ${task.completed ? 'line-through text-base-content/30' : 'text-base-content'} ${compact ? 'leading-snug' : ''} ${getFontSizeClass()}`}
-                >
+              className={`flex-1 break-words cursor-text prose prose-sm max-w-none min-h-[1.5em] pr-8 ${task.completed ? 'line-through text-base-content/30' : 'text-base-content'} ${compact ? 'leading-snug' : ''} ${getFontSizeClass()}`}
+            >
               <ReactMarkdown 
                 remarkPlugins={[remarkGfm, remarkBreaks]} 
                 components={{ 
@@ -671,27 +679,28 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
           
           {/* Plugin Extensions (rendered further down with exit handler) */}
 
-          {/* Plugin Action Buttons (hover visible) */}
-          {pluginRegistry.renderTaskActionButtons(task, taskItemContext).length > 0 && (
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-              {pluginRegistry.renderTaskActionButtons(task, taskItemContext).map((node, idx) => (
+          {/* Hover Actions (positioned so hover doesn't reflow text) */}
+          {(inlineTaskActionButtons.length > 0 || true) && (
+            <div
+              className={`absolute top-0 ${((task.description || isEditingDescription) && !shouldHideDescriptionToggle) ? 'right-8' : 'right-0'} hidden group-hover:flex items-center gap-1 bg-base-100/90 rounded-lg px-1`}
+            >
+              {inlineTaskActionButtons.map((node, idx) => (
                 <span key={idx}>{node}</span>
               ))}
+
+              <button
+                onClick={handleCopy}
+                className="btn btn-ghost btn-xs btn-circle text-base-content/40 hover:text-primary"
+                title="Copy task and description"
+              >
+                {justCopied ? <Check size={16} /> : <Copy size={16} />}
+              </button>
             </div>
           )}
 
-          {/* Copy Button */}
-          <button 
-            onClick={handleCopy}
-            className="btn btn-ghost btn-xs btn-circle opacity-0 group-hover:opacity-100 transition-opacity text-base-content/40 hover:text-primary"
-            title="Copy task and description"
-          >
-            {justCopied ? <Check size={16} /> : <Copy size={16} />}
-          </button>
-
           {/* Description Toggle */}
-            {(task.description || isEditingDescription) && !shouldHideDescriptionToggle && (
-          <button 
+          {(task.description || isEditingDescription) && !shouldHideDescriptionToggle && (
+            <button 
               onMouseDown={(e) => e.preventDefault()}
               onClick={(e) => {
                 // Toggle description visibility but do NOT exit Zen Mode.
@@ -713,6 +722,14 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
         {/* Description Area */}
         {(showDescription || isEditingDescription) && (
           <div className="mt-2 pl-1">
+            {breakdownTaskActionButtons.length > 0 && (
+              <div className="flex justify-end mb-1">
+                {breakdownTaskActionButtons.map((node, idx) => (
+                  <span key={idx}>{node}</span>
+                ))}
+              </div>
+            )}
+
             {isEditingDescription ? (
               <div className="flex flex-col gap-2">
                 {pluginRegistry.renderDescriptionToolbars(task, taskItemContext).length > 0 && (

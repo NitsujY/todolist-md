@@ -22,8 +22,13 @@
 ## Commit/Push Policy (Avoid Wasting Credits)
 
 - Do **not** run `git commit` or `git push` unless the user explicitly asks (e.g. “commit”, “commit and push”, “release to main”).
+- Do **not** merge/squash-merge/release to `main` unless the user explicitly asks (e.g. “release to main”, “merge to main”, “squash merge to main”).
 - Batch related work into **fewer commits** (prefer 1 commit per coherent request).
 - When you do commit/push, prefer chaining commands with `&&` so it’s a single, easy-to-audit step.
+
+## Repo Inspection Tools
+
+- Prefer VS Code tools for reading/searching code (`read_file`, `grep_search`, `semantic_search`) over shell commands like `sed`/`cat` when exploring source.
 
 ## Git Submodule Workflow (AI Assistant)
 
