@@ -423,6 +423,10 @@ export const useTodoStore = create<TodoState>()(
           }
       } catch (e) {
           console.error('Failed to import files', e);
+          const msg = (e as any)?.message;
+          if (typeof msg === 'string' && msg.length > 0) {
+            alert(msg);
+          }
       }
   },
 
