@@ -621,6 +621,14 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
                 >
                   <Calendar size={12} /> Due Date
                 </button>
+
+                {breakdownTaskActionButtons.length > 0 && (
+                  <div className="flex items-center gap-1">
+                    {breakdownTaskActionButtons.map((node, idx) => (
+                      <span key={idx}>{node}</span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -722,14 +730,6 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
         {/* Description Area */}
         {(showDescription || isEditingDescription) && (
           <div className="mt-2 pl-1">
-            {breakdownTaskActionButtons.length > 0 && (
-              <div className="flex justify-end mb-1">
-                {breakdownTaskActionButtons.map((node, idx) => (
-                  <span key={idx}>{node}</span>
-                ))}
-              </div>
-            )}
-
             {isEditingDescription ? (
               <div className="flex flex-col gap-2">
                 {pluginRegistry.renderDescriptionToolbars(task, taskItemContext).length > 0 && (
