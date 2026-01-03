@@ -27,6 +27,7 @@ export class GoogleDriveAdapter implements StorageProvider {
   private accessToken: string | null = null;
   private tokenExpiration: number = 0;
   private isInitialized = false;
+  private inFlightInit: Promise<void> | null = null;
   private fileCache: Map<string, { id: string; name: string }> = new Map();
   private writeLocks = new Map<string, Promise<void>>();
   private inFlightSignIn: Promise<void> | null = null;
@@ -44,6 +45,7 @@ export class GoogleDriveAdapter implements StorageProvider {
       } = null;
 
   private driveApiLoaded = false;
+  private inFlightDriveApiLoad: Promise<void> | null = null;
 
   private isIosStandalone(): boolean {
     // iOS Safari exposes navigator.standalone for Home Screen apps.
@@ -171,6 +173,14 @@ export class GoogleDriveAdapter implements StorageProvider {
     return err;
   }
 
+  private getPickerAppId(): string | null {
+    // Picker's setAppId expects the numeric project number.
+    // For many OAuth client IDs, the prefix before the first '-' is that number.
+    const clientId = this.config?.clientId ?? '';
+    const maybeProjectNumber = clientId.split('-')[0] ?? '';
+    return /^\d+$/.test(maybeProjectNumber) ? maybeProjectNumber : null;
+  }
+
   constructor() {
     // If we returned from an OAuth redirect, consume the token ASAP.
     this.consumeTokenFromUrlIfPresent();
@@ -248,57 +258,75 @@ export class GoogleDriveAdapter implements StorageProvider {
 
   async init(): Promise<void> {
     if (this.isInitialized) return;
+    if (this.inFlightInit) return this.inFlightInit;
     if (!this.config) throw new Error('Google Drive config not set');
     if (!this.config.clientId) throw new Error('Google Drive Client ID is missing. Please configure it in Settings.');
     if (!this.config.apiKey) throw new Error('Google Drive API Key is missing. Please configure it in Settings.');
 
-    await this.loadScripts();
+    this.inFlightInit = (async () => {
+      await this.loadScripts();
 
-    return new Promise((resolve, reject) => {
-      // Load both client and picker libraries
-      window.gapi.load('client:picker', async () => {
-        try {
-          console.log('Initializing GAPI client...');
-          // Minimal init - just API key, no discovery docs yet to avoid 502s
-          await window.gapi.client.init({
-            apiKey: this.config!.apiKey,
-          });
-          console.log('GAPI client initialized (minimal)');
+      await new Promise<void>((resolve, reject) => {
+        // Load both client and picker libraries
+        window.gapi.load('client:picker', async () => {
+          try {
+            console.log('Initializing GAPI client...');
+            // Minimal init - just API key, no discovery docs yet to avoid 502s
+            await window.gapi.client.init({
+              apiKey: this.config!.apiKey,
+            });
+            console.log('GAPI client initialized (minimal)');
 
-          // Default to popup; iOS A2HS will use a redirect client in signIn().
-          this.tokenClient = this.createTokenClient('popup');
+            // Default to popup; iOS A2HS will use a redirect client in signIn().
+            this.tokenClient = this.createTokenClient('popup');
 
-          this.isInitialized = true;
-          
-          // If we restored a valid token, ensure it's set on the client immediately
-          if (this.accessToken) {
-            window.gapi.client.setToken({ access_token: this.accessToken });
+            this.isInitialized = true;
+
+            // If we restored a valid token, ensure it's set on the client immediately
+            if (this.accessToken) {
+              window.gapi.client.setToken({ access_token: this.accessToken });
+            }
+
+            resolve();
+          } catch (err) {
+            console.error('GAPI Init Error:', JSON.stringify(err, null, 2));
+            reject(err);
           }
-
-          resolve();
-        } catch (err) {
-          console.error('GAPI Init Error:', JSON.stringify(err, null, 2));
-          reject(err);
-        }
+        });
       });
-    });
+    })();
+
+    try {
+      await this.inFlightInit;
+    } finally {
+      this.inFlightInit = null;
+    }
   }
 
   private async ensureDriveApi() {
     if (this.driveApiLoaded) return;
-    
+    if (this.inFlightDriveApiLoad) return this.inFlightDriveApiLoad;
+
     console.log('Loading Drive API...');
-    try {
+    this.inFlightDriveApiLoad = (async () => {
+      try {
         // Try loading via URL which is often more robust
         await window.gapi.client.load('https://www.googleapis.com/discovery/v1/apis/drive/v3/rest');
         this.driveApiLoaded = true;
         console.log('Drive API loaded via URL');
-    } catch (e) {
+      } catch (e) {
         console.error('Failed to load Drive API via URL, trying shorthand...', e);
         // Fallback
         await window.gapi.client.load('drive', 'v3');
         this.driveApiLoaded = true;
         console.log('Drive API loaded via shorthand');
+      }
+    })();
+
+    try {
+      await this.inFlightDriveApiLoad;
+    } finally {
+      this.inFlightDriveApiLoad = null;
     }
   }
 
@@ -577,6 +605,14 @@ export class GoogleDriveAdapter implements StorageProvider {
       return response.body;
     } catch (e) {
       console.error('Error reading file', e);
+      if ((e as any).status === 404) {
+        this.fileCache.delete(path);
+        const err = new Error(
+          'Google Drive cannot access this file (404). With drive.file scope, please re-import the file (Import Files) or switch to the correct Google account.'
+        ) as Error & { code?: string };
+        err.code = 'google_drive_not_found';
+        throw err;
+      }
       if ((e as any).status === 401) {
         this.accessToken = null;
         throw this.createAuthRequiredError('Google Drive session expired. Please reconnect.');
@@ -615,6 +651,14 @@ export class GoogleDriveAdapter implements StorageProvider {
       return { content: contentResp.body, meta };
     } catch (e) {
       console.error('Error reading file (with meta)', e);
+      if ((e as any).status === 404) {
+        this.fileCache.delete(path);
+        const err = new Error(
+          'Google Drive cannot access this file (404). With drive.file scope, please re-import the file (Import Files) or switch to the correct Google account.'
+        ) as Error & { code?: string };
+        err.code = 'google_drive_not_found';
+        throw err;
+      }
       if ((e as any).status === 401) {
         this.accessToken = null;
         throw this.createAuthRequiredError('Google Drive session expired. Please reconnect.');
@@ -888,13 +932,16 @@ export class GoogleDriveAdapter implements StorageProvider {
             .setSelectFolderEnabled(true)
             .setMimeTypes('application/vnd.google-apps.folder');
 
-          const picker = new window.google.picker.PickerBuilder()
+          const pickerBuilder = new window.google.picker.PickerBuilder()
             .addView(view)
             .setOAuthToken(this.accessToken)
             .setDeveloperKey(this.config!.apiKey)
             .setOrigin(window.location.origin)
             .setCallback(pickerCallback)
-            .build();
+          const appId = this.getPickerAppId();
+          if (appId) pickerBuilder.setAppId(appId);
+
+          const picker = pickerBuilder.build();
 
           picker.setVisible(true);
           console.log('pickFolder: Picker set to visible');
@@ -961,13 +1008,17 @@ export class GoogleDriveAdapter implements StorageProvider {
             .setIncludeFolders(true)
             .setMimeTypes('text/markdown,text/plain');
 
-          const picker = new window.google.picker.PickerBuilder()
+          const pickerBuilder = new window.google.picker.PickerBuilder()
             .addView(view)
             .setOAuthToken(this.accessToken)
             .setDeveloperKey(this.config!.apiKey)
             .setOrigin(window.location.origin)
             .setCallback(pickerCallback)
-            .build();
+
+          const appId = this.getPickerAppId();
+          if (appId) pickerBuilder.setAppId(appId);
+
+          const picker = pickerBuilder.build();
 
           picker.setVisible(true);
         } catch (err) {
@@ -1035,14 +1086,18 @@ export class GoogleDriveAdapter implements StorageProvider {
             .setIncludeFolders(true)
             .setMimeTypes('text/markdown,text/plain');
 
-          const picker = new window.google.picker.PickerBuilder()
+          const pickerBuilder = new window.google.picker.PickerBuilder()
             .addView(view)
             .enableFeature(window.google.picker.Feature.MULTISELECT_ENABLED)
             .setOAuthToken(this.accessToken)
             .setDeveloperKey(this.config!.apiKey)
             .setOrigin(window.location.origin)
             .setCallback(pickerCallback)
-            .build();
+
+          const appId = this.getPickerAppId();
+          if (appId) pickerBuilder.setAppId(appId);
+
+          const picker = pickerBuilder.build();
 
           picker.setVisible(true);
         } catch (err) {

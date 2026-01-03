@@ -541,6 +541,13 @@ export const useTodoStore = create<TodoState>()(
         if (opts?.throwOnAuthRequired) throw e;
         return;
       }
+
+      if (!background) {
+        const msg = (e as any)?.message;
+        if (typeof msg === 'string' && msg.length > 0) {
+          alert(msg);
+        }
+      }
       set({ isLoading: false });
     }
   },
