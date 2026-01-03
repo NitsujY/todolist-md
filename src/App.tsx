@@ -957,7 +957,7 @@ function App() {
                         items={visibleTasks.map(t => t.id)}
                         strategy={verticalListSortingStrategy}
                       >
-                        <div className="flex flex-col divide-y divide-base-200 pb-20">
+                        <div className="flex flex-col divide-y divide-base-200 pb-12">
                           {visibleTasks.map(task => (
                             <TaskItem 
                               key={task.id} 
