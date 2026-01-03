@@ -405,15 +405,28 @@ export const useTodoStore = create<TodoState>()(
       try {
           const files = await adapters.google.pickFiles();
           if (files.length > 0) {
-              // Refresh list
-              const currentFiles = await adapters.google.list('');
-              set({ fileList: sortFiles(currentFiles) });
-              if (currentFiles.length > 0 && !get().currentFile) {
-                  get().selectFile(currentFiles[0]);
+              const pickedNames = files
+                .map(f => f.name)
+                .filter(name => name !== '.todolist-md.config.json');
+
+              // In Drive "drive.file" mode, the user may pick files outside the current folder.
+              // The folder listing can legitimately return fewer items, so we merge instead of
+              // replacing the list.
+              set(state => {
+                const merged = Array.from(new Set([...(state.fileList || []), ...pickedNames]));
+                return { fileList: sortFiles(merged), googleAuthRequired: false };
+              });
+
+              if (!get().currentFile && pickedNames.length > 0) {
+                get().selectFile(pickedNames[0]);
               }
           }
       } catch (e) {
           console.error('Failed to import files', e);
+          const msg = (e as any)?.message;
+          if (typeof msg === 'string' && msg.length > 0) {
+            alert(msg);
+          }
       }
   },
 

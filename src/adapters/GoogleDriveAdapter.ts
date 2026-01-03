@@ -519,7 +519,9 @@ export class GoogleDriveAdapter implements StorageProvider {
       console.log(`[GoogleDrive] Raw list response:`, response.result.files);
 
       const files = response.result.files;
-      this.fileCache.clear();
+      // Do not clear the cache here.
+      // Users can import files via Picker that are outside the current root folder.
+      // Clearing would drop those name->id mappings and make the imported files appear "missing".
       
       if (files && files.length > 0) {
         const uniqueFiles = new Set<string>();
@@ -845,20 +847,40 @@ export class GoogleDriveAdapter implements StorageProvider {
       }
 
       try {
+        let loaded = false;
+        const loadTimeoutId = window.setTimeout(() => {
+          if (loaded) return;
+          reject(
+            new Error(
+              'google_picker_load_timeout: Picker failed to load. Common causes: API key HTTP referrer restrictions (add http://localhost:5173/*), Picker API not enabled, or third-party cookies blocked.'
+            )
+          );
+        }, 15000);
+
         const pickerCallback = (data: any) => {
-            if (data.action === window.google.picker.Action.PICKED) {
-              const doc = data.docs[0];
-              console.log('pickFolder: Folder picked', doc);
-              resolve(doc.id);
-            } else if (data.action === window.google.picker.Action.CANCEL) {
-              console.log('pickFolder: Cancelled');
-              resolve(null);
-            } else if (data.action === 'error') {
-               console.error('pickFolder: Picker Error Action', data);
-            } else if (data.action === window.google.picker.Action.LOADED) {
-               console.log('pickFolder: Picker UI loaded');
-            }
-          };
+          if (data.action === window.google.picker.Action.LOADED) {
+            loaded = true;
+            window.clearTimeout(loadTimeoutId);
+            return;
+          }
+
+          if (data.action === 'error') {
+            window.clearTimeout(loadTimeoutId);
+            reject(new Error('google_picker_error'));
+            return;
+          }
+
+          if (data.action === window.google.picker.Action.PICKED) {
+            window.clearTimeout(loadTimeoutId);
+            const doc = data.docs[0];
+            console.log('pickFolder: Folder picked', doc);
+            resolve(doc.id);
+          } else if (data.action === window.google.picker.Action.CANCEL) {
+            window.clearTimeout(loadTimeoutId);
+            console.log('pickFolder: Cancelled');
+            resolve(null);
+          }
+        };
 
           // Use DOCS view but configured for folders - this is often more reliable than FOLDERS view
           const view = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
@@ -870,7 +892,7 @@ export class GoogleDriveAdapter implements StorageProvider {
             .addView(view)
             .setOAuthToken(this.accessToken)
             .setDeveloperKey(this.config!.apiKey)
-            // .setOrigin(window.location.protocol + '//' + window.location.host) // Sometimes causes issues on localhost
+            .setOrigin(window.location.origin)
             .setCallback(pickerCallback)
             .build();
 
@@ -899,17 +921,41 @@ export class GoogleDriveAdapter implements StorageProvider {
       }
 
       try {
+        let loaded = false;
+        const loadTimeoutId = window.setTimeout(() => {
+          if (loaded) return;
+          reject(
+            new Error(
+              'google_picker_load_timeout: Picker failed to load. Common causes: API key HTTP referrer restrictions (add http://localhost:5173/*), Picker API not enabled, or third-party cookies blocked.'
+            )
+          );
+        }, 15000);
+
         const pickerCallback = (data: any) => {
-            if (data.action === window.google.picker.Action.PICKED) {
-              const doc = data.docs[0];
-              console.log('pickFile: File picked', doc.id);
-              // Update cache with the picked file ID to ensure subsequent operations use it
-              this.fileCache.set(doc.name, { id: doc.id, name: doc.name });
-              resolve({ id: doc.id, name: doc.name });
-            } else if (data.action === window.google.picker.Action.CANCEL) {
-              resolve(null);
-            }
-          };
+          if (data.action === window.google.picker.Action.LOADED) {
+            loaded = true;
+            window.clearTimeout(loadTimeoutId);
+            return;
+          }
+
+          if (data.action === 'error') {
+            window.clearTimeout(loadTimeoutId);
+            reject(new Error('google_picker_error'));
+            return;
+          }
+
+          if (data.action === window.google.picker.Action.PICKED) {
+            window.clearTimeout(loadTimeoutId);
+            const doc = data.docs[0];
+            console.log('pickFile: File picked', doc.id);
+            // Update cache with the picked file ID to ensure subsequent operations use it
+            this.fileCache.set(doc.name, { id: doc.id, name: doc.name });
+            resolve({ id: doc.id, name: doc.name });
+          } else if (data.action === window.google.picker.Action.CANCEL) {
+            window.clearTimeout(loadTimeoutId);
+            resolve(null);
+          }
+        };
 
           const view = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
             .setIncludeFolders(true)
@@ -919,6 +965,7 @@ export class GoogleDriveAdapter implements StorageProvider {
             .addView(view)
             .setOAuthToken(this.accessToken)
             .setDeveloperKey(this.config!.apiKey)
+            .setOrigin(window.location.origin)
             .setCallback(pickerCallback)
             .build();
 
@@ -945,20 +992,44 @@ export class GoogleDriveAdapter implements StorageProvider {
       }
 
       try {
+        let loaded = false;
+        const loadTimeoutId = window.setTimeout(() => {
+          if (loaded) return;
+          reject(
+            new Error(
+              'google_picker_load_timeout: Picker failed to load. Common causes: API key HTTP referrer restrictions (add http://localhost:5173/*), Picker API not enabled, or third-party cookies blocked.'
+            )
+          );
+        }, 15000);
+
         const pickerCallback = (data: any) => {
-            if (data.action === window.google.picker.Action.PICKED) {
-              const docs = data.docs;
-              console.log('pickFiles: Files picked', docs.length);
-              const results = docs.map((doc: any) => {
-                  // Update cache
-                  this.fileCache.set(doc.name, { id: doc.id, name: doc.name });
-                  return { id: doc.id, name: doc.name };
-              });
-              resolve(results);
-            } else if (data.action === window.google.picker.Action.CANCEL) {
-              resolve([]);
-            }
-          };
+          if (data.action === window.google.picker.Action.LOADED) {
+            loaded = true;
+            window.clearTimeout(loadTimeoutId);
+            return;
+          }
+
+          if (data.action === 'error') {
+            window.clearTimeout(loadTimeoutId);
+            reject(new Error('google_picker_error'));
+            return;
+          }
+
+          if (data.action === window.google.picker.Action.PICKED) {
+            window.clearTimeout(loadTimeoutId);
+            const docs = data.docs;
+            console.log('pickFiles: Files picked', docs.length);
+            const results = docs.map((doc: any) => {
+              // Update cache
+              this.fileCache.set(doc.name, { id: doc.id, name: doc.name });
+              return { id: doc.id, name: doc.name };
+            });
+            resolve(results);
+          } else if (data.action === window.google.picker.Action.CANCEL) {
+            window.clearTimeout(loadTimeoutId);
+            resolve([]);
+          }
+        };
 
           const view = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
             .setIncludeFolders(true)
@@ -969,6 +1040,7 @@ export class GoogleDriveAdapter implements StorageProvider {
             .enableFeature(window.google.picker.Feature.MULTISELECT_ENABLED)
             .setOAuthToken(this.accessToken)
             .setDeveloperKey(this.config!.apiKey)
+            .setOrigin(window.location.origin)
             .setCallback(pickerCallback)
             .build();
 
