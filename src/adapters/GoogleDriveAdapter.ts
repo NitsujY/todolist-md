@@ -30,6 +30,18 @@ export class GoogleDriveAdapter implements StorageProvider {
   private fileCache: Map<string, { id: string; name: string }> = new Map();
   private writeLocks = new Map<string, Promise<void>>();
   private inFlightSignIn: Promise<void> | null = null;
+  private pendingAuth:
+    | null
+    | {
+        resolve: () => void;
+        reject: (err: any) => void;
+        settle: (fn: () => void) => void;
+        startedAt: number;
+        interactive: boolean;
+        useRedirect: boolean;
+        redirectFallbackTriggered: boolean;
+        config: any;
+      } = null;
 
   private driveApiLoaded = false;
 
@@ -90,17 +102,67 @@ export class GoogleDriveAdapter implements StorageProvider {
       // For redirect mode, return to the current origin.
       redirect_uri: window.location.origin,
       callback: (response: TokenResponse) => {
-        if (response.error !== undefined) {
-          throw response;
-        }
-        this.handleTokenResponse(response);
+        this.handleAuthCallback(response);
       },
       error_callback: (err: any) => {
-        // The popup flow can fail in iOS "Add to Home Screen" PWAs.
-        // We surface the error via the Promise in signIn().
-        throw err;
+        this.handleAuthError(err);
       },
     });
+  }
+
+  private handleAuthCallback(response: TokenResponse) {
+    if (response?.error !== undefined) {
+      const pending = this.pendingAuth;
+      if (pending) {
+        pending.settle(() => pending.reject(response));
+      }
+      return;
+    }
+
+    try {
+      this.handleTokenResponse(response);
+      const pending = this.pendingAuth;
+      if (pending) {
+        pending.settle(() => pending.resolve());
+      }
+    } catch (e) {
+      const pending = this.pendingAuth;
+      if (pending) {
+        pending.settle(() => pending.reject(e));
+      }
+    }
+  }
+
+  private handleAuthError(err: any) {
+    const pending = this.pendingAuth;
+    if (!pending) return;
+
+    const type = err?.type ?? err?.error;
+    const msg = String(err?.message ?? '');
+    const isPopupClosed = type === 'popup_closed' || msg.toLowerCase().includes('popup window closed');
+    const isPopupFailed =
+      type === 'popup_failed_to_open' || msg.toLowerCase().includes('failed to open popup');
+    const isPopupError = isPopupClosed || isPopupFailed;
+
+    // If the popup closes almost immediately, it's often a popup-block / COOP-related failure.
+    // Redirect does not rely on opener/popup communication, so it's a good fallback.
+    if (
+      pending.interactive &&
+      !pending.useRedirect &&
+      !pending.redirectFallbackTriggered &&
+      isPopupError &&
+      Date.now() - pending.startedAt < 1000
+    ) {
+      pending.redirectFallbackTriggered = true;
+      try {
+        this.createTokenClient('redirect').requestAccessToken(pending.config);
+        return;
+      } catch {
+        // Fall through to rejection.
+      }
+    }
+
+    pending.settle(() => pending.reject(err));
   }
 
   private createAuthRequiredError(message = 'Google Drive authentication required') {
@@ -240,11 +302,14 @@ export class GoogleDriveAdapter implements StorageProvider {
     }
   }
 
-  async signIn(options?: { interactive?: boolean }): Promise<void> {
+  async signIn(options?: { interactive?: boolean; prompt?: string }): Promise<void> {
     if (!this.isInitialized) await this.init();
 
+    const forcePrompt = typeof options?.prompt === 'string' && options.prompt.length > 0;
+
     // If we already have a valid token, don't prompt.
-    if (this.accessToken && Date.now() < this.tokenExpiration) {
+    // (Unless the caller explicitly forces a prompt, e.g. select_account.)
+    if (!forcePrompt && this.accessToken && Date.now() < this.tokenExpiration) {
       if (window.gapi?.client) {
         window.gapi.client.setToken({ access_token: this.accessToken });
       }
@@ -260,20 +325,21 @@ export class GoogleDriveAdapter implements StorageProvider {
     this.inFlightSignIn = new Promise<void>((resolve, reject) => {
       const interactive = options?.interactive === true;
 
-      const config: any = { prompt: interactive ? 'consent' : '' };
+      const prompt = options?.prompt ?? (interactive ? 'consent' : '');
+      const config: any = { prompt };
 
       // iOS A2HS PWAs frequently block popups. Use redirect for interactive auth.
       const useRedirect = interactive && this.isIosStandalone();
       const client = useRedirect ? this.createTokenClient('redirect') : this.tokenClient;
 
       const startedAt = Date.now();
-      let redirectFallbackTriggered = false;
 
       let settled = false;
       const timeoutMs = interactive ? 2 * 60 * 1000 : 20 * 1000;
       const timeoutId = window.setTimeout(() => {
         if (settled) return;
         settled = true;
+        this.pendingAuth = null;
         reject(new Error('google_auth_timeout'));
       }, timeoutMs);
 
@@ -281,46 +347,19 @@ export class GoogleDriveAdapter implements StorageProvider {
         if (settled) return;
         settled = true;
         window.clearTimeout(timeoutId);
+        this.pendingAuth = null;
         fn();
       };
 
-      // Ensure auth failures reject the Promise rather than throwing asynchronously.
-      (client as any).error_callback = (err: any) => {
-        const type = err?.type ?? err?.error;
-        const msg = String(err?.message ?? '');
-        const isPopupClosed = type === 'popup_closed' || msg.toLowerCase().includes('popup window closed');
-        const isPopupFailed = type === 'popup_failed_to_open' || msg.toLowerCase().includes('failed to open popup');
-        const isPopupError = isPopupClosed || isPopupFailed;
-
-        // If the popup closes almost immediately, it's often a popup-block / COOP-related failure.
-        // Redirect does not rely on opener/popup communication, so it's a good fallback.
-        if (interactive && !useRedirect && !redirectFallbackTriggered && isPopupError) {
-          const elapsedMs = Date.now() - startedAt;
-          if (elapsedMs < 1000) {
-            redirectFallbackTriggered = true;
-            try {
-              this.createTokenClient('redirect').requestAccessToken(config);
-              return;
-            } catch {
-              // Fall through to rejection.
-            }
-          }
-        }
-
-        settle(() => reject(err));
-      };
-
-      client.callback = (resp: TokenResponse) => {
-        if (resp?.error !== undefined) {
-          settle(() => reject(resp));
-          return;
-        }
-        try {
-          this.handleTokenResponse(resp);
-          settle(() => resolve());
-        } catch (e) {
-          settle(() => reject(e));
-        }
+      this.pendingAuth = {
+        resolve,
+        reject,
+        settle,
+        startedAt,
+        interactive,
+        useRedirect,
+        redirectFallbackTriggered: false,
+        config,
       };
 
       // If popup fails to open (common on iOS A2HS), fallback to redirect.
@@ -348,19 +387,14 @@ export class GoogleDriveAdapter implements StorageProvider {
 
   async switchAccount(): Promise<void> {
     if (!this.isInitialized) await this.init();
-    
-    return new Promise((resolve, reject) => {
-      this.tokenClient.callback = (resp: TokenResponse) => {
-        if (resp.error !== undefined) {
-          reject(resp);
-          return;
-        }
-        this.handleTokenResponse(resp);
-        resolve();
-      };
-      // Force account selection
-      this.tokenClient.requestAccessToken({ prompt: 'select_account' });
-    });
+
+    // Force a fresh flow with account chooser.
+    this.accessToken = null;
+    this.tokenExpiration = 0;
+    localStorage.removeItem('google-drive-token');
+    localStorage.removeItem('google-drive-token-expires');
+
+    await this.signIn({ interactive: true, prompt: 'select_account' });
   }
   private handleTokenResponse(resp: TokenResponse) {
     this.accessToken = resp.access_token;
