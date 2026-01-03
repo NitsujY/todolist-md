@@ -593,8 +593,7 @@ function App() {
 
   return (
     <div
-      className="flex flex-col h-screen bg-base-200 font-sans overflow-hidden"
-      style={{ paddingBottom: 'var(--ai-bottom-bar-offset, 0px)' }}
+      className="flex flex-col h-dvh bg-base-200 font-sans overflow-hidden"
     >
       
       {requiresPermission && (
@@ -914,7 +913,10 @@ function App() {
             ) : (
               <div className="flex flex-col flex-1 overflow-hidden relative">
                 {/* Task List */}
-                <div className="flex-1 overflow-y-auto">
+                <div
+                  className="flex-1 overflow-y-auto"
+                  style={{ paddingBottom: 'var(--ai-bottom-bar-offset, 0px)' }}
+                >
                   {visibleTasks.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-base-content/40">
                       {tasks.length === 0 ? (
@@ -957,7 +959,7 @@ function App() {
                         items={visibleTasks.map(t => t.id)}
                         strategy={verticalListSortingStrategy}
                       >
-                        <div className="flex flex-col divide-y divide-base-200 pb-20">
+                        <div className="flex flex-col divide-y divide-base-200 pb-4">
                           {visibleTasks.map(task => (
                             <TaskItem 
                               key={task.id} 
@@ -1014,7 +1016,7 @@ function App() {
                     </DndContext>
                   )}
                 </div>
-                <div className="p-2 text-center text-xs text-base-content/30 border-t border-base-200 bg-base-50">
+                <div className="px-2 py-1 text-center text-xs text-base-content/30 border-t border-base-200 bg-base-50">
                   <a href="/privacy.html" target="_blank" className="hover:text-primary">Privacy Policy</a>
                   <span className="mx-2">•</span>
                   <a href="/terms.html" target="_blank" className="hover:text-primary">Terms of Service</a>
@@ -1173,7 +1175,7 @@ function App() {
               </div>
             </div>
             
-            <div className="text-center text-xs text-base-content/30 mt-8 flex flex-col gap-2">
+            <div className="text-center text-xs text-base-content/30 mt-4 flex flex-col gap-1">
               <span>v{__APP_VERSION__}</span>
               <div className="flex justify-center gap-3">
                 <a href="/privacy.html" target="_blank" className="hover:text-primary underline">Privacy Policy</a>

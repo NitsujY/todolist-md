@@ -153,7 +153,13 @@ class PluginRegistry {
     return this.getEnabledPlugins()
       .map(meta => {
         const node = meta.instance.renderTaskActionButton ? meta.instance.renderTaskActionButton(task, context) : null;
-        return node ? <React.Fragment key={meta.name}>{node}</React.Fragment> : null;
+        if (!node) return null;
+
+        // Preserve element identity/props so consumers can inspect/route buttons
+        // (e.g., via `data-*` attributes) without everything being hidden behind a Fragment.
+        return React.isValidElement(node)
+          ? React.cloneElement(node, { key: meta.name })
+          : <React.Fragment key={meta.name}>{node}</React.Fragment>;
       })
       .filter(Boolean);
   }
