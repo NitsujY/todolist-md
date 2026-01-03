@@ -519,7 +519,9 @@ export class GoogleDriveAdapter implements StorageProvider {
       console.log(`[GoogleDrive] Raw list response:`, response.result.files);
 
       const files = response.result.files;
-      this.fileCache.clear();
+      // Do not clear the cache here.
+      // Users can import files via Picker that are outside the current root folder.
+      // Clearing would drop those name->id mappings and make the imported files appear "missing".
       
       if (files && files.length > 0) {
         const uniqueFiles = new Set<string>();
