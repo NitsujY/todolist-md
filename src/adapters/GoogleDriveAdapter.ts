@@ -59,6 +59,19 @@ export class GoogleDriveAdapter implements StorageProvider {
     }
   }
 
+  private isConsentOrInteractionRequired(err: any): boolean {
+    const type = String(err?.type ?? err?.error ?? err?.code ?? '').toLowerCase();
+    const message = String(err?.message ?? '').toLowerCase();
+
+    // GIS token flow commonly uses these identifiers.
+    const combined = `${type} ${message}`;
+    return (
+      combined.includes('consent_required') ||
+      combined.includes('interaction_required') ||
+      combined.includes('login_required')
+    );
+  }
+
   private consumeTokenFromUrlIfPresent() {
     try {
       const url = new URL(window.location.href);
@@ -350,61 +363,82 @@ export class GoogleDriveAdapter implements StorageProvider {
       return;
     }
 
-    this.inFlightSignIn = new Promise<void>((resolve, reject) => {
+    const requestToken = (params: { interactive: boolean; prompt: string }): Promise<void> => {
+      return new Promise<void>((resolve, reject) => {
+        const { interactive, prompt } = params;
+        const config: any = { prompt };
+
+        // iOS A2HS PWAs frequently block popups. Use redirect for interactive auth.
+        const useRedirect = interactive && this.isIosStandalone();
+        const client = useRedirect ? this.createTokenClient('redirect') : this.tokenClient;
+
+        const startedAt = Date.now();
+
+        let settled = false;
+        const timeoutMs = interactive ? 2 * 60 * 1000 : 20 * 1000;
+        const timeoutId = window.setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          this.pendingAuth = null;
+          reject(new Error('google_auth_timeout'));
+        }, timeoutMs);
+
+        const settle = (fn: () => void) => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timeoutId);
+          this.pendingAuth = null;
+          fn();
+        };
+
+        this.pendingAuth = {
+          resolve,
+          reject,
+          settle,
+          startedAt,
+          interactive,
+          useRedirect,
+          redirectFallbackTriggered: false,
+          config,
+        };
+
+        // If popup fails to open (common on iOS A2HS), fallback to redirect.
+        try {
+          client.requestAccessToken(config);
+        } catch (e: any) {
+          if (interactive && !useRedirect) {
+            try {
+              this.createTokenClient('redirect').requestAccessToken(config);
+              return;
+            } catch {
+              // Ignore; we'll reject below.
+            }
+          }
+          settle(() => reject(e));
+        }
+      });
+    };
+
+    this.inFlightSignIn = (async () => {
       const interactive = options?.interactive === true;
 
-      const prompt = options?.prompt ?? (interactive ? 'consent' : '');
-      const config: any = { prompt };
-
-      // iOS A2HS PWAs frequently block popups. Use redirect for interactive auth.
-      const useRedirect = interactive && this.isIosStandalone();
-      const client = useRedirect ? this.createTokenClient('redirect') : this.tokenClient;
-
-      const startedAt = Date.now();
-
-      let settled = false;
-      const timeoutMs = interactive ? 2 * 60 * 1000 : 20 * 1000;
-      const timeoutId = window.setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        this.pendingAuth = null;
-        reject(new Error('google_auth_timeout'));
-      }, timeoutMs);
-
-      const settle = (fn: () => void) => {
-        if (settled) return;
-        settled = true;
-        window.clearTimeout(timeoutId);
-        this.pendingAuth = null;
-        fn();
-      };
-
-      this.pendingAuth = {
-        resolve,
-        reject,
-        settle,
-        startedAt,
-        interactive,
-        useRedirect,
-        redirectFallbackTriggered: false,
-        config,
-      };
-
-      // If popup fails to open (common on iOS A2HS), fallback to redirect.
-      try {
-        client.requestAccessToken(config);
-      } catch (e: any) {
-        if (interactive && !useRedirect) {
-          try {
-            this.createTokenClient('redirect').requestAccessToken(config);
-            return;
-          } catch {
-            // Ignore; we'll reject below.
-          }
-        }
-        settle(() => reject(e));
+      // Important: prompt='consent' forces the consent UI every time.
+      // For a better UX, try prompt='' first and only fall back to consent when required.
+      if (forcePrompt) {
+        await requestToken({ interactive, prompt: options!.prompt! });
+        return;
       }
-    });
+
+      try {
+        await requestToken({ interactive, prompt: '' });
+      } catch (e: any) {
+        if (interactive && this.isConsentOrInteractionRequired(e)) {
+          await requestToken({ interactive, prompt: 'consent' });
+          return;
+        }
+        throw e;
+      }
+    })();
 
     try {
       await this.inFlightSignIn;
