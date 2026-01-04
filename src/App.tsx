@@ -1194,6 +1194,11 @@ function App() {
       )}
 
       {/* Google Config Modal Removed */}
+
+      {/* Global plugin UI (always mounted) */}
+      {pluginRegistry.getGlobals().map((node, i) => (
+        <div key={i}>{node}</div>
+      ))}
     </div>
   );
 }

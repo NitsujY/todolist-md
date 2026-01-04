@@ -41,6 +41,8 @@ export interface Plugin {
   transformMarkdown?: (markdown: string) => string;
   onTaskComplete?: (task: Task) => void;
   renderDashboard?: () => ReactNode;
+  /** Render UI that must always be mounted (e.g., fixed overlays/bars). */
+  renderGlobal?: () => ReactNode;
   renderHeaderButton?: () => ReactNode;
   renderSettings?: () => ReactNode;
   onEnable?: () => void;
@@ -228,7 +230,18 @@ class PluginRegistry {
       .map(meta => {
         const node = meta.instance.renderDashboard!();
         return node ? <React.Fragment key={meta.name}>{node}</React.Fragment> : null;
-      });
+      })
+      .filter(Boolean);
+  }
+
+  getGlobals(): ReactNode[] {
+    return Array.from(this.plugins.values())
+      .filter(meta => meta.enabled && meta.instance.renderGlobal)
+      .map(meta => {
+        const node = meta.instance.renderGlobal!();
+        return node ? <React.Fragment key={meta.name}>{node}</React.Fragment> : null;
+      })
+      .filter(Boolean);
   }
 }
 
