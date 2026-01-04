@@ -106,6 +106,7 @@ To keep the header usable (especially on small screens) and avoid an ever-growin
     - `renderSettings`: Render custom configuration UI in the Settings modal.
     - `onTaskComplete`: Hook triggered when a task is marked as done.
     - `renderDashboard`: Render background controllers or UI elements (e.g., for auto-refresh).
+    - `renderGlobal`: Render UI that must always be mounted (e.g., fixed overlays/bars).
 - **Built-in Plugins**:
     - `ThemePlugin`: Manages theme switching.
 
