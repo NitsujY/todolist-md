@@ -34,6 +34,21 @@ A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (
     npm run build
     ```
 
+## Release / Deploy (GitHub Pages)
+
+- Normal development happens on `develop`.
+- Releasing is **just squash-merge `develop` → `main`**.
+- Every push to `main` is treated as a **public release**:
+    - GitHub Actions creates the next **patch** git tag `vX.Y.Z` and a GitHub Release.
+    - The site is built and deployed to **GitHub Pages**.
+
+### Required GitHub Secrets
+
+Set these repository secrets (used at build time):
+
+- `VITE_GOOGLE_CLIENT_ID`
+- `VITE_GOOGLE_API_KEY`
+
 ## macOS Reminders Connector (CLI + Background Sync)
 
 This repo includes a small CLI that can sync your Markdown lists into **macOS Reminders**.

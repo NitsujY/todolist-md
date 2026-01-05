@@ -262,6 +262,32 @@ function App() {
   const [focusId, setFocusId] = useState<string | null>(null);
   const [targetFocusId, setTargetFocusId] = useState<string | null>(null);
 
+  // Bottom "blank line" quick-add (doesn't touch the .md until user confirms).
+  const [quickAddText, setQuickAddText] = useState('');
+  const quickAddRef = useRef<HTMLTextAreaElement>(null);
+  const quickAddSubmittingRef = useRef(false);
+
+  const commitQuickAdd = async (opts?: { refocus?: boolean }) => {
+    if (quickAddSubmittingRef.current) return;
+
+    const text = quickAddText.trim();
+    if (!text) return;
+
+    // Clear immediately so rapid Enter can't duplicate before addTask resolves.
+    setQuickAddText('');
+
+    quickAddSubmittingRef.current = true;
+    try {
+      const newId = await addTask(text);
+      if (newId) setTargetFocusId(newId);
+    } finally {
+      quickAddSubmittingRef.current = false;
+      if (opts?.refocus !== false) {
+        requestAnimationFrame(() => quickAddRef.current?.focus());
+      }
+    }
+  };
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -911,10 +937,10 @@ function App() {
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col flex-1 overflow-hidden relative">
+              <div className="flex flex-col flex-1 overflow-hidden relative min-h-0">
                 {/* Task List */}
                 <div
-                  className="flex-1 overflow-y-auto"
+                  className="flex-1 overflow-y-auto min-h-0 autohide-scrollbar"
                   style={{ paddingBottom: 'var(--ai-bottom-bar-offset, 0px)' }}
                 >
                   {visibleTasks.length === 0 ? (
@@ -993,6 +1019,44 @@ function App() {
                               fontSize={fontSize}
                             />
                           ))}
+
+                          {!searchQuery && (
+                            <div
+                              className={`task-item flex items-start gap-3 border-b border-base-300 last:border-none ${compactMode ? 'p-1' : 'p-3'}`}
+                              onMouseDown={(e) => {
+                                // Mimic "click below last task then type".
+                                e.preventDefault();
+                                requestAnimationFrame(() => quickAddRef.current?.focus());
+                              }}
+                            >
+                              <div className={`flex items-center justify-center flex-shrink-0 ${compactMode ? 'h-4' : 'h-5'} mt-0.5`}>
+                                <div className={`${compactMode ? 'w-4 h-4' : 'w-5 h-5'}`}></div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <textarea
+                                  ref={quickAddRef}
+                                  value={quickAddText}
+                                  onChange={(e) => {
+                                    setQuickAddText(e.target.value);
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = e.target.scrollHeight + 'px';
+                                  }}
+                                  onKeyDown={async (e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                      e.preventDefault();
+                                      await commitQuickAdd();
+                                    }
+                                  }}
+                                  onBlur={async () => {
+                                    await commitQuickAdd({ refocus: false });
+                                  }}
+                                  rows={1}
+                                  className={`w-full bg-transparent border-none outline-none text-base-content font-medium p-0 resize-none overflow-hidden leading-normal ${fontSize === 'small' ? 'text-sm leading-4' : fontSize === 'normal' ? 'text-base leading-5' : fontSize === 'large' ? 'text-lg leading-6' : 'text-xl leading-7'}`}
+                                  placeholder=""
+                                />
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </SortableContext>
                       <DragOverlay>

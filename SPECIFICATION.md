@@ -189,6 +189,11 @@ The AI Assistant supports:
     - Google Drive API failures should alert the user or log to console, not crash the app.
     - File System permission denials should be handled gracefully (show "Grant Permission" UI).
 
+6.  **Release Process (GitHub Pages)**:
+    - Any push to `main` is treated as a **public release**.
+    - The intended human workflow is: **squash merge `develop` → `main`**.
+    - CI must create the next **patch** git tag `vX.Y.Z` (and a GitHub Release) and deploy the built `dist/` to GitHub Pages.
+
 ## 7. Performance & Concurrency
 
 ### 7.1 Fast Switching (Stale-While-Revalidate)
