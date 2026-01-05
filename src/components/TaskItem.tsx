@@ -5,7 +5,7 @@ import remarkBreaks from 'remark-breaks';
 import { useSortable } from '@dnd-kit/sortable';
 import { useDndContext } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Plus, ChevronDown, ChevronRight, Calendar, AlignLeft, Copy, Check, Link2 } from 'lucide-react';
+import { GripVertical, Plus, ChevronDown, ChevronRight, Calendar, AlignLeft, Copy, Check, Link2, Trash2 } from 'lucide-react';
 import { pluginRegistry } from '../plugins/pluginEngine.tsx';
 import type { TaskItemContext } from '../plugins/pluginEngine.tsx';
 import type { Task } from '../lib/MarkdownParser';
@@ -622,6 +622,21 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
                   <Calendar size={12} /> Due Date
                 </button>
 
+                {onDelete && (
+                  <button
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onDelete(task.id);
+                    }}
+                    className="btn btn-xs btn-ghost gap-1 text-base-content/60 font-normal hover:text-error"
+                    title="Delete task"
+                    aria-label="Delete task"
+                  >
+                    <Trash2 size={12} /> Delete
+                  </button>
+                )}
+
                 {breakdownTaskActionButtons.length > 0 && (
                   <div className="flex items-center gap-1">
                     {breakdownTaskActionButtons.map((node, idx) => (
@@ -690,7 +705,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
           {/* Hover Actions (positioned so hover doesn't reflow text) */}
           {(inlineTaskActionButtons.length > 0 || true) && (
             <div
-              className={`absolute top-0 ${((task.description || isEditingDescription) && !shouldHideDescriptionToggle) ? 'right-8' : 'right-0'} hidden group-hover:flex items-center gap-1 bg-base-100/90 rounded-lg px-1`}
+              className={`absolute top-0 ${((task.description || isEditingDescription) && !shouldHideDescriptionToggle) ? 'right-8' : 'right-0'} hidden group-hover:flex group-focus-within:flex items-center gap-1 bg-base-100/90 rounded-lg px-1`}
             >
               {inlineTaskActionButtons.map((node, idx) => (
                 <span key={idx}>{node}</span>

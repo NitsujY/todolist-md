@@ -57,7 +57,7 @@ interface TodoState {
   loadTodos: () => Promise<void>;
   refreshCurrentFile: (opts?: { background?: boolean; throwOnAuthRequired?: boolean }) => Promise<void>;
   toggleTask: (taskId: string) => Promise<void>;
-  addTask: (text: string) => Promise<void>;
+  addTask: (text: string) => Promise<string | undefined>;
   updateTaskText: (taskId: string, newText: string) => Promise<string | undefined>;
   updateTaskDescription: (taskId: string, description: string) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
@@ -562,12 +562,16 @@ export const useTodoStore = create<TodoState>()(
   },
 
   addTask: async (text) => {
-    const { markdown } = get();
+    const { markdown, tasks: oldTasks } = get();
+    const oldIds = new Set(oldTasks.map(t => t.id));
     const newMarkdown = addTaskToMarkdown(markdown, text);
 
     const newTasks = parseTasks(newMarkdown);
     set({ markdown: newMarkdown, tasks: newTasks });
     await persistCurrentFile(newMarkdown, newTasks);
+
+    const added = newTasks.find(t => !oldIds.has(t.id) && t.type !== 'header');
+    return added?.id;
   },
 
   updateTaskText: async (taskId, newText) => {

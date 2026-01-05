@@ -3,6 +3,38 @@
 @plugin "daisyui";
 @plugin "@tailwindcss/typography";
 
+/* Auto-hide scrollbars (show on hover). */
+.autohide-scrollbar {
+  scrollbar-width: none; /* Firefox */
+}
+
+.autohide-scrollbar:hover {
+  scrollbar-width: thin; /* Firefox */
+}
+
+.autohide-scrollbar::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
+}
+
+.autohide-scrollbar:hover::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.autohide-scrollbar::-webkit-scrollbar-thumb {
+  background: oklch(var(--bc) / 0.25);
+  border-radius: 9999px;
+}
+
+.autohide-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: oklch(var(--bc) / 0.4);
+}
+
+.autohide-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 :root[data-font="inter"] {
   --font-current: 'Inter', sans-serif;
 }
@@ -22,11 +54,6 @@
 /* Define default value for AI bottom bar offset */
 :root {
   --ai-bottom-bar-offset: 0px;
-}
-
-/* Apply the offset to the body to reserve space */
-body {
-  padding-bottom: var(--ai-bottom-bar-offset);
 }
 
 /* Apply the font variable when data-font is present */
