@@ -36,9 +36,10 @@ A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (
 
 ## Release / Deploy (GitHub Pages)
 
-- Releasing is **just squash-merge to `main`**.
+- Normal development happens on `develop`.
+- Releasing is **just squash-merge `develop` → `main`**.
 - Every push to `main` is treated as a **public release**:
-    - GitHub Actions auto-bumps `package.json` **patch** version and creates a git tag `vX.Y.Z`.
+    - GitHub Actions creates the next **patch** git tag `vX.Y.Z` and a GitHub Release.
     - The site is built and deployed to **GitHub Pages**.
 
 ### Required GitHub Secrets

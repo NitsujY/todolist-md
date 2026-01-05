@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: "pages"
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -32,13 +32,31 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Configure git
+      - name: Fetch tags
+        run: git fetch --tags --force
+
+      - name: Compute next version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest="$(git tag -l 'v*' --sort=-v:refname | head -n 1)"
+          if [[ -z "$latest" ]]; then
+            next="0.1.0"
+          else
+            v="${latest#v}"
+            IFS='.' read -r major minor patch <<<"$v"
+            patch=$((patch + 1))
+            next="${major}.${minor}.${patch}"
+          fi
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Create release tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Bump version (patch) + tag
-        run: npm version patch -m "chore(release): v%s [skip ci]"
+          git tag -a "v${{ steps.version.outputs.next }}" -m "Release v${{ steps.version.outputs.next }}"
+          git push origin "v${{ steps.version.outputs.next }}"
 
       - name: Build
         run: npm run build
@@ -46,8 +64,11 @@ jobs:
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
           VITE_GOOGLE_API_KEY: ${{ secrets.VITE_GOOGLE_API_KEY }}
 
-      - name: Push version commit + tag
-        run: git push --follow-tags
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ steps.version.outputs.next }}" --generate-notes
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

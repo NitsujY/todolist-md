@@ -191,8 +191,8 @@ The AI Assistant supports:
 
 6.  **Release Process (GitHub Pages)**:
     - Any push to `main` is treated as a **public release**.
-    - CI must auto-bump the **patch** version in `package.json` (and `package-lock.json`), create a git tag `vX.Y.Z`, and deploy the built `dist/` to GitHub Pages.
-    - The intended human workflow is: **squash merge to `main`**.
+    - The intended human workflow is: **squash merge `develop` → `main`**.
+    - CI must create the next **patch** git tag `vX.Y.Z` (and a GitHub Release) and deploy the built `dist/` to GitHub Pages.
 
 ## 7. Performance & Concurrency
 

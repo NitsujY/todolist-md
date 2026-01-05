@@ -640,7 +640,12 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
                 {breakdownTaskActionButtons.length > 0 && (
                   <div className="flex items-center gap-1">
                     {breakdownTaskActionButtons.map((node, idx) => (
-                      <span key={idx}>{node}</span>
+                      <span
+                        key={idx}
+                        className="[&>button]:!bg-primary/10 [&>button]:!text-primary [&>button]:!border [&>button]:!border-primary/20 [&>button]:hover:!bg-primary/20 [&>button]:hover:!border-primary/30 [&>button]:!shadow-none"
+                      >
+                        {node}
+                      </span>
                     ))}
                   </div>
                 )}
