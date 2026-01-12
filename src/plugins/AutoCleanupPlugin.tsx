@@ -8,8 +8,65 @@ export class AutoCleanupPlugin implements Plugin {
   name = 'AutoCleanup';
   defaultEnabled = false;
 
+  private timerId: number | null = null;
+  private readonly lastRunStorageKey = 'auto-cleanup-last-run';
+
   onInit(api: PluginAPI) {
     api.registerAction('cleanup', () => this.cleanup());
+  }
+
+  onEnable = () => {
+    // Run soon after enabling, then periodically.
+    // Keep this conservative: once per day maximum, and never while editing.
+    this.stopScheduler();
+    this.timerId = window.setInterval(() => {
+      void this.cleanupIfDue();
+    }, 60 * 60 * 1000); // hourly
+
+    // Fire a near-immediate attempt.
+    window.setTimeout(() => {
+      void this.cleanupIfDue();
+    }, 1500);
+  };
+
+  onDisable = () => {
+    this.stopScheduler();
+  };
+
+  private stopScheduler() {
+    if (this.timerId !== null) {
+      window.clearInterval(this.timerId);
+      this.timerId = null;
+    }
+  }
+
+  private isUserEditingTask() {
+    const active = document.activeElement;
+    return !!(
+      active &&
+      (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT') &&
+      (active as Element).closest('.task-item')
+    );
+  }
+
+  private isDueToRunToday() {
+    const today = new Date().toISOString().slice(0, 10);
+    const last = localStorage.getItem(this.lastRunStorageKey);
+    return last !== today;
+  }
+
+  private markRanToday() {
+    const today = new Date().toISOString().slice(0, 10);
+    localStorage.setItem(this.lastRunStorageKey, today);
+  }
+
+  private async cleanupIfDue() {
+    if (!this.isDueToRunToday()) return;
+    if (this.isUserEditingTask()) return;
+
+    // Only mark as ran if the cleanup attempt completes.
+    await this.cleanup();
+    this.markRanToday();
   }
 
   getDaysThreshold(): number {
@@ -20,6 +77,7 @@ export class AutoCleanupPlugin implements Plugin {
   async cleanup() {
     const store = useTodoStore.getState();
     const { tasks, markdown, updateMarkdown } = store;
+    if (!markdown || tasks.length === 0) return;
     const now = new Date();
     const days = this.getDaysThreshold();
     const thresholdDate = new Date(now);

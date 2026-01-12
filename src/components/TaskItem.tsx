@@ -658,6 +658,8 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
                 if (el?.closest('a')) return;
                 e.preventDefault();
                 setModes({});
+                // Clicking a task should open its details panel too.
+                setShowDescription(true);
                 setIsEditing(true);
               }}
               className={`flex-1 break-words cursor-text prose prose-sm max-w-none min-h-[1.5em] pr-8 ${task.completed ? 'line-through text-base-content/30' : 'text-base-content'} ${compact ? 'leading-snug' : ''} ${getFontSizeClass()}`}

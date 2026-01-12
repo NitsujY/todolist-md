@@ -66,6 +66,7 @@ interface TodoState {
   reorderFiles: (activeFile: string, overFile: string) => void;
   nestTask: (activeId: string, overId: string) => Promise<void>;
   updateMarkdown: (newMarkdown: string) => Promise<void>;
+  saveCurrentFile: () => Promise<void>;
   openFileOrFolder: (type: 'file' | 'folder') => Promise<boolean>;
   selectFile: (filename: string, opts?: { interactiveAuth?: boolean }) => Promise<void>;
   renameFile: (oldName: string, newName: string) => Promise<void>;
@@ -644,6 +645,11 @@ export const useTodoStore = create<TodoState>()(
     const newTasks = parseTasks(newMarkdown);
     set({ markdown: newMarkdown, tasks: newTasks });
     await persistCurrentFile(newMarkdown, newTasks);
+  },
+
+  saveCurrentFile: async () => {
+    const { markdown, tasks } = get();
+    await persistCurrentFile(markdown, tasks);
   },
 
   updateTaskDescription: async (taskId, description) => {

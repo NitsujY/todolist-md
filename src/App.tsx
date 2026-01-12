@@ -106,7 +106,8 @@ function App() {
     togglePlugin,
     remindersLinkedByFile,
     googleAuthRequired,
-    connectGoogleDrive
+    connectGoogleDrive,
+    saveCurrentFile
   } = useTodoStore();
 
   // Access temporal store for undo/redo
@@ -309,12 +310,31 @@ function App() {
           undo();
         }
         e.preventDefault();
+        return;
+      }
+
+      // Override Cmd/Ctrl+S to save changes
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+
+        // Force any active task textarea/input to commit via blur handlers.
+        const active = document.activeElement as HTMLElement | null;
+        active?.blur();
+
+        // If raw markdown editor is open, save that buffer.
+        if (isEditingRaw) {
+          void updateMarkdown(rawMarkdown);
+          return;
+        }
+
+        void saveCurrentFile();
+        return;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo]);
+  }, [undo, redo, isEditingRaw, rawMarkdown, updateMarkdown, saveCurrentFile]);
 
   useEffect(() => {
     restoreSession();
@@ -472,6 +492,7 @@ function App() {
 
   const filteredTasks = tasks.filter(t => {
     if (activeTag && (!t.tags || !t.tags.includes(activeTag))) return false;
+    if (!showCompleted && t.type === 'task' && t.completed) return false;
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return (
