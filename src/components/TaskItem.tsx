@@ -471,7 +471,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
         `}
       >
         <DropIndicator />
-        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div {...attributes} {...listeners} className="drag-handle cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
           <GripVertical size={16} />
         </div>
 
@@ -531,7 +531,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
         `}
       >
         <DropIndicator />
-        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div {...attributes} {...listeners} className="drag-handle cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
           <GripVertical size={16} />
         </div>
         {isEditing ? (
@@ -571,7 +571,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
       `}
     >
       <DropIndicator />
-      <div {...attributes} {...listeners} className={`cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center ${getLineHeightClass()}`}>
+      <div {...attributes} {...listeners} className={`drag-handle cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center justify-center ${getLineHeightClass()}`}>
         <GripVertical size={16} />
       </div>
 

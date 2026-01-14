@@ -49,7 +49,7 @@ function AutoRefreshSettings() {
 }
 
 function AutoRefreshController() {
-  const loadTodos = useTodoStore(state => state.loadTodos);
+  const refreshCurrentFile = useTodoStore(state => state.refreshCurrentFile);
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -72,7 +72,9 @@ function AutoRefreshController() {
       }
 
       console.log('[AutoRefresh] Refreshing todos...');
-      loadTodos();
+      refreshCurrentFile({ background: true }).catch(e => {
+        console.error('[AutoRefresh] Background refresh failed', e);
+      });
     };
 
     // Initial run
@@ -96,7 +98,7 @@ function AutoRefreshController() {
       if (intervalRef.current) clearInterval(intervalRef.current);
       window.removeEventListener('storage', handleStorage);
     };
-  }, [loadTodos]);
+  }, [refreshCurrentFile]);
 
   return null; // Invisible component
 }

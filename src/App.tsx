@@ -73,7 +73,9 @@ function App() {
     tasks, 
     markdown, 
     isLoading, 
+    refreshingCount,
     loadTodos, 
+    refreshCurrentFile,
     toggleTask, 
     deleteTask,
     updateMarkdown,
@@ -696,8 +698,15 @@ function App() {
         <div className="flex-none gap-1">
           <div className="w-px h-4 bg-base-300 mx-1"></div>
 
-          <button onClick={() => loadTodos()} className="btn btn-ghost btn-square btn-sm" title="Refresh">
-            <RefreshCw size={16} />
+          <button
+            onClick={() => refreshCurrentFile({ background: true })}
+            className="btn btn-ghost btn-square btn-sm"
+            title="Refresh"
+          >
+            <RefreshCw
+              size={16}
+              className={(isLoading || refreshingCount > 0) ? 'animate-spin' : undefined}
+            />
           </button>
 
           <button 
