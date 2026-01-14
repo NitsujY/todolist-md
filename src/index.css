@@ -22,6 +22,13 @@
   height: 10px;
 }
 
+/* Touch devices don't have hover; keep drag handles visible. */
+@media (hover: none) {
+  .task-item .drag-handle {
+    opacity: 1 !important;
+  }
+}
+
 .autohide-scrollbar::-webkit-scrollbar-thumb {
   background: oklch(var(--bc) / 0.25);
   border-radius: 9999px;

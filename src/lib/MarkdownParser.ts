@@ -99,6 +99,16 @@ const createProcessor = () => unified()
     listItemIndent: 'one',
   });
 
+const paragraphToMarkdown = (processor: ReturnType<typeof createProcessor>, paragraphNode: any): string => {
+  try {
+    const tempRoot = { type: 'root', children: [paragraphNode] };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return processor.stringify(tempRoot as any).trim();
+  } catch {
+    return '';
+  }
+};
+
 const parseInline = (text: string): any[] => {
   const processor = createProcessor();
   const tree = processor.parse(text) as Root;
@@ -355,8 +365,8 @@ export const setRemindersLinkInMarkdown = (
 
       if (node.children && node.children.length > 0) {
         const p = node.children[0];
-        if (p.type === 'paragraph' && p.children && p.children.length > 0) {
-          text = p.children.map((c: any) => c.value || '').join('');
+        if (p.type === 'paragraph') {
+          text = paragraphToMarkdown(processor, p);
         }
       }
 
@@ -409,8 +419,8 @@ export const linkAllTasksToRemindersInMarkdown = (
       if (typeof node.checked === 'boolean') isTask = true;
       if (node.children && node.children.length > 0) {
         const p = node.children[0];
-        if (p.type === 'paragraph' && p.children && p.children.length > 0) {
-          text = p.children.map((c: any) => c.value || '').join('');
+        if (p.type === 'paragraph') {
+          text = paragraphToMarkdown(processor, p);
         }
       }
       if (isTask) {
@@ -439,6 +449,49 @@ export const linkAllTasksToRemindersInMarkdown = (
 export const toggleTaskInMarkdown = (markdown: string, taskId: string): string => {
   const processor = createProcessor();
   const tree = processor.parse(markdown) as Root;
+
+  const stripDoneTagFromParagraph = (p: any) => {
+    const doneRegex = /\s*@done\(\d{4}-\d{2}-\d{2}\)/g;
+    if (!p?.children) return;
+    for (const child of p.children) {
+      if (child?.type === 'text' && typeof child.value === 'string') {
+        child.value = child.value.replace(doneRegex, '');
+      }
+    }
+  };
+
+  const ensureDoneTagOnParagraph = (p: any, dateStr: string) => {
+    if (!p?.children) return;
+    const doneRegex = /@done\(\d{4}-\d{2}-\d{2}\)/;
+
+    const combinedText = p.children
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .filter((c: any) => c?.type === 'text' && typeof c.value === 'string')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((c: any) => c.value)
+      .join('');
+
+    if (doneRegex.test(combinedText)) return;
+
+    // Insert before a trailing reminders marker (html) if present, else append.
+    let insertAt = p.children.length;
+    for (let i = 0; i < p.children.length; i++) {
+      const c = p.children[i];
+      if (c?.type === 'html' && typeof c.value === 'string' && c.value.includes(REMINDERS_TASK_MARKER_PREFIX)) {
+        insertAt = i;
+        break;
+      }
+    }
+
+    const prev = p.children[insertAt - 1];
+    const needsSpace = !(prev?.type === 'text' && typeof prev.value === 'string' && prev.value.endsWith(' '));
+    if (needsSpace) {
+      p.children.splice(insertAt, 0, { type: 'text', value: ' ' });
+      insertAt += 1;
+    }
+
+    p.children.splice(insertAt, 0, { type: 'text', value: `@done(${dateStr})` });
+  };
   
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const visit = (node: any) => {
@@ -452,9 +505,8 @@ export const toggleTaskInMarkdown = (markdown: string, taskId: string): string =
 
       if (node.children && node.children.length > 0) {
         const p = node.children[0];
-        if (p.type === 'paragraph' && p.children && p.children.length > 0) {
-           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-           text = p.children.map((c: any) => c.value || '').join('');
+        if (p.type === 'paragraph') {
+          text = paragraphToMarkdown(processor, p);
         }
       }
 
@@ -476,27 +528,11 @@ export const toggleTaskInMarkdown = (markdown: string, taskId: string): string =
           if (node.children && node.children.length > 0) {
             const p = node.children[0];
             if (p.type === 'paragraph' && p.children) {
-              // We need to modify the text content to add/remove @done tag
-              // This is a bit complex with remark AST, so we might need to reconstruct the text
-              // But remark-stringify handles node.checked for us.
-              // We just need to append/remove the tag from the text node.
-              
-              // Find the text node
-              const textNode = p.children.find((c: any) => c.type === 'text');
-              if (textNode) {
-                let content = textNode.value;
-                const doneRegex = / @done\(\d{4}-\d{2}-\d{2}\)/;
-                
-                if (node.checked) {
-                  // Task became completed, add tag if not present
-                  if (!doneRegex.test(content)) {
-                    const today = new Date().toISOString().split('T')[0];
-                    textNode.value = `${content} @done(${today})`;
-                  }
-                } else {
-                  // Task became incomplete, remove tag
-                  textNode.value = content.replace(doneRegex, '');
-                }
+              const today = new Date().toISOString().split('T')[0];
+              if (node.checked) {
+                ensureDoneTagOnParagraph(p, today);
+              } else {
+                stripDoneTagFromParagraph(p);
               }
             }
           }
@@ -567,9 +603,8 @@ export const updateTaskTextInMarkdown = (markdown: string, taskId: string, newTe
 
       if (node.children && node.children.length > 0) {
         const p = node.children[0];
-        if (p.type === 'paragraph' && p.children && p.children.length > 0) {
-           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-           text = p.children.map((c: any) => c.value || '').join('');
+        if (p.type === 'paragraph') {
+          text = paragraphToMarkdown(processor, p);
         }
       }
 
@@ -657,9 +692,8 @@ export const deleteTaskInMarkdown = (markdown: string, taskId: string): string =
 
       if (node.children && node.children.length > 0) {
         const p = node.children[0];
-        if (p.type === 'paragraph' && p.children && p.children.length > 0) {
-           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-           text = p.children.map((c: any) => c.value || '').join('');
+        if (p.type === 'paragraph') {
+          text = paragraphToMarkdown(processor, p);
         }
       }
 
@@ -750,9 +784,8 @@ export const insertTaskAfterInMarkdown = (markdown: string, targetTaskId: string
 
           if (child.children && child.children.length > 0) {
             const p = child.children[0];
-            if (p.type === 'paragraph' && p.children && p.children.length > 0) {
-               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-               text = p.children.map((c: any) => c.value || '').join('');
+            if (p.type === 'paragraph') {
+              text = paragraphToMarkdown(processor, p);
             }
           }
 
@@ -855,9 +888,8 @@ export const reorderTaskInMarkdown = (markdown: string, activeId: string, overId
 
       if (node.children && node.children.length > 0) {
         const p = node.children[0];
-        if (p.type === 'paragraph' && p.children && p.children.length > 0) {
-           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-           text = p.children.map((c: any) => c.value || '').join('');
+        if (p.type === 'paragraph') {
+          text = paragraphToMarkdown(processor, p);
         }
       }
 
@@ -1088,9 +1120,8 @@ export const nestTaskInMarkdown = (markdown: string, activeId: string, overId: s
 
       if (node.children && node.children.length > 0) {
         const p = node.children[0];
-        if (p.type === 'paragraph' && p.children && p.children.length > 0) {
-           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-           text = p.children.map((c: any) => c.value || '').join('');
+        if (p.type === 'paragraph') {
+          text = paragraphToMarkdown(processor, p);
         }
       }
 
@@ -1180,9 +1211,8 @@ export const updateTaskDescriptionInMarkdown = (markdown: string, taskId: string
 
       if (node.children && node.children.length > 0) {
         const p = node.children[0];
-        if (p.type === 'paragraph' && p.children && p.children.length > 0) {
-           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-           text = p.children.map((c: any) => c.value || '').join('');
+        if (p.type === 'paragraph') {
+          text = paragraphToMarkdown(processor, p);
         }
       }
 

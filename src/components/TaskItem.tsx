@@ -471,7 +471,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
         `}
       >
         <DropIndicator />
-        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div {...attributes} {...listeners} className="drag-handle cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
           <GripVertical size={16} />
         </div>
 
@@ -531,7 +531,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
         `}
       >
         <DropIndicator />
-        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div {...attributes} {...listeners} className="drag-handle cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
           <GripVertical size={16} />
         </div>
         {isEditing ? (
@@ -571,7 +571,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
       `}
     >
       <DropIndicator />
-      <div {...attributes} {...listeners} className={`cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center ${getLineHeightClass()}`}>
+      <div {...attributes} {...listeners} className={`drag-handle cursor-grab active:cursor-grabbing text-base-content/20 hover:text-base-content/50 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center justify-center ${getLineHeightClass()}`}>
         <GripVertical size={16} />
       </div>
 
@@ -658,6 +658,8 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
                 if (el?.closest('a')) return;
                 e.preventDefault();
                 setModes({});
+                // Clicking a task should open its details panel too.
+                setShowDescription(true);
                 setIsEditing(true);
               }}
               className={`flex-1 break-words cursor-text prose prose-sm max-w-none min-h-[1.5em] pr-8 ${task.completed ? 'line-through text-base-content/30' : 'text-base-content'} ${compact ? 'leading-snug' : ''} ${getFontSizeClass()}`}

@@ -22,6 +22,7 @@ interface TodoState {
   storage: StorageProvider;
   configService: ConfigService;
   isLoading: boolean;
+  refreshingCount: number;
   fileList: string[];
   currentFile: string;
   isFolderMode: boolean;
@@ -66,6 +67,7 @@ interface TodoState {
   reorderFiles: (activeFile: string, overFile: string) => void;
   nestTask: (activeId: string, overId: string) => Promise<void>;
   updateMarkdown: (newMarkdown: string) => Promise<void>;
+  saveCurrentFile: () => Promise<void>;
   openFileOrFolder: (type: 'file' | 'folder') => Promise<boolean>;
   selectFile: (filename: string, opts?: { interactiveAuth?: boolean }) => Promise<void>;
   renameFile: (oldName: string, newName: string) => Promise<void>;
@@ -131,6 +133,7 @@ export const useTodoStore = create<TodoState>()(
         storage: adapters.local,
         configService: new ConfigService(adapters.local),
         isLoading: false,
+        refreshingCount: 0,
         fileList: [],
         currentFile: '',
         isFolderMode: false,
@@ -470,6 +473,7 @@ export const useTodoStore = create<TodoState>()(
   },
 
   refreshCurrentFile: async (opts) => {
+    set(state => ({ refreshingCount: state.refreshingCount + 1 }));
     const background = !!opts?.background;
     const token = ++activeReadToken;
 
@@ -549,6 +553,8 @@ export const useTodoStore = create<TodoState>()(
         }
       }
       set({ isLoading: false });
+    } finally {
+      set(state => ({ refreshingCount: Math.max(0, state.refreshingCount - 1) }));
     }
   },
 
@@ -644,6 +650,16 @@ export const useTodoStore = create<TodoState>()(
     const newTasks = parseTasks(newMarkdown);
     set({ markdown: newMarkdown, tasks: newTasks });
     await persistCurrentFile(newMarkdown, newTasks);
+  },
+
+  saveCurrentFile: async () => {
+    set(state => ({ refreshingCount: state.refreshingCount + 1 }));
+    try {
+      const { markdown, tasks } = get();
+      await persistCurrentFile(markdown, tasks);
+    } finally {
+      set(state => ({ refreshingCount: Math.max(0, state.refreshingCount - 1) }));
+    }
   },
 
   updateTaskDescription: async (taskId, description) => {
