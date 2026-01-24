@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useStore } from 'zustand';
 import { useTodoStore } from './store/useTodoStore';
 import { pluginRegistry } from './plugins/pluginEngine.tsx';
@@ -142,6 +142,39 @@ function App() {
 
   // Controls whether each header section is collapsed (hides tasks until next header).
   const [sectionCollapsedByHeaderId, setSectionCollapsedByHeaderId] = useState<Record<string, boolean>>({});
+
+  const sectionCollapseStorageKey = useMemo(() => {
+    const fileKey = (currentFile || '').trim() || 'todo.md';
+    return `section-collapsed:v1:${activeStorage}:${fileKey}`;
+  }, [activeStorage, currentFile]);
+
+  // Restore persisted section collapse state when switching files/storages.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(sectionCollapseStorageKey);
+      if (!raw) {
+        setSectionCollapsedByHeaderId({});
+        return;
+      }
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== 'object') {
+        setSectionCollapsedByHeaderId({});
+        return;
+      }
+      setSectionCollapsedByHeaderId(parsed as Record<string, boolean>);
+    } catch {
+      setSectionCollapsedByHeaderId({});
+    }
+  }, [sectionCollapseStorageKey]);
+
+  // Persist section collapse state.
+  useEffect(() => {
+    try {
+      localStorage.setItem(sectionCollapseStorageKey, JSON.stringify(sectionCollapsedByHeaderId));
+    } catch {
+      // ignore
+    }
+  }, [sectionCollapseStorageKey, sectionCollapsedByHeaderId]);
 
   // Tracks the last header the user interacted with (used for scroll anchoring).
   const [activeHeaderId, setActiveHeaderId] = useState<string | null>(null);
@@ -971,7 +1004,7 @@ function App() {
                 {/* Task List */}
                 <div
                   className="flex-1 overflow-y-auto min-h-0 autohide-scrollbar"
-                  style={{ paddingBottom: 'var(--ai-bottom-bar-offset, 0px)' }}
+                  style={{ paddingBottom: 'calc(var(--ai-bottom-bar-offset, 0px) + env(safe-area-inset-bottom))' }}
                 >
                   {visibleTasks.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-base-content/40">
