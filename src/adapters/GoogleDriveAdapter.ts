@@ -106,6 +106,20 @@ export class GoogleDriveAdapter implements StorageProvider {
     }
   }
 
+  private getRedirectUri(): string {
+    // Use the current path (not just origin) so GitHub Pages subpaths and PWAs
+    // return to the actual app URL after redirect-based auth.
+    // Do not include query/hash in the registered redirect URI.
+    try {
+      const url = new URL(window.location.href);
+      url.hash = '';
+      url.search = '';
+      return url.toString();
+    } catch {
+      return window.location.origin + window.location.pathname;
+    }
+  }
+
   private createTokenClient(uxMode: 'popup' | 'redirect') {
     return window.google.accounts.oauth2.initTokenClient({
       client_id: this.config!.clientId,
@@ -114,8 +128,8 @@ export class GoogleDriveAdapter implements StorageProvider {
       scope: 'https://www.googleapis.com/auth/drive.file',
       include_granted_scopes: false,
       ux_mode: uxMode,
-      // For redirect mode, return to the current origin.
-      redirect_uri: window.location.origin,
+      // For redirect mode, return to the current app URL.
+      redirect_uri: this.getRedirectUri(),
       callback: (response: TokenResponse) => {
         this.handleAuthCallback(response);
       },
