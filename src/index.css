@@ -5,19 +5,19 @@
 
 /* Auto-hide scrollbars (show on hover). */
 .autohide-scrollbar {
-  scrollbar-width: none; /* Firefox */
+  /* Reserve scrollbar space so content doesn't shift when it appears */
+  scrollbar-gutter: stable;
+
+  /* Firefox: keep width stable; hide by making it transparent */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
 }
 
 .autohide-scrollbar:hover {
-  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: oklch(var(--bc) / 0.25) transparent;
 }
 
 .autohide-scrollbar::-webkit-scrollbar {
-  width: 0px;
-  height: 0px;
-}
-
-.autohide-scrollbar:hover::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
@@ -30,8 +30,12 @@
 }
 
 .autohide-scrollbar::-webkit-scrollbar-thumb {
-  background: oklch(var(--bc) / 0.25);
+  background: transparent;
   border-radius: 9999px;
+}
+
+.autohide-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: oklch(var(--bc) / 0.25);
 }
 
 .autohide-scrollbar::-webkit-scrollbar-thumb:hover {
