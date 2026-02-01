@@ -1,5 +1,8 @@
 # Serverless, Plugin-First Markdown Todo App (Clawdbot-friendly)
 
+[![Clawdbot Friendly](https://img.shields.io/badge/Clawdbot-friendly-0ea5e9?style=flat-square)](#clawdbot-integration-proposed)
+[![Markdown Todo](https://img.shields.io/badge/Markdown-GFM%20Task%20Lists-10b981?style=flat-square)](#features)
+
 A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (SPA) using Markdown as the data source. **This app is designed to work primarily with local files or remote markdown sources, giving you full control over your data without relying on a proprietary database.**
 
 > Key feature: **Clawdbot-friendly Markdown tasks** — because the source-of-truth is plain Markdown, Clawdbot can periodically review your todo files, suggest next steps, and (optionally) execute tasks via agent workflows.
@@ -171,6 +174,17 @@ It depends on your priorities (quality vs cost vs speed). For this app’s use c
 On **Azure OpenAI**, you don’t pass a model name in requests here — you select a **deployment**, and that deployment is tied to a model/version.
 
 ## Clawdbot integration (proposed)
+
+### Install the Clawdbot skill (from this repo)
+If you're running Clawdbot locally, you can install the skill folder directly:
+
+```bash
+clawdhub publish ./skills/todolist-md-clawdbot --slug todolist-md-clawdbot --name "todolist-md-clawdbot" --version 0.1.0
+# then install it (on the target Clawdbot instance)
+clawdhub install todolist-md-clawdbot
+```
+
+If you prefer not to publish, you can copy `skills/todolist-md-clawdbot/` into your Clawdbot workspace skills folder.
 
 Because tasks live in Markdown, this project is a good fit for Clawdbot automation.
 
