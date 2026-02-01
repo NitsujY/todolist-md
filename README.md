@@ -1,6 +1,21 @@
-# Serverless, Plugin-First Markdown Todo App
+# Serverless, Plugin-First Markdown Todo App (Clawdbot-Powered)
 
-A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (SPA) using Markdown as the data source. **This app is designed to work primarily with local files or remote markdown sources, giving you full control over your data without relying on a proprietary database.**
+[![Clawdbot Friendly](https://img.shields.io/badge/Clawdbot-powered-0ea5e9?style=flat-square)](#-clawdbot-integration-ai-powered-task-automation)
+[![AI Agent Ready](https://img.shields.io/badge/AI%20Agent-ready-f97316?style=flat-square)](#-clawdbot-integration-ai-powered-task-automation)
+[![Markdown Todo](https://img.shields.io/badge/Markdown-GFM%20Task%20Lists-10b981?style=flat-square)](#features)
+[![LLM Friendly](https://img.shields.io/badge/LLM-friendly-8b5cf6?style=flat-square)](#markdown-syntax-guide)
+
+A **Markdown-first todo app** designed for humans *and* AI agents. Keep your tasks in plain Markdown files, and let **Clawdbot** (or any AI agent) read, analyze, and execute tasks on your behalf.
+
+## 🤖 Why This Is Perfect for AI Agents
+
+**Your todos are just Markdown files** — which means:
+- ✅ **Clawdbot can read them** directly from your file system or Google Drive
+- ✅ **Zero vendor lock-in** — it's just plain text with GFM task lists
+- ✅ **AI-native format** — LLMs understand Markdown perfectly
+- ✅ **Automation-ready** — external scripts, agents, and CLIs can parse and modify your tasks
+
+> **Key Innovation**: While most todo apps trap your data in proprietary formats, todolist-md keeps everything in standard Markdown. This makes it the **perfect companion for Clawdbot** and other AI assistants that can proactively manage your workflow.
 
 ## Tech Stack
 
@@ -13,9 +28,10 @@ A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (
 
 ## Architecture
 
-- **Storage Adapter Pattern**: Supports swapping between Local Storage and Mock Cloud Storage.
+- **Storage Adapter Pattern**: Supports swapping between Local Storage, File System, and Google Drive.
 - **Plugin System**: Allows extending the UI and Markdown transformation via plugins.
 - **Markdown-First**: The source of truth is a Markdown string.
+- **Automation-ready**: External tools (like **Clawdbot**) can parse the same Markdown and act on tasks.
 
 ## Getting Started
 
@@ -166,6 +182,34 @@ It depends on your priorities (quality vs cost vs speed). For this app’s use c
 - **Best quality**: `gpt-4.1` or `gpt-4o`
 
 On **Azure OpenAI**, you don’t pass a model name in requests here — you select a **deployment**, and that deployment is tied to a model/version.
+
+## Clawdbot integration (proposed)
+
+### Install the Clawdbot skill (from this repo)
+If you're running Clawdbot locally, you can install the skill folder directly:
+
+```bash
+clawdhub publish ./skills/todolist-md-clawdbot --slug todolist-md-clawdbot --name "todolist-md-clawdbot" --version 0.1.0
+# then install it (on the target Clawdbot instance)
+clawdhub install todolist-md-clawdbot
+```
+
+If you prefer not to publish, you can copy `skills/todolist-md-clawdbot/` into your Clawdbot workspace skills folder.
+
+Because tasks live in Markdown, this project is a good fit for Clawdbot automation.
+
+### What “Clawdbot-friendly” means
+- A Clawdbot skill can **read** your todo markdown files on a schedule.
+- It can **summarize**, **prioritize**, and propose **next actions**.
+- For tasks that match known playbooks (e.g., create PR, run CI, update docs), Clawdbot can **execute** them with confirmation.
+
+### Suggested repository SEO keywords
+- clawdbot, agent, ai assistant, markdown todo, llm-friendly, automation, devops
+
+### Spec requirements for Clawdbot automation
+- Keep todos as **standard GFM task lists** (`- [ ]` / `- [x]`).
+- Use `#tags` and `due:YYYY-MM-DD` consistently (already supported by the parser).
+- Prefer storing todos in **real files** (File System / Google Drive) so Clawdbot can access them out-of-browser.
 
 ## Features
 

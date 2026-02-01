@@ -67,12 +67,84 @@ Detailed feature specifications are maintained in the `specs/` directory.
 - **[Brain Dump](specs/features/brain-dump.md)**: Context-aware capture (voice or typed) → tasks + next actions.
 - **[TaskItem UI](specs/ui/task-item.spec.md)**: Detailed UI states and interactions for the task component.
 
-### 4.x Optional External Connectors
+### 4.x Clawdbot Integration (AI Agent Automation)
+
+**Status**: First-class feature (see `specs/integrations/clawdbot.md` and `skills/todolist-md-clawdbot/`)
+
+This app is designed to be **AI agent-friendly**. Because the data format is plain Markdown with GFM task lists, AI agents (especially Clawdbot) can:
+
+1. **Read** todo files periodically from File System or Google Drive
+2. **Analyze** tasks to identify:
+   - Overdue items
+   - Blocked tasks (missing info)
+   - Quick wins (small, high-impact tasks)
+   - Top 3 recommended next actions
+3. **Execute** well-defined tasks autonomously (with user confirmation)
+
+#### Requirements for Clawdbot Compatibility
+
+**MUST:**
+- Tasks use GFM checkbox syntax: `- [ ]` (open) and `- [x]` (completed)
+- Tags follow the `#tagname` convention
+- Due dates use `due:YYYY-MM-DD` format
+- Descriptions are blockquotes (`>`) immediately following a task
+- Storage mode is **File System** or **Google Drive** (not LocalStorage-only, which is inaccessible outside the browser)
+
+**SHOULD:**
+- Keep task titles concise and action-oriented (e.g., "Deploy v2.0 to production" not "Maybe we should think about deployment")
+- Use tags consistently for categorization (`#frontend`, `#backend`, `#urgent`)
+- Add context in descriptions for complex tasks
+
+**MAY:**
+- Use additional metadata in descriptions (e.g., `owner:@username`, `depends-on:#123`)
+- Link to external resources (GitHub issues, PRs, docs)
+
+#### Safety Model
+
+- **Read-only by default**: Clawdbot analyzes and suggests without modifying files
+- **Write-back requires confirmation**: Any operation that modifies tasks (mark complete, add subtasks, reorder) must be explicitly confirmed by the user
+- **Audit trail**: All Clawdbot actions should be logged (in the skill's context)
+
+#### Example Clawdbot Workflows
+
+**Daily digest:**
+```
+User: @clawdbot check my todos
+Clawdbot: You have 2 overdue tasks and 12 open. Top priority:
+  1. [Deploy v2.0 to production] - due today, #backend
+  2. [Update API docs] - due tomorrow, #docs
+  3. [Fix auth bug] - no due date, #urgent
+```
+
+**Task breakdown:**
+```
+User: @clawdbot break down "Build new landing page"
+Clawdbot: I'll add these subtasks (confirm?):
+  - [ ] Design mockup in Figma
+  - [ ] HTML structure
+  - [ ] CSS styling
+  - [ ] Make responsive
+  - [ ] Deploy to staging
+```
+
+**Autonomous execution:**
+```
+Task: - [ ] Create PR for bugfix #github
+      > Fix null pointer in auth.ts line 42
+
+Clawdbot: I found the bug. I can:
+  1. Create branch 'fix/auth-null-pointer'
+  2. Apply the fix
+  3. Open PR with description
+  Confirm?
+```
+
+### 4.y Optional External Connectors
 
 This repo may include optional, external utilities (outside the SPA) that operate on Markdown files.
 
 - **macOS Reminders sync**: A CLI (`npm run reminders:sync`) that reads Markdown files from disk and mirrors tasks into macOS Reminders lists.
-    - This is intentionally **out-of-browser** and does not change the app’s serverless/SPAs-only constraint.
+    - This is intentionally **out-of-browser** and does not change the app's serverless/SPA-only constraint.
 
 ### 4.0 Global Details Toggle
 - The top toolbar provides a single **Expand details / Collapse details** control.
