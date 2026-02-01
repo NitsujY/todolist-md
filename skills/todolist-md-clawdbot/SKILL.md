@@ -101,10 +101,116 @@ If the user has enabled proactive mode, Clawdbot can:
 - **Suggest prioritization** ("These 3 tasks are blocking others")
 - **Identify patterns** ("You have 5 tasks tagged #frontend - want to batch them?")
 
+## Smart Polling Schedule
+
+### Automatic Check Intervals
+- **Default**: Check every **6 hours** (configurable)
+- **Change-triggered**: If markdown file modified → check within **15 minutes**
+- **Rate limit**: Max 1 check per 15 minutes (prevents spam)
+- **Quiet hours**: Skip checks between 10 PM - 7 AM (optional)
+
+### How Change Detection Works
+```bash
+# Clawdbot tracks file modification timestamps
+# When file mtime changes, schedule a priority check
+# Use filesystem watch or periodic stat polling
+```
+
+### Example Schedule
+```
+09:00 - Scheduled check (6hr timer)
+10:30 - User edits todo.md → trigger check at 10:45
+11:00 - Skip (rate limited, checked at 10:45)
+15:00 - Scheduled check (6hr from 09:00)
+16:20 - User edits todo.md → trigger check at 16:35
+21:00 - Scheduled check (6hr from 15:00)
+```
+
+## Processing Workflow
+
+When Clawdbot runs (scheduled or change-triggered):
+
+### 1. Read & Parse Markdown
+```
+- Parse all tasks with GFM syntax
+- Extract metadata: tags, due dates, descriptions
+- Track task state: open vs completed
+- Note: Brain Dump section, Clawdbot-suggested section
+```
+
+### 2. Identify Actions Needed
+```
+Clawdbot should:
+✅ Find unresolved tasks (open tasks without recent activity)
+✅ Check overdue tasks (due date < today)
+✅ Detect blocked tasks (missing dependencies, unclear)
+✅ Process Brain Dump items (new captures)
+✅ Review Clawdbot-suggested tasks (pending user acceptance)
+```
+
+### 3. Write Back to Markdown
+
+**Add Inline Comments** (as blockquotes):
+```markdown
+- [ ] Deploy v2.0 to production
+  > Status: Ready to deploy
+  > <!-- Clawdbot: Staging tests passed. Run: npm run deploy:prod -->
+  > <!-- Last checked: 2026-02-02 09:00 -->
+```
+
+**Mark Tasks Complete** (when appropriate):
+```markdown
+- [x] Fix auth bug
+  > <!-- Clawdbot: Verified fixed in commit abc123. Marked complete. -->
+```
+
+**Create New Tasks** (based on analysis):
+```markdown
+## Tasks (Clawdbot-suggested)
+<!-- Generated 2026-02-02 09:00 -->
+
+- [ ] Update deployment docs #docs
+  > <!-- Clawdbot: Created because deploy process changed -->
+```
+
+**Add Follow-up Actions**:
+```markdown
+- [ ] Build landing page #frontend
+  - [ ] Design mockup <!-- Clawdbot: Added subtask -->
+  - [ ] HTML structure <!-- Clawdbot: Added subtask -->
+```
+
+### 4. Metadata Tracking
+
+**Option A: Hidden Markers** (recommended)
+```markdown
+<!-- clawdbot-metadata
+last-checked: 2026-02-02 09:00:00
+last-modified: 2026-02-02 08:45:00
+pending-brain-dumps: 2
+suggested-tasks: 3
+-->
+```
+
+**Option B: Separate .clawdbot.json**
+```json
+{
+  "files": {
+    "todo.md": {
+      "lastChecked": "2026-02-02T09:00:00Z",
+      "lastModified": "2026-02-02T08:45:00Z",
+      "pendingBrainDumps": 2,
+      "suggestedTasks": 3
+    }
+  }
+}
+```
+
 ## Suggested periodic digest
-- **Daily** (9 AM): overdue + top 3 next actions
-- **Weekly** (Monday 9 AM): review stale tasks (no activity in 2+ weeks) + cleanup suggestions
-- **On-demand**: user asks "@clawdbot check my todos"
+- **Every 6 hours**: Auto-check + process (or when changes detected)
+- **Daily** (9 AM): Summary email/notification with priorities
+- **Weekly** (Monday 9 AM): Stale task cleanup suggestions
+- **On-demand**: "@clawdbot check my todos" or "@clawdbot process brain dumps"
 
 ## Advanced: Task breakdown
 
@@ -138,6 +244,70 @@ When the user has a large, vague task, offer to break it down:
 4. **Confirm before adding** (show the proposed subtasks)
 5. Append subtasks as indented items in the markdown
 
+## Clawdbot Write-back Guidelines
+
+### When to Write
+✅ **Safe writes** (always okay):
+- Add comments/analysis as blockquotes
+- Create new tasks in "Clawdbot-suggested" section
+- Add hidden metadata markers
+- Append to Brain Dump analysis
+
+⚠️ **Cautious writes** (confirm first):
+- Mark tasks as complete (unless obviously done)
+- Reorder tasks
+- Add subtasks to existing tasks
+- Modify task titles
+
+❌ **Never** (destructive):
+- Delete tasks without confirmation
+- Remove user-written content
+- Overwrite descriptions
+
+### Write Format Standards
+
+**Comments**: Use blockquote with marker
+```markdown
+> <!-- Clawdbot: Your insight here -->
+```
+
+**Timestamps**: ISO format
+```markdown
+<!-- Last checked: 2026-02-02T09:00:00Z -->
+```
+
+**Suggested Section**: Separate, easy to review
+```markdown
+## Tasks (Clawdbot-suggested)
+<!-- Review and move to main Tasks section when ready -->
+```
+
+## File System Watching (Implementation)
+
+### Option A: inotify/FSEvents (Recommended)
+```bash
+# Watch markdown files for changes
+# Trigger Clawdbot check 15min after last modification
+# Uses OS-level filesystem events
+```
+
+### Option B: Polling
+```bash
+# Every 5 minutes: stat all markdown files
+# Compare mtime with last known
+# If changed: schedule priority check
+```
+
+### Option C: Git Hook (Advanced)
+```bash
+# Install post-commit hook
+# Triggers Clawdbot on git commit
+# Best for git-tracked markdown
+```
+
 ## Notes
 - Keep outputs concise and actionable.
 - Prefer step-by-step suggestions.
+- **Respect user's workspace**: Don't overwrite user content
+- **Be transparent**: Always mark Clawdbot-generated content
+- **Rate limit**: Avoid excessive API calls when files change frequently

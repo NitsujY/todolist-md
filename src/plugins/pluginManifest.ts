@@ -85,17 +85,25 @@ export const pluginManifest: PluginManifestEntry[] = [
     kind: 'class',
   },
   {
-    id: 'ai-assistant',
-    module: './plugins/ai-assistant/AIAssistantPlugin.tsx',
-    exportName: 'AIAssistantPlugin',
-    kind: 'value',
-  },
-  {
     id: 'reminders-link',
     module: './plugins/RemindersLinkPlugin.tsx',
     exportName: 'RemindersLinkPlugin',
     kind: 'class',
     defaultEnabled: false,
+  },
+  {
+    id: 'file-change-detection',
+    module: './plugins/FileChangeDetectionPlugin.tsx',
+    exportName: 'FileChangeDetectionPlugin',
+    kind: 'class',
+    defaultEnabled: true,
+  },
+  {
+    id: 'clawdbot',
+    module: './plugins/clawdbot-plugin/ClawdbotPlugin.tsx',
+    exportName: 'ClawdbotPlugin',
+    kind: 'class',
+    defaultEnabled: true,
   },
   // {
   //   id: 'gamify',

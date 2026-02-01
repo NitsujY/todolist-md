@@ -228,7 +228,6 @@ Because tasks live in Markdown, this project is a good fit for Clawdbot automati
     - **Compact Mode**: For when you want to see more.
     - **Font Size**: Adjustable text size.
 - **Plugin System**: Extensible architecture (includes Due Date, Focus Mode, etc.) loaded via a manifest.
-- **Brain Dump (AI Assistant)**: Voice-first capture from a persistent bottom bar; optional typed input with scrolling inside the editor.
 - **Storage Options**:
     - **Local Storage**: Quick start, data stays in browser. Persists across reloads.
     - **File System**: Edit real files on your disk. Remembers your last folder/file and prompts to restore access on reload.

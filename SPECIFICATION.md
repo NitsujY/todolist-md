@@ -64,7 +64,7 @@ Detailed feature specifications are maintained in the `specs/` directory.
 
 - **[Task Management](specs/features/task-management.md)**: Core task creation, editing, and organization.
 - **[Focus Mode (Zen Mode)](specs/features/focus-mode.md)**: Distraction-free editing experience.
-- **[Brain Dump](specs/features/brain-dump.md)**: Context-aware capture (voice or typed) → tasks + next actions.
+- **[Clawdbot Integration](specs/integrations/clawdbot.md)**: External AI processing via Clawdbot skill (no in-app AI).
 - **[TaskItem UI](specs/ui/task-item.spec.md)**: Detailed UI states and interactions for the task component.
 
 ### 4.x Clawdbot Integration (AI Agent Automation)
@@ -232,29 +232,11 @@ To ensure a seamless experience across devices while respecting device-specific 
         - **Constraint**: Must pause/skip refresh if the user is currently editing a task (input focused) to prevent data loss or UI disruption.
     - `SoundEffectsPlugin`: Plays sounds on task completion.
     - `GamifyPlugin`: (Experimental) XP and leveling system.
-    - `AIAssistantPlugin`: (Submodule) AI features including Voice Mode and Smart Tags. Source: `https://github.com/NitsujY/todolist-ai-assistant.git`.
 
-#### 4.2.1 AI Assistant Providers (BYOK)
+#### 4.2 (Removed) AI Features
 
-The AI Assistant supports:
+**All AI/LLM features removed** - moved to external Clawdbot processing. See `docs/CLAWDBOT_AI_MIGRATION.md`.
 
-- **OpenAI** (direct from browser)
-- **Azure OpenAI** (direct from browser; requires endpoint + deployment + api-version)
-- **Private Endpoint (Managed)** (recommended when API keys must remain secret)
-
-**Config storage**:
-
-- UI settings are stored in `localStorage` under `ai-plugin-config`.
-- The app may also read Vite env vars (public at build-time) prefixed with `VITE_`.
-
-#### 4.2.2 Brain Dump Typed Input (UX Constraint)
-
-- In Brain Dump, when the user opens typed input (“Use typing”), the textarea should expand to fill available space (up to the overlay’s max height) and remain readable.
-- Long input must scroll inside the textarea; avoid making the entire Brain Dump overlay/page scroll just to edit text.
-
-## 5. Technical Constraints & Rules
-1.  **No Database**: Do not introduce a backend database. All state must be reconstructible from Markdown files.
-2.  **Vite Config**: The `__APP_VERSION__` global is defined in `vite.config.ts` from `package.json`.
 3.  **Tailwind**: Use Tailwind utility classes for styling. Avoid custom CSS unless necessary for complex animations or specific font overrides.
 4.  **State Management**: Use `zustand` for global state.
 5.  **Error Handling**:

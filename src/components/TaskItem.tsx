@@ -9,6 +9,7 @@ import { GripVertical, Plus, ChevronDown, ChevronRight, Calendar, AlignLeft, Cop
 import { pluginRegistry } from '../plugins/pluginEngine.tsx';
 import type { TaskItemContext } from '../plugins/pluginEngine.tsx';
 import type { Task } from '../lib/MarkdownParser';
+import { enhanceDescriptionWithClawdbot, ClawdbotCommentView, extractInlineClawdbotComment, ClawdbotInlineBadge } from '../plugins/clawdbot-plugin/ClawdbotPlugin';
 
 interface TaskItemProps {
   task: Task;
@@ -35,7 +36,8 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
   });
   const [isAnimating, setIsAnimating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [editText, setEditText] = useState(task.text);
+  // Strip Clawdbot markers from edit text so users don't see raw HTML comments
+  const [editText, setEditText] = useState(() => extractInlineClawdbotComment(task.text).cleanText);
   const [uncontrolledShowDescription, setUncontrolledShowDescription] = useState(false);
   const isShowDescriptionControlled = descriptionExpanded !== undefined;
   const showDescription = isShowDescriptionControlled ? descriptionExpanded : uncontrolledShowDescription;
@@ -217,8 +219,9 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
   }, [task.completed, showCompleted]);
 
   useEffect(() => {
-    if (task.text !== editText && !isEditing) {
-      setEditText(task.text);
+    const { cleanText } = extractInlineClawdbotComment(task.text);
+    if (cleanText !== editText && !isEditing) {
+      setEditText(cleanText);
     }
   }, [task.text, editText, isEditing]);
 
@@ -503,7 +506,16 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
             }}
             className={`font-bold text-base-content flex-1 cursor-text ${getHeaderFontSizeClass()}`}
           >
-            {getDisplayText(task.text)}
+            {(() => {
+              // Check if header has inline Clawdbot comment
+              const { cleanText, comment } = extractInlineClawdbotComment(task.text);
+              return (
+                <>
+                  {getDisplayText(cleanText)}
+                  {comment && <ClawdbotInlineBadge comment={comment} />}
+                </>
+              );
+            })()}
           </h2>
         )}
         <button 
@@ -662,38 +674,47 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
                 setShowDescription(true);
                 setIsEditing(true);
               }}
-              className={`flex-1 break-words cursor-text prose prose-sm max-w-none min-h-[1.5em] pr-8 ${task.completed ? 'line-through text-base-content/30' : 'text-base-content'} ${compact ? 'leading-snug' : ''} ${getFontSizeClass()}`}
+              className={`flex-1 break-words cursor-text prose prose-sm max-w-none min-h-[1.5em] pr-8 flex items-center gap-1 flex-wrap ${task.completed ? 'line-through text-base-content/30' : 'text-base-content'} ${compact ? 'leading-snug' : ''} ${getFontSizeClass()}`}
             >
-              <ReactMarkdown 
-                remarkPlugins={[remarkGfm, remarkBreaks]} 
-                components={{ 
-                  p: ({children}) => <span className="m-0 p-0">{children}</span>,
-                  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                  a: ({node, ...props}) => {
-                    const href = props.href || '';
-                    if (href.startsWith('tag:')) {
-                      const tag = href.replace('tag:', '');
+              <span className="flex-1 min-w-0">
+                <ReactMarkdown 
+                  remarkPlugins={[remarkGfm, remarkBreaks]} 
+                  components={{ 
+                    p: ({children}) => <span className="m-0 p-0">{children}</span>,
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    a: ({node, ...props}) => {
+                      const href = props.href || '';
+                      if (href.startsWith('tag:')) {
+                        const tag = href.replace('tag:', '');
+                        return (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary mx-0.5 select-none">
+                            #{tag}
+                          </span>
+                        );
+                      }
                       return (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary mx-0.5 select-none">
-                          #{tag}
-                        </span>
+                        <a 
+                          {...props} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="text-primary hover:underline cursor-pointer relative z-10"
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => e.stopPropagation()} 
+                        />
                       );
                     }
-                    return (
-                      <a 
-                        {...props} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="text-primary hover:underline cursor-pointer relative z-10"
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={(e) => e.stopPropagation()} 
-                      />
-                    );
-                  }
-                }}
-              >
-                {getDisplayText(task.text)}
-              </ReactMarkdown>
+                  }}
+                >
+                  {(() => {
+                    const { cleanText } = extractInlineClawdbotComment(task.text);
+                    return getDisplayText(cleanText);
+                  })()}
+                </ReactMarkdown>
+              </span>
+              {(() => {
+                const { comment } = extractInlineClawdbotComment(task.text);
+                return comment ? <ClawdbotInlineBadge comment={comment} /> : null;
+              })()}
             </div>
           )}
 
@@ -807,24 +828,41 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
                 }}
                 className="text-sm text-base-content/70 cursor-text border-l-2 border-base-300 pl-3 py-1 prose prose-sm max-w-none"
                     >
-                <ReactMarkdown 
-                  remarkPlugins={[remarkGfm, remarkBreaks]}
-                  components={{
-                    p: ({children}) => <span className="block mb-1 last:mb-0">{children}</span>,
-                    a: ({node, ...props}) => (
-                      <a 
-                        {...props} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="text-primary hover:underline cursor-pointer"
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={(e) => e.stopPropagation()} 
-                      />
-                    )
-                  }}
-                >
-                  {task.description || ''}
-                </ReactMarkdown>
+                {(() => {
+                  // Check if description has Clawdbot comments
+                  const enhanced = enhanceDescriptionWithClawdbot(task.description || '');
+                  
+                  return (
+                    <>
+                      {/* Render Clawdbot comments with special styling */}
+                      {enhanced.comments.map((comment, idx) => (
+                        <ClawdbotCommentView key={idx} comment={comment} />
+                      ))}
+                      
+                      {/* Render clean description without Clawdbot HTML comments */}
+                      {enhanced.cleanDescription && (
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm, remarkBreaks]}
+                          components={{
+                            p: ({children}) => <span className="block mb-1 last:mb-0">{children}</span>,
+                            a: ({node, ...props}) => (
+                              <a 
+                                {...props} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="text-primary hover:underline cursor-pointer"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => e.stopPropagation()} 
+                              />
+                            )
+                          }}
+                        >
+                          {enhanced.cleanDescription}
+                        </ReactMarkdown>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             )}
           </div>
