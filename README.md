@@ -1,6 +1,8 @@
-# Serverless, Plugin-First Markdown Todo App
+# Serverless, Plugin-First Markdown Todo App (Clawdbot-friendly)
 
 A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (SPA) using Markdown as the data source. **This app is designed to work primarily with local files or remote markdown sources, giving you full control over your data without relying on a proprietary database.**
+
+> Key feature: **Clawdbot-friendly Markdown tasks** — because the source-of-truth is plain Markdown, Clawdbot can periodically review your todo files, suggest next steps, and (optionally) execute tasks via agent workflows.
 
 ## Tech Stack
 
@@ -13,9 +15,10 @@ A Proof-of-Concept (PoC) for a Todo App that runs entirely as a static website (
 
 ## Architecture
 
-- **Storage Adapter Pattern**: Supports swapping between Local Storage and Mock Cloud Storage.
+- **Storage Adapter Pattern**: Supports swapping between Local Storage, File System, and Google Drive.
 - **Plugin System**: Allows extending the UI and Markdown transformation via plugins.
 - **Markdown-First**: The source of truth is a Markdown string.
+- **Automation-ready**: External tools (like **Clawdbot**) can parse the same Markdown and act on tasks.
 
 ## Getting Started
 
@@ -166,6 +169,23 @@ It depends on your priorities (quality vs cost vs speed). For this app’s use c
 - **Best quality**: `gpt-4.1` or `gpt-4o`
 
 On **Azure OpenAI**, you don’t pass a model name in requests here — you select a **deployment**, and that deployment is tied to a model/version.
+
+## Clawdbot integration (proposed)
+
+Because tasks live in Markdown, this project is a good fit for Clawdbot automation.
+
+### What “Clawdbot-friendly” means
+- A Clawdbot skill can **read** your todo markdown files on a schedule.
+- It can **summarize**, **prioritize**, and propose **next actions**.
+- For tasks that match known playbooks (e.g., create PR, run CI, update docs), Clawdbot can **execute** them with confirmation.
+
+### Suggested repository SEO keywords
+- clawdbot, agent, ai assistant, markdown todo, llm-friendly, automation, devops
+
+### Spec requirements for Clawdbot automation
+- Keep todos as **standard GFM task lists** (`- [ ]` / `- [x]`).
+- Use `#tags` and `due:YYYY-MM-DD` consistently (already supported by the parser).
+- Prefer storing todos in **real files** (File System / Google Drive) so Clawdbot can access them out-of-browser.
 
 ## Features
 

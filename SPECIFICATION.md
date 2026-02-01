@@ -69,6 +69,9 @@ Detailed feature specifications are maintained in the `specs/` directory.
 
 ### 4.x Optional External Connectors
 
+- **Clawdbot integration (proposed)**: A Clawdbot skill can read the same Markdown todos (from File System or Google Drive) on a schedule, generate guidance/next actions, and optionally execute tasks with confirmation.
+  - Spec: `specs/integrations/clawdbot.md`
+
 This repo may include optional, external utilities (outside the SPA) that operate on Markdown files.
 
 - **macOS Reminders sync**: A CLI (`npm run reminders:sync`) that reads Markdown files from disk and mirrors tasks into macOS Reminders lists.
