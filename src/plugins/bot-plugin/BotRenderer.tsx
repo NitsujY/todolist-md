@@ -1,23 +1,23 @@
 import { Bot, CheckCircle, XCircle, Clock } from 'lucide-react';
 
-export interface ClawdbotComment {
+export interface BotComment {
   content: string;
   timestamp?: string;
 }
 
-export interface ClawdbotSuggestedTask {
+export interface BotSuggestedTask {
   text: string;
   description?: string;
   generated: string;
 }
 
 /**
- * Parses Clawdbot HTML comments from text
- * Format: <!-- Clawdbot: Your insight here -->
+ * Parses bot HTML comments from text
+ * Format: <!-- bot: Your insight here -->
  */
-export function parseClawdbotComments(text: string): ClawdbotComment[] {
-  const regex = /<!--\s*Clawdbot:\s*(.*?)\s*-->/gi;
-  const comments: ClawdbotComment[] = [];
+export function parseBotComments(text: string): BotComment[] {
+  const regex = /<!--\s*bot:\s*(.*?)\s*-->/gi;
+  const comments: BotComment[] = [];
   let match;
 
   while ((match = regex.exec(text)) !== null) {
@@ -35,19 +35,19 @@ export function parseClawdbotComments(text: string): ClawdbotComment[] {
 }
 
 /**
- * Extracts inline Clawdbot comments from task text
+ * Extracts inline bot comments from task text
  * Returns clean text and parsed comments separately
  */
-export function extractInlineClawdbotComment(text: string): { 
+export function extractInlineBotComment(text: string): { 
   cleanText: string; 
-  comment: ClawdbotComment | null;
+  comment: BotComment | null;
 } {
-  // Clawdbot markers can appear anywhere in the task text, e.g.
-  // "Design mockup <!-- Clawdbot: Added subtask --> #frontend due:2026-02-05"
+  // Bot markers can appear anywhere in the task text, e.g.
+  // "Design mockup <!-- bot: Added subtask --> #frontend due:2026-02-05"
   // ReactMarkdown will drop HTML comments, so we extract them and show as a badge.
 
-  const regexGlobal = /<!--\s*Clawdbot:\s*([\s\S]*?)\s*-->/gi;
-  const comments: ClawdbotComment[] = [];
+  const regexGlobal = /<!--\s*bot:\s*([\s\S]*?)\s*-->/gi;
+  const comments: BotComment[] = [];
 
   const cleanText = text
     .replace(regexGlobal, (_m, rawContent: string) => {
@@ -66,10 +66,10 @@ export function extractInlineClawdbotComment(text: string): {
 }
 
 /**
- * Check if a blockquote contains Clawdbot comment
+ * Check if a blockquote contains bot comment
  */
-export function isClawdbotComment(blockquoteText: string): boolean {
-  return /<!--\s*Clawdbot:/i.test(blockquoteText);
+export function isBotComment(blockquoteText: string): boolean {
+  return /<!--\s*bot:/i.test(blockquoteText);
 }
 
 /**
@@ -97,9 +97,9 @@ function formatRelativeTime(timestamp: string): string {
 }
 
 /**
- * Renders a Clawdbot comment with bot icon and styling
+ * Renders a bot comment with icon and styling
  */
-export function ClawdbotCommentView({ comment }: { comment: ClawdbotComment }) {
+export function BotCommentView({ comment }: { comment: BotComment }) {
   return (
     <div className="flex items-start gap-2 p-3 my-2 bg-blue-50 dark:bg-blue-950 border-l-4 border-blue-400 dark:border-blue-600 rounded-r">
       <Bot className="w-4 h-4 mt-0.5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
@@ -119,9 +119,9 @@ export function ClawdbotCommentView({ comment }: { comment: ClawdbotComment }) {
 }
 
 /**
- * Renders a compact inline Clawdbot badge (icon only, with tooltip)
+ * Renders a compact inline bot badge (icon only, with tooltip)
  */
-export function ClawdbotInlineBadge({ comment }: { comment: ClawdbotComment }) {
+export function BotInlineBadge({ comment }: { comment: BotComment }) {
   return (
     <span 
       className="inline-flex items-center ml-1 p-0.5 text-blue-500 dark:text-blue-400 opacity-70 hover:opacity-100"
@@ -133,23 +133,23 @@ export function ClawdbotInlineBadge({ comment }: { comment: ClawdbotComment }) {
 }
 
 /**
- * Renders Clawdbot-suggested tasks section with Accept/Reject buttons
+ * Renders bot-suggested tasks section with Accept/Reject buttons
  */
-export function ClawdbotSuggestedSection({ 
+export function BotSuggestedSection({ 
   tasks, 
   onAccept, 
   onReject 
 }: { 
-  tasks: ClawdbotSuggestedTask[]; 
-  onAccept: (task: ClawdbotSuggestedTask) => void;
-  onReject: (task: ClawdbotSuggestedTask) => void;
+  tasks: BotSuggestedTask[]; 
+  onAccept: (task: BotSuggestedTask) => void;
+  onReject: (task: BotSuggestedTask) => void;
 }) {
   return (
     <div className="p-4 my-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
       <div className="flex items-center gap-2 mb-3">
         <Bot className="w-5 h-5 text-blue-600 dark:text-blue-400" />
         <h3 className="font-semibold text-blue-900 dark:text-blue-100">
-          Clawdbot Suggestions
+          Bot Suggestions
         </h3>
         <span className="text-xs px-2 py-0.5 bg-blue-200 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full">
           {tasks.length}
@@ -204,10 +204,10 @@ export function ClawdbotSuggestedSection({
 }
 
 /**
- * Parses suggested tasks from "Tasks (Clawdbot-suggested)" section
+ * Parses suggested tasks from "Tasks (bot-suggested)" section
  */
-export function parseClawdbotSuggestedSection(markdown: string): ClawdbotSuggestedTask[] {
-  const sectionRegex = /##\s*Tasks\s*\(Clawdbot-suggested\)\s*\n<!--\s*Generated\s*(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2})?(?:Z)?)\s*-->\s*\n([\s\S]*?)(?=\n##\s|\n#\s|$)/i;
+export function parseBotSuggestedSection(markdown: string): BotSuggestedTask[] {
+  const sectionRegex = /##\s*Tasks\s*\(bot-suggested\)\s*\n<!--\s*Generated\s*(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2})?(?:Z)?)\s*-->\s*\n([\s\S]*?)(?=\n##\s|\n#\s|$)/i;
   const match = markdown.match(sectionRegex);
   
   if (!match) return [];
@@ -216,8 +216,8 @@ export function parseClawdbotSuggestedSection(markdown: string): ClawdbotSuggest
   const sectionContent = match[2];
   
   // Parse tasks from section
-  const taskRegex = /-\s*\[\s*\]\s*(.+?)(?:\n\s*>\s*<!--\s*Clawdbot:\s*(.*?)\s*-->)?(?=\n-\s*\[|\n#|$)/g;
-  const tasks: ClawdbotSuggestedTask[] = [];
+  const taskRegex = /-\s*\[\s*\]\s*(.+?)(?:\n\s*>\s*<!--\s*bot:\s*(.*?)\s*-->)?(?=\n-\s*\[|\n#|$)/g;
+  const tasks: BotSuggestedTask[] = [];
   let taskMatch;
   
   while ((taskMatch = taskRegex.exec(sectionContent)) !== null) {
@@ -232,13 +232,13 @@ export function parseClawdbotSuggestedSection(markdown: string): ClawdbotSuggest
 }
 
 /**
- * Removes accepted/rejected tasks from the Clawdbot-suggested section
+ * Removes accepted/rejected tasks from the bot-suggested section
  */
-export function removeClawdbotSuggestedTask(markdown: string, taskText: string): string {
+export function removeBotSuggestedTask(markdown: string, taskText: string): string {
   // Find the task line and its description (if any)
   const escapedText = taskText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const taskRegex = new RegExp(
-    `-\\s*\\[\\s*\\]\\s*${escapedText}\\s*(?:\\n\\s*>\\s*<!--\\s*Clawdbot:.*?-->)?`,
+    `-\\s*\\[\\s*\\]\\s*${escapedText}\\s*(?:\\n\\s*>\\s*<!--\\s*bot:.*?-->)?`,
     'g'
   );
   
@@ -246,21 +246,21 @@ export function removeClawdbotSuggestedTask(markdown: string, taskText: string):
 }
 
 /**
- * Hook into TaskItem description rendering to show Clawdbot comments with special styling
+ * Hook into TaskItem description rendering to show bot comments with special styling
  */
-export function enhanceDescriptionWithClawdbot(description: string): {
-  hasClawdbotComments: boolean;
-  comments: ClawdbotComment[];
+export function enhanceDescriptionWithBot(description: string): {
+  hasBotComments: boolean;
+  comments: BotComment[];
   cleanDescription: string;
 } {
-  const comments = parseClawdbotComments(description);
+  const comments = parseBotComments(description);
   
-  // Remove Clawdbot HTML comments from visible description
+  // Remove bot HTML comments from visible description
   // so they don't render as raw HTML
-  const cleanDescription = description.replace(/<!--\s*Clawdbot:.*?-->/gi, '').trim();
+  const cleanDescription = description.replace(/<!--\s*bot:.*?-->/gi, '').trim();
   
   return {
-    hasClawdbotComments: comments.length > 0,
+    hasBotComments: comments.length > 0,
     comments,
     cleanDescription,
   };

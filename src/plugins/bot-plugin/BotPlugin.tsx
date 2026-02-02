@@ -1,18 +1,18 @@
 import type { Plugin } from '../pluginEngine';
 
 /**
- * ClawdbotPlugin
+ * BotPlugin
  * 
- * Enables Clawdbot-aware rendering for markdown tasks:
- * - Parses <!-- Clawdbot: ... --> comments
+ * Enables bot-aware rendering for markdown tasks:
+ * - Parses <!-- bot: ... --> comments
  * - Renders them with 🤖 icon and blue styling
  * - Shows inline badges for subtask markers
  * - Provides suggested tasks UI (Accept/Reject)
  * 
- * Default enabled since Clawdbot integration is a core feature.
+ * Default enabled since bot integration is a core feature.
  */
-export class ClawdbotPlugin implements Plugin {
-  name = 'Clawdbot';
+export class BotPlugin implements Plugin {
+  name = 'Bot';
   defaultEnabled = true;
 
   onEnable() {
@@ -21,14 +21,14 @@ export class ClawdbotPlugin implements Plugin {
   }
 
   onDisable() {
-    // When disabled, Clawdbot comments render as plain HTML comments
+    // When disabled, bot comments render as plain HTML comments
     // (which browsers hide by default)
   }
 
   renderSettings() {
     return (
       <div className="text-sm text-base-content/70">
-        <p>Enables special rendering for Clawdbot comments:</p>
+        <p>Enables special rendering for bot comments:</p>
         <ul className="list-disc list-inside mt-2 space-y-1">
           <li>🤖 Blue badges for inline markers</li>
           <li>Styled comment blocks in descriptions</li>
@@ -39,17 +39,17 @@ export class ClawdbotPlugin implements Plugin {
   }
 }
 
-// Re-export all Clawdbot utilities and components
+// Re-export all bot utilities and components
 export {
-  parseClawdbotComments,
-  extractInlineClawdbotComment,
-  isClawdbotComment,
-  enhanceDescriptionWithClawdbot,
-  parseClawdbotSuggestedSection,
-  removeClawdbotSuggestedTask,
-  ClawdbotCommentView,
-  ClawdbotInlineBadge,
-  ClawdbotSuggestedSection,
-} from './ClawdbotRenderer';
+  parseBotComments,
+  extractInlineBotComment,
+  isBotComment,
+  enhanceDescriptionWithBot,
+  parseBotSuggestedSection,
+  removeBotSuggestedTask,
+  BotCommentView,
+  BotInlineBadge,
+  BotSuggestedSection,
+} from './BotRenderer';
 
-export type { ClawdbotComment, ClawdbotSuggestedTask } from './ClawdbotRenderer';
+export type { BotComment, BotSuggestedTask } from './BotRenderer';

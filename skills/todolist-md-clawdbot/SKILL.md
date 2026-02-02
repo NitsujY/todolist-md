@@ -7,6 +7,8 @@ description: Use todolist-md (Markdown-first todo lists) with Clawdbot. Read Mar
 
 This skill helps Clawdbot work with **todolist-md** markdown todos.
 
+Core rule: the **Markdown file is the system of record**. Clawdbot can ask questions and propose edits in chat, but the final answer/decision should be written into the Markdown so the user sees it in the app and other tools can read it later.
+
 ## Data conventions (what Clawdbot expects)
 - Tasks use **GFM** checkboxes: `- [ ]` and `- [x]`
 - Optional tags: `#tag`
@@ -135,7 +137,7 @@ When Clawdbot runs (scheduled or change-triggered):
 - Parse all tasks with GFM syntax
 - Extract metadata: tags, due dates, descriptions
 - Track task state: open vs completed
-- Note: Brain Dump section, Clawdbot-suggested section
+- Note: Brain Dump section, bot-suggested section
 ```
 
 ### 2. Identify Actions Needed
@@ -145,39 +147,87 @@ Clawdbot should:
 ✅ Check overdue tasks (due date < today)
 ✅ Detect blocked tasks (missing dependencies, unclear)
 ✅ Process Brain Dump items (new captures)
-✅ Review Clawdbot-suggested tasks (pending user acceptance)
+✅ Review bot-suggested tasks (pending user acceptance)
 ```
 
 ### 3. Write Back to Markdown
 
 **Add Inline Comments** (as blockquotes):
+
+Supported marker format:
+- `<!-- bot: ... -->`
+
 ```markdown
 - [ ] Deploy v2.0 to production
   > Status: Ready to deploy
-  > <!-- Clawdbot: Staging tests passed. Run: npm run deploy:prod -->
+  > <!-- bot: Staging tests passed. Run: npm run deploy:prod -->
   > <!-- Last checked: 2026-02-02 09:00 -->
 ```
+
+### Q/A: asking, answering, and clearing
+
+Core rule: if you ask a question, the **answer must end up in Markdown**.
+
+**Ask** (single line marker):
+
+```md
+- [ ] Plan Q1 roadmap
+  > <!-- bot: Question: what is the success metric for Q1? -->
+```
+
+**User answers** (preferred: same line, so line counts stay stable):
+
+```md
+- [ ] Plan Q1 roadmap
+  > <!-- bot: Question: what is the success metric for Q1? --> Answer: Increase weekly active users by 15%.
+```
+
+**After the bot consumes the answer**, it should stop re-asking and either:
+
+**Option B (preferred): archive to a Bot Log**
+- Append a log entry under `## Bot Log` (ideally at end of file).
+- Replace the original question line **in-place** (do not delete it).
+
+Example:
+
+```md
+- [ ] Plan Q1 roadmap
+  > <!-- bot: Archived: moved to Bot Log (answered) -->
+
+## Bot Log
+- 2026-02-02T12:30Z Plan Q1 roadmap | Q: success metric for Q1? | A: Increase weekly active users by 15%.
+```
+
+**Option C (acceptable): clear it**
+- Do not remove lines inside a task description.
+- Replace the question line with a short placeholder marker:
+
+```md
+> <!-- bot: Cleared question (answered) -->
+```
+
+Why this matters: todolist-md currently derives task IDs from Markdown line positions. Deleting/adding lines inside task descriptions can make task IDs shift and cause the UI to “jump”.
 
 **Mark Tasks Complete** (when appropriate):
 ```markdown
 - [x] Fix auth bug
-  > <!-- Clawdbot: Verified fixed in commit abc123. Marked complete. -->
+  > <!-- bot: Verified fixed in commit abc123. Marked complete. -->
 ```
 
 **Create New Tasks** (based on analysis):
 ```markdown
-## Tasks (Clawdbot-suggested)
+## Tasks (bot-suggested)
 <!-- Generated 2026-02-02 09:00 -->
 
 - [ ] Update deployment docs #docs
-  > <!-- Clawdbot: Created because deploy process changed -->
+  > <!-- bot: Created because deploy process changed -->
 ```
 
 **Add Follow-up Actions**:
 ```markdown
 - [ ] Build landing page #frontend
-  - [ ] Design mockup <!-- Clawdbot: Added subtask -->
-  - [ ] HTML structure <!-- Clawdbot: Added subtask -->
+  - [ ] Design mockup <!-- bot: Added subtask -->
+  - [ ] HTML structure <!-- bot: Added subtask -->
 ```
 
 ### 4. Metadata Tracking
@@ -249,7 +299,7 @@ When the user has a large, vague task, offer to break it down:
 ### When to Write
 ✅ **Safe writes** (always okay):
 - Add comments/analysis as blockquotes
-- Create new tasks in "Clawdbot-suggested" section
+- Create new tasks in "bot-suggested" section
 - Add hidden metadata markers
 - Append to Brain Dump analysis
 
@@ -268,7 +318,7 @@ When the user has a large, vague task, offer to break it down:
 
 **Comments**: Use blockquote with marker
 ```markdown
-> <!-- Clawdbot: Your insight here -->
+> <!-- bot: Your insight here -->
 ```
 
 **Timestamps**: ISO format
@@ -278,8 +328,49 @@ When the user has a large, vague task, offer to break it down:
 
 **Suggested Section**: Separate, easy to review
 ```markdown
-## Tasks (Clawdbot-suggested)
+## Tasks (bot-suggested)
 <!-- Review and move to main Tasks section when ready -->
+```
+
+## Clarifying Questions (In-File Q/A Protocol)
+
+When a task is missing requirements, Clawdbot should ask questions **inside the markdown file** so the user can answer in-context.
+
+This is recommended because it:
+- Works without any in-app AI
+- Keeps decisions next to the task
+- Is easy to audit in git history
+
+See the full end-to-end example in `texture/bot-full-example.md`.
+
+### Question format (Clawdbot writes)
+
+Use the standard bot marker so the todolist-md UI renders it nicely:
+
+```markdown
+- [ ] Deploy v2.0 to production #backend
+  > <!-- bot: Question[id=deploy-tests] Which CI job is failing? Options: unit / integration / e2e -->
+```
+
+Rules:
+- Always include a stable `id=...` so the Q can be referenced later.
+- Prefer offering 2-5 options.
+- Keep questions short and single-purpose.
+
+### Answer format (User writes)
+
+The user answers in plain text (not a Clawdbot marker):
+
+```markdown
+  > Answer (deploy-tests): integration
+```
+
+### Resolution (Clawdbot writes)
+
+After reading the answer, Clawdbot should update the task description/subtasks and leave an audit note:
+
+```markdown
+  > <!-- bot: Resolved Question[id=deploy-tests]. Updated task description and next steps. -->
 ```
 
 ## File System Watching (Implementation)

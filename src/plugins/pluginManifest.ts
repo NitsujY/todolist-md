@@ -99,9 +99,9 @@ export const pluginManifest: PluginManifestEntry[] = [
     defaultEnabled: true,
   },
   {
-    id: 'clawdbot',
-    module: './plugins/clawdbot-plugin/ClawdbotPlugin.tsx',
-    exportName: 'ClawdbotPlugin',
+    id: 'bot',
+    module: './plugins/bot-plugin/BotPlugin.tsx',
+    exportName: 'BotPlugin',
     kind: 'class',
     defaultEnabled: true,
   },

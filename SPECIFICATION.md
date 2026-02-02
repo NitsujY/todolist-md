@@ -64,14 +64,14 @@ Detailed feature specifications are maintained in the `specs/` directory.
 
 - **[Task Management](specs/features/task-management.md)**: Core task creation, editing, and organization.
 - **[Focus Mode (Zen Mode)](specs/features/focus-mode.md)**: Distraction-free editing experience.
-- **[Clawdbot Integration](specs/integrations/clawdbot.md)**: External AI processing via Clawdbot skill (no in-app AI).
+- **[Bot Integration](specs/integrations/clawdbot.md)**: External bot processing via Clawdbot skill or similar (no in-app AI).
 - **[TaskItem UI](specs/ui/task-item.spec.md)**: Detailed UI states and interactions for the task component.
 
-### 4.x Clawdbot Integration (AI Agent Automation)
+### 4.x Bot Integration (AI Agent Automation)
 
 **Status**: First-class feature (see `specs/integrations/clawdbot.md` and `skills/todolist-md-clawdbot/`)
 
-This app is designed to be **AI agent-friendly**. Because the data format is plain Markdown with GFM task lists, AI agents (especially Clawdbot) can:
+This app is designed to be **AI agent-friendly**. Because the data format is plain Markdown with GFM task lists, external agents (including Clawdbot) can:
 
 1. **Read** todo files periodically from File System or Google Drive
 2. **Analyze** tasks to identify:
@@ -81,7 +81,7 @@ This app is designed to be **AI agent-friendly**. Because the data format is pla
    - Top 3 recommended next actions
 3. **Execute** well-defined tasks autonomously (with user confirmation)
 
-#### Requirements for Clawdbot Compatibility
+#### Requirements for Bot Compatibility
 
 **MUST:**
 - Tasks use GFM checkbox syntax: `- [ ]` (open) and `- [x]` (completed)
@@ -105,7 +105,7 @@ This app is designed to be **AI agent-friendly**. Because the data format is pla
 - **Write-back requires confirmation**: Any operation that modifies tasks (mark complete, add subtasks, reorder) must be explicitly confirmed by the user
 - **Audit trail**: All Clawdbot actions should be logged (in the skill's context)
 
-#### Example Clawdbot Workflows
+#### Example Agent Workflows
 
 **Daily digest:**
 ```

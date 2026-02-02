@@ -1,21 +1,20 @@
-# Serverless, Plugin-First Markdown Todo App (Clawdbot-Powered)
+# Serverless, Plugin-First Markdown Todo App
 
-[![Clawdbot Friendly](https://img.shields.io/badge/Clawdbot-powered-0ea5e9?style=flat-square)](#-clawdbot-integration-ai-powered-task-automation)
-[![AI Agent Ready](https://img.shields.io/badge/AI%20Agent-ready-f97316?style=flat-square)](#-clawdbot-integration-ai-powered-task-automation)
+[![AI Agent Ready](https://img.shields.io/badge/AI%20Agent-ready-f97316?style=flat-square)](#bot-integration-external)
 [![Markdown Todo](https://img.shields.io/badge/Markdown-GFM%20Task%20Lists-10b981?style=flat-square)](#features)
 [![LLM Friendly](https://img.shields.io/badge/LLM-friendly-8b5cf6?style=flat-square)](#markdown-syntax-guide)
 
-A **Markdown-first todo app** designed for humans *and* AI agents. Keep your tasks in plain Markdown files, and let **Clawdbot** (or any AI agent) read, analyze, and execute tasks on your behalf.
+A **Markdown-first todo app** designed for humans *and* AI agents. Keep your tasks in plain Markdown files, and let external agents read/analyze/act on them.
 
-## 🤖 Why This Is Perfect for AI Agents
+## Why this works well with bots
 
 **Your todos are just Markdown files** — which means:
-- ✅ **Clawdbot can read them** directly from your file system or Google Drive
+- ✅ **Bots can read them** directly from your file system or Google Drive
 - ✅ **Zero vendor lock-in** — it's just plain text with GFM task lists
 - ✅ **AI-native format** — LLMs understand Markdown perfectly
 - ✅ **Automation-ready** — external scripts, agents, and CLIs can parse and modify your tasks
 
-> **Key Innovation**: While most todo apps trap your data in proprietary formats, todolist-md keeps everything in standard Markdown. This makes it the **perfect companion for Clawdbot** and other AI assistants that can proactively manage your workflow.
+> Key idea: this app keeps tasks in standard Markdown so automation can happen externally.
 
 ## Tech Stack
 
@@ -124,68 +123,9 @@ To check logs:
 - The CLI stores the Reminders UUID in the hidden marker (no scanning/index file required).
 - It only works with **real markdown files** on disk (File System / folder mode is ideal). LocalStorage-only lists aren’t directly accessible from a CLI.
 
-## Submodule Note (AI Assistant)
+## Bot integration (external)
 
-The AI Assistant is a git submodule at `src/plugins/ai-assistant`. If you change it, you must push the submodule commit before pushing the parent repo submodule pointer (otherwise CI can fail with a missing ref).
-
-## AI Assistant: OpenAI vs Azure OpenAI
-
-This app is a static SPA. Any API key you provide (in Settings or via Vite env vars) is used from the browser.
-
-- If you need to keep keys secret, use **Private Endpoint (Managed)** and proxy calls through a backend you control.
-
-### Option A: Configure in the UI (recommended for quick testing)
-
-1. Open the app.
-2. Open **AI Settings** (gear icon).
-3. In **Provider**, choose:
-    - **OpenAI** (standard OpenAI API), or
-    - **Azure OpenAI** (Microsoft Azure OpenAI).
-
-For **OpenAI**:
-- Enter your **API Key**
-- Optional: set **Model** (default: `gpt-4.1-mini`)
-
-For **Azure OpenAI**:
-- **Azure Endpoint**: `https://<resource>.openai.azure.com`
-- **API Version**: the Azure OpenAI API version you enabled (example: `2024-06-01`)
-- **Deployment**: your deployment name in Azure OpenAI Studio
-- **API Key**: your Azure OpenAI key
-
-### Option B: Configure via `.env.local` (Vite)
-
-Create `.env.local` in the project root:
-
-```bash
-# Standard OpenAI
-VITE_OPENAI_API_KEY=sk-...
-VITE_OPENAI_MODEL=gpt-4.1-mini
-
-# Azure OpenAI
-VITE_AZURE_OPENAI_ENDPOINT=https://<resource>.openai.azure.com
-VITE_AZURE_OPENAI_API_VERSION=2024-06-01
-VITE_AZURE_OPENAI_DEPLOYMENT=<your-deployment-name>
-VITE_AZURE_OPENAI_API_KEY=<your-azure-openai-key>
-```
-
-Restart the dev server after changes:
-
-```bash
-npm run dev
-```
-
-### Which model “works best”?
-
-It depends on your priorities (quality vs cost vs speed). For this app’s use cases (task breakdown, summarization, light assistant prompts):
-
-- **Best default (cost/perf)**: `gpt-4.1-mini` or `gpt-4o-mini`
-- **Best quality**: `gpt-4.1` or `gpt-4o`
-
-On **Azure OpenAI**, you don’t pass a model name in requests here — you select a **deployment**, and that deployment is tied to a model/version.
-
-## Clawdbot integration (proposed)
-
-### Install the Clawdbot skill (from this repo)
+### Install the Clawdbot skill (optional)
 If you're running Clawdbot locally, you can install the skill folder directly:
 
 ```bash
@@ -196,7 +136,9 @@ clawdhub install todolist-md-clawdbot
 
 If you prefer not to publish, you can copy `skills/todolist-md-clawdbot/` into your Clawdbot workspace skills folder.
 
-Because tasks live in Markdown, this project is a good fit for Clawdbot automation.
+Because tasks live in Markdown, this project is a good fit for external automation.
+
+Full test fixture (markers + conventions): `texture/bot-full-example.md`.
 
 ### What “Clawdbot-friendly” means
 - A Clawdbot skill can **read** your todo markdown files on a schedule.
@@ -204,7 +146,7 @@ Because tasks live in Markdown, this project is a good fit for Clawdbot automati
 - For tasks that match known playbooks (e.g., create PR, run CI, update docs), Clawdbot can **execute** them with confirmation.
 
 ### Suggested repository SEO keywords
-- clawdbot, agent, ai assistant, markdown todo, llm-friendly, automation, devops
+- bot, agent, markdown todo, llm-friendly, automation
 
 ### Spec requirements for Clawdbot automation
 - Keep todos as **standard GFM task lists** (`- [ ]` / `- [x]`).

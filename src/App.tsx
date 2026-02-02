@@ -87,6 +87,7 @@ function App() {
     isFolderMode,
     updateTaskText,
     updateTaskDescription,
+    answerBotQuestion,
     renameFile,
     reorderTasks,
     insertTaskAfter,
@@ -1056,6 +1057,7 @@ function App() {
                               onToggle={toggleTask} 
                               onUpdate={updateTaskText}
                               onUpdateDescription={updateTaskDescription}
+                              onAnswerBotQuestion={answerBotQuestion}
                               descriptionExpanded={descriptionExpandedById[task.id] === true}
                               onDescriptionExpandedChange={(taskId, expanded) => {
                                 setDescriptionExpandedById(prev => {

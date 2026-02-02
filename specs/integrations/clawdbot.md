@@ -1,10 +1,14 @@
-# Clawdbot Integration Spec (Proposed)
+# Bot Integration Spec (External Agents)
+
+This spec describes how **external agents** (Clawdbot or any other bot) can interact with `todolist-md` by reading/writing Markdown files.
 
 ## Goal
-Make `todolist-md` easy for Clawdbot to:
-1) Read markdown todos regularly
-2) Suggest next steps and guidance
-3) Optionally execute tasks via agent workflows
+- Keep the app **AI-free** (viewer/editor only)
+- Make Markdown files the **source of truth** for both humans and bots
+- Provide a minimal, bot-compatible convention for:
+  - suggestions
+  - questions
+  - answers (user responses)
 
 ## Non-goals
 - No mandatory backend service
@@ -14,37 +18,88 @@ Make `todolist-md` easy for Clawdbot to:
 - GFM tasks: `- [ ]` and `- [x]`
 - Tags: `#tag`
 - Due date: `due:YYYY-MM-DD`
-- Optional metadata lines can be added as blockquotes under a task (existing description mechanism)
+- Description: a blockquote under a task (existing description mechanism)
 
-## Access patterns
-Clawdbot needs file access outside the browser:
-- Prefer File System folder mode (real `.md` files) or Google Drive adapter.
-- LocalStorage-only mode is not suitable for automation.
+## Bot marker format (only supported)
 
-## Automation safety
-- Default is **read-only** analysis + suggestions.
-- Any write-back (mark complete, append notes, reorder) should require explicit user confirmation.
+Bots may add hidden HTML comment markers anywhere in task text/description:
 
-## Suggested Clawdbot skill scope
-- Parse markdown todo files in a folder/drive location
-- Identify:
-  - overdue tasks (due < today)
-  - tasks without owners/tags
-  - tasks blocked by missing info
-  - quick wins (small tasks)
-- Produce:
-  - daily digest
-  - top 3 next actions
-  - optional execution plan (commands or PR steps)
+```md
+<!-- bot: Your note here -->
+```
 
-## Example
-Input:
+Notes:
+- The app renders these markers as bot callouts/badges.
+- The raw `<!-- ... -->` should not be shown in edit UX.
 
-- [ ] Update README for Clawdbot integration #docs due:2026-02-05
-  > Include SEO keywords and quick start
+## Questions & answers (recommended workflow)
 
-Output (digest):
-- Overdue: none
-- Next actions:
-  1) Draft README section "Clawdbot integration"
-  2) Add spec file under specs/integrations/
+### Where does the user answer?
+The **user answers in the todo app** (by editing the Markdown), because the Markdown file is the system of record.
+
+Bots can ask questions in Clawdbot chat, but the answer should be written back into the Markdown file so:
+- the user sees it in the app
+- future bots can read it
+- the result is auditable
+
+### How does Q/A look in Markdown?
+
+Bot asks (single line):
+
+```md
+- [ ] Plan Q1 roadmap
+  > <!-- bot: Question: what is the success metric for Q1? -->
+```
+
+User answers (preferred, same line to avoid shifting task IDs):
+
+```md
+- [ ] Plan Q1 roadmap
+  > <!-- bot: Question: what is the success metric for Q1? --> Answer: Increase weekly active users by 15%.
+```
+
+This convention is intentionally simple:
+- Bot writes a `<!-- bot: Question: ... -->` marker.
+- User writes an `Answer: ...` (preferably on the same line as the marker).
+
+### After the user answers (what bots should do)
+
+If the task now has all information it needs, bots should **stop re-asking** and either:
+
+**B) Archive to a Bot Log (recommended)**
+- Append a log entry under a `## Bot Log` section (ideally at the end of the file).
+- Replace the original question line **in-place** (do not delete the line) so task IDs remain stable.
+
+Example:
+
+```md
+- [ ] Plan Q1 roadmap
+  > <!-- bot: Archived: moved to Bot Log (answered) -->
+
+## Bot Log
+- 2026-02-02T12:30Z Plan Q1 roadmap | Q: success metric for Q1? | A: Increase weekly active users by 15%.
+```
+
+**C) Clear it entirely (acceptable, but keep line count stable)**
+- Do not remove lines from the middle of the file.
+- Instead, rewrite the question line into a short placeholder (still a `<!-- bot: ... -->` marker), e.g.:
+
+```md
+> <!-- bot: Cleared question (answered) -->
+```
+
+## Bot-suggested tasks section (optional)
+
+Bots may append a suggested section (the app can parse this header):
+
+```md
+## Tasks (bot-suggested)
+<!-- Generated 2026-02-02T12:00Z -->
+
+- [ ] Write a rollout plan
+  > <!-- bot: Include rollback steps + monitoring links. -->
+```
+
+## Test fixture
+
+- Reference file: `texture/bot-full-example.md`

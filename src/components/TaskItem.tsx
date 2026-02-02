@@ -9,13 +9,14 @@ import { GripVertical, Plus, ChevronDown, ChevronRight, Calendar, AlignLeft, Cop
 import { pluginRegistry } from '../plugins/pluginEngine.tsx';
 import type { TaskItemContext } from '../plugins/pluginEngine.tsx';
 import type { Task } from '../lib/MarkdownParser';
-import { enhanceDescriptionWithClawdbot, ClawdbotCommentView, extractInlineClawdbotComment, ClawdbotInlineBadge } from '../plugins/clawdbot-plugin/ClawdbotPlugin';
+import { enhanceDescriptionWithBot, BotCommentView, extractInlineBotComment, BotInlineBadge } from '../plugins/bot-plugin/BotPlugin';
 
 interface TaskItemProps {
   task: Task;
   onToggle: (id: string) => void;
   onUpdate?: (id: string, newText: string) => Promise<string | undefined> | void;
   onUpdateDescription?: (id: string, description: string) => void;
+  onAnswerBotQuestion?: (taskId: string, comment: string, answer: string, opts?: { archive?: boolean }) => Promise<void>;
   descriptionExpanded?: boolean;
   onDescriptionExpandedChange?: (taskId: string, expanded: boolean) => void;
   onAddNext?: (afterId: string) => void;
@@ -29,7 +30,7 @@ interface TaskItemProps {
   fontSize?: 'small' | 'normal' | 'large' | 'xl';
 }
 
-export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descriptionExpanded, onDescriptionExpandedChange, onAddNext, onToggleSection, sectionCollapsed, onHeaderEditStart, onDelete, showCompleted, autoFocus, compact, fontSize = 'normal' }: TaskItemProps) {
+export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnswerBotQuestion, descriptionExpanded, onDescriptionExpandedChange, onAddNext, onToggleSection, sectionCollapsed, onHeaderEditStart, onDelete, showCompleted, autoFocus, compact, fontSize = 'normal' }: TaskItemProps) {
   const [isVisible, setIsVisible] = useState(() => {
     if (task.completed && !showCompleted) return false;
     return true;
@@ -37,7 +38,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
   const [isAnimating, setIsAnimating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   // Strip Clawdbot markers from edit text so users don't see raw HTML comments
-  const [editText, setEditText] = useState(() => extractInlineClawdbotComment(task.text).cleanText);
+  const [editText, setEditText] = useState(() => extractInlineBotComment(task.text).cleanText);
   const [uncontrolledShowDescription, setUncontrolledShowDescription] = useState(false);
   const isShowDescriptionControlled = descriptionExpanded !== undefined;
   const showDescription = isShowDescriptionControlled ? descriptionExpanded : uncontrolledShowDescription;
@@ -50,7 +51,18 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
     }
   };
   const [isEditingDescription, setIsEditingDescription] = useState(false);
-  const [editDescription, setEditDescription] = useState(task.description || '');
+  // Strip bot markers from description edit text so users don't see raw HTML comments
+  const [editDescription, setEditDescription] = useState(() => 
+    enhanceDescriptionWithBot(task.description || '').cleanDescription
+  );
+
+  // Quick-answer UX for bot questions (without opening full description editor)
+  const [activeBotQuestionKey, setActiveBotQuestionKey] = useState<string | null>(null);
+  const [activeBotQuestionMarker, setActiveBotQuestionMarker] = useState<string | null>(null);
+  const [activeBotQuestionComment, setActiveBotQuestionComment] = useState<{ content: string; timestamp?: string } | null>(null);
+  const [botAnswerDraft, setBotAnswerDraft] = useState('');
+  const [isSavingBotAnswer, setIsSavingBotAnswer] = useState(false);
+  const [isBotAnswerModalOpen, setIsBotAnswerModalOpen] = useState(false);
   const [justCopied, setJustCopied] = useState(false);
   
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -150,11 +162,20 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
   const requestExit = async () => {
     if (editText.trim() === '') {
       onDelete?.(task.id);
-    } else if (editText.trim() !== task.text) {
-      await onUpdate?.(task.id, editText);
+    } else {
+      const originalCleanText = extractInlineBotComment(task.text).cleanText.trim();
+      if (editText.trim() !== originalCleanText) {
+        const mergedText = mergeTaskTextPreservingInlineBotMarker(editText, task.text);
+        await onUpdate?.(task.id, mergedText);
+      }
     }
-    if (editDescription !== (task.description || '')) {
-      onUpdateDescription?.(task.id, editDescription);
+    {
+      const originalDesc = task.description || '';
+      const originalCleanDesc = enhanceDescriptionWithBot(originalDesc).cleanDescription;
+      if (editDescription !== originalCleanDesc) {
+        const mergedDesc = mergeDescriptionPreservingBotMarkers(originalDesc, editDescription);
+        onUpdateDescription?.(task.id, mergedDesc);
+      }
     }
     setIsEditing(false);
     setIsEditingDescription(false);
@@ -219,11 +240,152 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
   }, [task.completed, showCompleted]);
 
   useEffect(() => {
-    const { cleanText } = extractInlineClawdbotComment(task.text);
+    const { cleanText } = extractInlineBotComment(task.text);
     if (cleanText !== editText && !isEditing) {
       setEditText(cleanText);
     }
   }, [task.text, editText, isEditing]);
+
+  useEffect(() => {
+    if (!isEditingDescription) {
+      setEditDescription(enhanceDescriptionWithBot(task.description || '').cleanDescription);
+    }
+  }, [task.description, isEditingDescription]);
+
+  const getBotCommentKey = (comment: { content: string; timestamp?: string }) => {
+    return `${comment.timestamp ?? ''}|${comment.content}`;
+  };
+
+  const isBotQuestion = (comment: { content: string }) => {
+    const c = String(comment.content || '').trim();
+    return /^question\s*:/i.test(c) || /^q\s*:/i.test(c) || c.endsWith('?');
+  };
+
+  const formatBotMarker = (comment: { content: string; timestamp?: string }) => {
+    const inner = comment.timestamp ? `${comment.content} (${comment.timestamp})` : comment.content;
+    return `<!-- bot: ${inner} -->`;
+  };
+
+  const mergeTaskTextPreservingInlineBotMarker = (cleanText: string, originalTaskText: string) => {
+    if (/<!--\s*bot:/i.test(cleanText)) return cleanText;
+    const { comment } = extractInlineBotComment(originalTaskText);
+    if (!comment) return cleanText;
+    const marker = formatBotMarker(comment);
+    const needsSpace = !cleanText.endsWith(' ') && cleanText.length > 0;
+    return `${cleanText}${needsSpace ? ' ' : ''}${marker}`;
+  };
+
+  const mergeDescriptionPreservingBotMarkers = (originalDescription: string, editedCleanDescription: string) => {
+    if (/<!--\s*bot:/i.test(editedCleanDescription)) return editedCleanDescription;
+
+    const markers = originalDescription.match(/<!--\s*bot:[\s\S]*?-->/gi) || [];
+    if (markers.length === 0) return editedCleanDescription;
+
+    const clean = editedCleanDescription.trimEnd();
+    if (!clean) return `${markers.join('\n')}`;
+    return `${clean}\n\n${markers.join('\n')}`;
+  };
+
+  const insertAnswerAfterBotComment = (originalDescription: string, comment: { content: string; timestamp?: string }, answer: string) => {
+    const raw = String(originalDescription || '');
+    const normalizedAnswer = String(answer || '').trim();
+    if (!normalizedAnswer) return raw;
+
+    const botRe = /<!--\s*bot:\s*([\s\S]*?)\s*-->/gi;
+    let match: RegExpExecArray | null;
+
+    const normalizeMarkerContent = (rawContent: string) => {
+      const content = String(rawContent ?? '').trim();
+      const timestampMatch = content.match(/\((\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2})?(?:Z)?)\)/);
+      const timestamp = timestampMatch ? timestampMatch[1] : undefined;
+      const cleanContent = timestamp ? content.replace(/\s*\([^)]+\)\s*$/, '') : content;
+      return { cleanContent: cleanContent.trim(), timestamp };
+    };
+
+    while ((match = botRe.exec(raw)) !== null) {
+      const markerContent = match[1];
+      const start = match.index;
+      const end = start + match[0].length;
+
+      const normalized = normalizeMarkerContent(markerContent);
+      const targetContent = String(comment.content || '').trim();
+      const targetTimestamp = comment.timestamp;
+
+      if (normalized.cleanContent === targetContent && normalized.timestamp === targetTimestamp) {
+        // Keep the answer on the SAME LINE as the marker so we don't change
+        // line counts (task IDs are line-number derived).
+        const lineEnd = raw.indexOf('\n', end);
+        const actualLineEnd = lineEnd === -1 ? raw.length : lineEnd;
+        const tail = raw.slice(end, actualLineEnd);
+
+        const answerRe = /(\s*Answer\s*:\s*)([^\n]*)/i;
+        const replacementTail = answerRe.test(tail)
+          ? tail.replace(answerRe, `$1${normalizedAnswer}`)
+          : `${tail}${tail.trim().length === 0 ? ' ' : ' '}Answer: ${normalizedAnswer}`;
+
+        return `${raw.slice(0, end)}${replacementTail}${raw.slice(actualLineEnd)}`;
+      }
+    }
+
+    // Fallback: append as a normal line (may affect line numbers; avoid if possible)
+    const base = raw.trimEnd();
+    return `${base}${base ? '\n' : ''}Answer: ${normalizedAnswer}`;
+  };
+
+  const findInlineAnswerForBotComment = (originalDescription: string, comment: { content: string; timestamp?: string }) => {
+    const raw = String(originalDescription || '');
+    const botRe = /<!--\s*bot:\s*([\s\S]*?)\s*-->/gi;
+    let match: RegExpExecArray | null;
+
+    const normalizeMarkerContent = (rawContent: string) => {
+      const content = String(rawContent ?? '').trim();
+      const timestampMatch = content.match(/\((\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2})?(?:Z)?)\)/);
+      const timestamp = timestampMatch ? timestampMatch[1] : undefined;
+      const cleanContent = timestamp ? content.replace(/\s*\([^)]+\)\s*$/, '') : content;
+      return { cleanContent: cleanContent.trim(), timestamp };
+    };
+
+    while ((match = botRe.exec(raw)) !== null) {
+      const markerContent = match[1];
+      const start = match.index;
+      const end = start + match[0].length;
+
+      const normalized = normalizeMarkerContent(markerContent);
+      const targetContent = String(comment.content || '').trim();
+      const targetTimestamp = comment.timestamp;
+
+      if (normalized.cleanContent === targetContent && normalized.timestamp === targetTimestamp) {
+        const lineEnd = raw.indexOf('\n', end);
+        const actualLineEnd = lineEnd === -1 ? raw.length : lineEnd;
+        const tail = raw.slice(end, actualLineEnd);
+        const m = tail.match(/Answer\s*:\s*([^\n]*)/i);
+        return m ? String(m[1] || '').trim() : null;
+      }
+    }
+    return null;
+  };
+
+  const openBotAnswerModal = (
+    key: string,
+    marker: string,
+    comment: { content: string; timestamp?: string },
+    existingAnswer: string | null
+  ) => {
+    setShowDescription(true);
+    setActiveBotQuestionKey(key);
+    setActiveBotQuestionMarker(marker);
+    setActiveBotQuestionComment(comment);
+    setBotAnswerDraft(existingAnswer || '');
+    setIsBotAnswerModalOpen(true);
+  };
+
+  const closeBotAnswerModal = () => {
+    setIsBotAnswerModalOpen(false);
+    setActiveBotQuestionKey(null);
+    setActiveBotQuestionMarker(null);
+    setActiveBotQuestionComment(null);
+    setBotAnswerDraft('');
+  };
 
   if (!isVisible) return null;
 
@@ -268,9 +430,13 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
       e.preventDefault(); // Prevent newline (submit)
       
       let currentId = task.id;
-      if (editText.trim() !== task.text) {
-        const newId = await onUpdate?.(task.id, editText);
-        if (newId) currentId = newId;
+      {
+        const originalCleanText = extractInlineBotComment(task.text).cleanText.trim();
+        if (editText.trim() !== originalCleanText) {
+          const mergedText = mergeTaskTextPreservingInlineBotMarker(editText, task.text);
+          const newId = await onUpdate?.(task.id, mergedText);
+          if (newId) currentId = newId;
+        }
       }
       setIsEditing(false);
       onAddNext?.(currentId);
@@ -282,7 +448,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
       }
       {
         setIsEditing(false);
-        setEditText(task.text);
+        setEditText(extractInlineBotComment(task.text).cleanText);
       }
     } else if (e.key === 'Backspace' && editText === '') {
       e.preventDefault();
@@ -293,7 +459,8 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
   const handleDescriptionKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       setIsEditingDescription(false);
-      setEditDescription(task.description || '');
+      // Reset to clean description without bot markers
+      setEditDescription(enhanceDescriptionWithBot(task.description || '').cleanDescription);
     }
   };
 
@@ -319,8 +486,13 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
       return;
     }
 
-    if (editDescription !== (task.description || '')) {
-      onUpdateDescription?.(task.id, editDescription);
+    {
+      const originalDesc = task.description || '';
+      const originalCleanDesc = enhanceDescriptionWithBot(originalDesc).cleanDescription;
+      if (editDescription !== originalCleanDesc) {
+        const mergedDesc = mergeDescriptionPreservingBotMarkers(originalDesc, editDescription);
+        onUpdateDescription?.(task.id, mergedDesc);
+      }
     }
     setIsEditingDescription(false);
     // Also close title edit if we are leaving the task completely
@@ -373,8 +545,12 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
 
     if (editText.trim() === '') {
       onDelete?.(task.id);
-    } else if (editText.trim() !== task.text) {
-      onUpdate?.(task.id, editText);
+    } else {
+      const originalCleanText = extractInlineBotComment(task.text).cleanText.trim();
+      if (editText.trim() !== originalCleanText) {
+        const mergedText = mergeTaskTextPreservingInlineBotMarker(editText, task.text);
+        onUpdate?.(task.id, mergedText);
+      }
     }
     setIsEditing(false);
     // Also close description edit if we are leaving
@@ -508,11 +684,11 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
           >
             {(() => {
               // Check if header has inline Clawdbot comment
-              const { cleanText, comment } = extractInlineClawdbotComment(task.text);
+              const { cleanText, comment } = extractInlineBotComment(task.text);
               return (
                 <>
                   {getDisplayText(cleanText)}
-                  {comment && <ClawdbotInlineBadge comment={comment} />}
+                  {comment && <BotInlineBadge comment={comment} />}
                 </>
               );
             })()}
@@ -706,14 +882,14 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
                   }}
                 >
                   {(() => {
-                    const { cleanText } = extractInlineClawdbotComment(task.text);
+                    const { cleanText } = extractInlineBotComment(task.text);
                     return getDisplayText(cleanText);
                   })()}
                 </ReactMarkdown>
               </span>
               {(() => {
-                const { comment } = extractInlineClawdbotComment(task.text);
-                return comment ? <ClawdbotInlineBadge comment={comment} /> : null;
+                const { comment } = extractInlineBotComment(task.text);
+                return comment ? <BotInlineBadge comment={comment} /> : null;
               })()}
             </div>
           )}
@@ -822,6 +998,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
                 onMouseDown={(e) => {
                   const el = e.target instanceof Element ? e.target : null;
                   if (el?.closest('a')) return;
+                  if (el?.closest('.bot-qa')) return;
                   e.preventDefault();
                   setModes({});
                   setIsEditingDescription(true);
@@ -829,17 +1006,58 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
                 className="text-sm text-base-content/70 cursor-text border-l-2 border-base-300 pl-3 py-1 prose prose-sm max-w-none"
                     >
                 {(() => {
-                  // Check if description has Clawdbot comments
-                  const enhanced = enhanceDescriptionWithClawdbot(task.description || '');
+                  // Check if description has bot comments
+                  const enhanced = enhanceDescriptionWithBot(task.description || '');
                   
                   return (
                     <>
-                      {/* Render Clawdbot comments with special styling */}
-                      {enhanced.comments.map((comment, idx) => (
-                        <ClawdbotCommentView key={idx} comment={comment} />
-                      ))}
+                      {/* Render bot comments with special styling */}
+                      {enhanced.comments.map((comment) => {
+                        const key = getBotCommentKey(comment);
+                        const question = isBotQuestion(comment);
+                        const existingAnswer = question
+                          ? findInlineAnswerForBotComment(task.description || '', comment)
+                          : null;
+
+                        return (
+                          <div key={key} className="mb-2">
+                            <BotCommentView comment={comment} />
+
+                            {question && onUpdateDescription && (
+                              <div
+                                className="ml-7 -mt-1 bot-qa"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="flex items-center gap-2">
+                                  {existingAnswer ? (
+                                    <span className="text-xs text-base-content/60 truncate max-w-[28rem]">
+                                      <span className="badge badge-outline badge-success mr-2">Answered</span>
+                                      <span className="opacity-80">{existingAnswer}</span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs text-base-content/50">Needs an answer</span>
+                                  )}
+
+                                  <button
+                                    className={existingAnswer ? 'btn btn-xs btn-outline' : 'btn btn-xs btn-outline btn-primary'}
+                                    disabled={isSavingBotAnswer}
+                                    onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openBotAnswerModal(key, formatBotMarker(comment), comment, existingAnswer);
+                                    }}
+                                  >
+                                    {existingAnswer ? 'Edit' : 'Answer'}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                       
-                      {/* Render clean description without Clawdbot HTML comments */}
+                      {/* Render clean description without bot HTML comments */}
                       {enhanced.cleanDescription && (
                         <ReactMarkdown 
                           remarkPlugins={[remarkGfm, remarkBreaks]}
@@ -868,6 +1086,127 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, descri
           </div>
         )}
       </div>
+
+      {isBotAnswerModalOpen && activeBotQuestionKey && activeBotQuestionMarker && activeBotQuestionComment && (
+        <div
+          className="modal modal-open"
+          onMouseDown={(e) => {
+            // Click outside closes the modal (and must not trigger task interactions).
+            e.stopPropagation();
+            if (e.target === e.currentTarget) closeBotAnswerModal();
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="modal-box max-w-2xl" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-lg">Answer bot question</h3>
+
+            <div className="mt-3 text-sm text-base-content/70">
+              <div className="mb-2">
+                <span className="badge badge-outline">Question</span>
+              </div>
+              <div className="bg-base-200/60 rounded p-3 text-sm whitespace-pre-wrap">
+                {activeBotQuestionComment.content}
+                {activeBotQuestionComment.timestamp ? ` (${activeBotQuestionComment.timestamp})` : ''}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <div className="mb-2 text-sm text-base-content/70">
+                <span className="badge badge-outline">Your answer</span>
+              </div>
+              <textarea
+                autoFocus
+                value={botAnswerDraft}
+                onChange={(e) => setBotAnswerDraft(e.target.value)}
+                rows={4}
+                placeholder="Type your answer…"
+                className="textarea textarea-bordered w-full text-sm"
+                disabled={isSavingBotAnswer}
+                onKeyDown={async (e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    const trimmed = botAnswerDraft.trim();
+                    if (!trimmed) return;
+                    try {
+                      setIsSavingBotAnswer(true);
+                      if (onAnswerBotQuestion) {
+                        await onAnswerBotQuestion(task.id, activeBotQuestionMarker, trimmed, { archive: false });
+                      } else if (onUpdateDescription) {
+                        const originalDesc = task.description || '';
+                        const nextDesc = insertAnswerAfterBotComment(originalDesc, activeBotQuestionComment, trimmed);
+                        await Promise.resolve(onUpdateDescription(task.id, nextDesc));
+                      }
+                      closeBotAnswerModal();
+                    } finally {
+                      setIsSavingBotAnswer(false);
+                    }
+                  }
+                }}
+              />
+            </div>
+
+            <div className="modal-action">
+              <button
+                className="btn btn-ghost"
+                disabled={isSavingBotAnswer}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeBotAnswerModal();
+                }}
+              >
+                Cancel
+              </button>
+
+              <button
+                className="btn btn-outline"
+                disabled={isSavingBotAnswer || !botAnswerDraft.trim()}
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const trimmed = botAnswerDraft.trim();
+                  if (!trimmed) return;
+                  try {
+                    setIsSavingBotAnswer(true);
+                    if (onAnswerBotQuestion) {
+                      await onAnswerBotQuestion(task.id, activeBotQuestionMarker, trimmed, { archive: false });
+                    } else if (onUpdateDescription) {
+                      const originalDesc = task.description || '';
+                      // Best-effort: write inline answer only.
+                      const nextDesc = insertAnswerAfterBotComment(originalDesc, activeBotQuestionComment, trimmed);
+                      await Promise.resolve(onUpdateDescription(task.id, nextDesc));
+                    }
+                    closeBotAnswerModal();
+                  } finally {
+                    setIsSavingBotAnswer(false);
+                  }
+                }}
+              >
+                Save
+              </button>
+
+              <button
+                className="btn btn-primary"
+                disabled={isSavingBotAnswer || !botAnswerDraft.trim() || !onAnswerBotQuestion}
+                title={!onAnswerBotQuestion ? 'Save & archive requires the bot Q/A store action' : undefined}
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const trimmed = botAnswerDraft.trim();
+                  if (!trimmed) return;
+                  if (!onAnswerBotQuestion) return;
+                  try {
+                    setIsSavingBotAnswer(true);
+                    await onAnswerBotQuestion(task.id, activeBotQuestionMarker, trimmed, { archive: true });
+                    closeBotAnswerModal();
+                  } finally {
+                    setIsSavingBotAnswer(false);
+                  }
+                }}
+              >
+                Save & archive
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Render Plugin UI */}
       {pluginRegistry.getPlugins().map(plugin => {
