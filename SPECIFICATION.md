@@ -64,15 +64,87 @@ Detailed feature specifications are maintained in the `specs/` directory.
 
 - **[Task Management](specs/features/task-management.md)**: Core task creation, editing, and organization.
 - **[Focus Mode (Zen Mode)](specs/features/focus-mode.md)**: Distraction-free editing experience.
-- **[Brain Dump](specs/features/brain-dump.md)**: Context-aware capture (voice or typed) → tasks + next actions.
+- **[Bot Integration](specs/integrations/clawdbot.md)**: External bot processing via Clawdbot skill or similar (no in-app AI).
 - **[TaskItem UI](specs/ui/task-item.spec.md)**: Detailed UI states and interactions for the task component.
 
-### 4.x Optional External Connectors
+### 4.x Bot Integration (AI Agent Automation)
+
+**Status**: First-class feature (see `specs/integrations/clawdbot.md` and `skills/todolist-md-clawdbot/`)
+
+This app is designed to be **AI agent-friendly**. Because the data format is plain Markdown with GFM task lists, external agents (including Clawdbot) can:
+
+1. **Read** todo files periodically from File System or Google Drive
+2. **Analyze** tasks to identify:
+   - Overdue items
+   - Blocked tasks (missing info)
+   - Quick wins (small, high-impact tasks)
+   - Top 3 recommended next actions
+3. **Execute** well-defined tasks autonomously (with user confirmation)
+
+#### Requirements for Bot Compatibility
+
+**MUST:**
+- Tasks use GFM checkbox syntax: `- [ ]` (open) and `- [x]` (completed)
+- Tags follow the `#tagname` convention
+- Due dates use `due:YYYY-MM-DD` format
+- Descriptions are blockquotes (`>`) immediately following a task
+- Storage mode is **File System** or **Google Drive** (not LocalStorage-only, which is inaccessible outside the browser)
+
+**SHOULD:**
+- Keep task titles concise and action-oriented (e.g., "Deploy v2.0 to production" not "Maybe we should think about deployment")
+- Use tags consistently for categorization (`#frontend`, `#backend`, `#urgent`)
+- Add context in descriptions for complex tasks
+
+**MAY:**
+- Use additional metadata in descriptions (e.g., `owner:@username`, `depends-on:#123`)
+- Link to external resources (GitHub issues, PRs, docs)
+
+#### Safety Model
+
+- **Read-only by default**: Clawdbot analyzes and suggests without modifying files
+- **Write-back requires confirmation**: Any operation that modifies tasks (mark complete, add subtasks, reorder) must be explicitly confirmed by the user
+- **Audit trail**: All Clawdbot actions should be logged (in the skill's context)
+
+#### Example Agent Workflows
+
+**Daily digest:**
+```
+User: @clawdbot check my todos
+Clawdbot: You have 2 overdue tasks and 12 open. Top priority:
+  1. [Deploy v2.0 to production] - due today, #backend
+  2. [Update API docs] - due tomorrow, #docs
+  3. [Fix auth bug] - no due date, #urgent
+```
+
+**Task breakdown:**
+```
+User: @clawdbot break down "Build new landing page"
+Clawdbot: I'll add these subtasks (confirm?):
+  - [ ] Design mockup in Figma
+  - [ ] HTML structure
+  - [ ] CSS styling
+  - [ ] Make responsive
+  - [ ] Deploy to staging
+```
+
+**Autonomous execution:**
+```
+Task: - [ ] Create PR for bugfix #github
+      > Fix null pointer in auth.ts line 42
+
+Clawdbot: I found the bug. I can:
+  1. Create branch 'fix/auth-null-pointer'
+  2. Apply the fix
+  3. Open PR with description
+  Confirm?
+```
+
+### 4.y Optional External Connectors
 
 This repo may include optional, external utilities (outside the SPA) that operate on Markdown files.
 
 - **macOS Reminders sync**: A CLI (`npm run reminders:sync`) that reads Markdown files from disk and mirrors tasks into macOS Reminders lists.
-    - This is intentionally **out-of-browser** and does not change the app’s serverless/SPAs-only constraint.
+    - This is intentionally **out-of-browser** and does not change the app's serverless/SPA-only constraint.
 
 ### 4.0 Global Details Toggle
 - The top toolbar provides a single **Expand details / Collapse details** control.
@@ -160,29 +232,11 @@ To ensure a seamless experience across devices while respecting device-specific 
         - **Constraint**: Must pause/skip refresh if the user is currently editing a task (input focused) to prevent data loss or UI disruption.
     - `SoundEffectsPlugin`: Plays sounds on task completion.
     - `GamifyPlugin`: (Experimental) XP and leveling system.
-    - `AIAssistantPlugin`: (Submodule) AI features including Voice Mode and Smart Tags. Source: `https://github.com/NitsujY/todolist-ai-assistant.git`.
 
-#### 4.2.1 AI Assistant Providers (BYOK)
+#### 4.2 (Removed) AI Features
 
-The AI Assistant supports:
+**All AI/LLM features removed** - moved to external Clawdbot processing. See `docs/CLAWDBOT_AI_MIGRATION.md`.
 
-- **OpenAI** (direct from browser)
-- **Azure OpenAI** (direct from browser; requires endpoint + deployment + api-version)
-- **Private Endpoint (Managed)** (recommended when API keys must remain secret)
-
-**Config storage**:
-
-- UI settings are stored in `localStorage` under `ai-plugin-config`.
-- The app may also read Vite env vars (public at build-time) prefixed with `VITE_`.
-
-#### 4.2.2 Brain Dump Typed Input (UX Constraint)
-
-- In Brain Dump, when the user opens typed input (“Use typing”), the textarea should expand to fill available space (up to the overlay’s max height) and remain readable.
-- Long input must scroll inside the textarea; avoid making the entire Brain Dump overlay/page scroll just to edit text.
-
-## 5. Technical Constraints & Rules
-1.  **No Database**: Do not introduce a backend database. All state must be reconstructible from Markdown files.
-2.  **Vite Config**: The `__APP_VERSION__` global is defined in `vite.config.ts` from `package.json`.
 3.  **Tailwind**: Use Tailwind utility classes for styling. Avoid custom CSS unless necessary for complex animations or specific font overrides.
 4.  **State Management**: Use `zustand` for global state.
 5.  **Error Handling**:

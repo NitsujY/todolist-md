@@ -59,6 +59,33 @@ export class GoogleDriveAdapter implements StorageProvider {
     }
   }
 
+  private shouldUseRedirectFlow(): boolean {
+    // Use redirect flow for:
+    // 1. iOS/Android standalone PWAs (popups are blocked)
+    // 2. Any mobile device in standalone mode
+    // 3. Mobile browsers where popups are unreliable
+    if (this.isIosStandalone()) return true;
+    
+    // Check for mobile user agent - popups are unreliable on mobile
+    const ua = navigator.userAgent.toLowerCase();
+    const isMobile = /iphone|ipad|ipod|android|mobile|webos|blackberry|opera mini|iemobile/i.test(ua);
+    
+    // If mobile AND display-mode is standalone or fullscreen, definitely use redirect
+    if (isMobile) {
+      try {
+        const isStandalone = window.matchMedia?.('(display-mode: standalone)')?.matches;
+        const isFullscreen = window.matchMedia?.('(display-mode: fullscreen)')?.matches;
+        if (isStandalone || isFullscreen) return true;
+      } catch {
+        // Ignore matchMedia errors
+      }
+      // On mobile, always prefer redirect for better UX
+      return true;
+    }
+    
+    return false;
+  }
+
   private isConsentOrInteractionRequired(err: any): boolean {
     const type = String(err?.type ?? err?.error ?? err?.code ?? '').toLowerCase();
     const message = String(err?.message ?? '').toLowerCase();
@@ -382,8 +409,8 @@ export class GoogleDriveAdapter implements StorageProvider {
         const { interactive, prompt } = params;
         const config: any = { prompt };
 
-        // iOS A2HS PWAs frequently block popups. Use redirect for interactive auth.
-        const useRedirect = interactive && this.isIosStandalone();
+        // Mobile/PWA environments frequently block popups. Use redirect for interactive auth.
+        const useRedirect = interactive && this.shouldUseRedirectFlow();
         const client = useRedirect ? this.createTokenClient('redirect') : this.tokenClient;
 
         const startedAt = Date.now();

@@ -61,6 +61,7 @@ interface TodoState {
   addTask: (text: string) => Promise<string | undefined>;
   updateTaskText: (taskId: string, newText: string) => Promise<string | undefined>;
   updateTaskDescription: (taskId: string, description: string) => Promise<void>;
+  answerBotQuestion: (taskId: string, comment: string, answer: string, opts?: { archive?: boolean }) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
   insertTaskAfter: (taskId: string, text: string) => Promise<void>;
   reorderTasks: (activeId: string, overId: string) => Promise<void>;
@@ -211,6 +212,55 @@ export const useTodoStore = create<TodoState>()(
           }
           throw e;
         }
+      };
+
+      const upsertInlineAnswerOnLine = (line: string, comment: string, answer: string) => {
+        const trimmed = line;
+        const idx = trimmed.indexOf(comment);
+        if (idx === -1) return line;
+
+        const before = trimmed.slice(0, idx + comment.length);
+        const after = trimmed.slice(idx + comment.length);
+        const updatedAfter = after.replace(/\s*Answer:\s*[^\n]*\s*$/i, '').trimEnd();
+        const spacer = updatedAfter.length > 0 ? ` ${updatedAfter}` : '';
+        return `${before}${spacer} Answer: ${answer}`;
+      };
+
+      const extractBotCommentText = (comment: string) => {
+        return String(comment)
+          .replace(/^<!--\s*bot:\s*/i, '')
+          .replace(/\s*-->\s*$/i, '')
+          .trim();
+      };
+
+      const appendToBotLog = (markdown: string, entry: string) => {
+        const normalized = String(markdown ?? '').replace(/\r\n/g, '\n');
+        const headerRe = /^##\s+Bot Log\s*$/gm;
+        const match = headerRe.exec(normalized);
+        if (!match) {
+          const suffix = normalized.endsWith('\n') ? '' : '\n';
+          return `${normalized}${suffix}\n## Bot Log\n\n${entry}\n`;
+        }
+
+        // Insert at the end of the Bot Log section (before the next #/## heading).
+        const headerLineStart = match.index;
+        const headerLineEnd = (() => {
+          const nl = normalized.indexOf('\n', headerLineStart);
+          return nl === -1 ? normalized.length : nl + 1;
+        })();
+
+        const nextHeadingRe = /^#{1,2}\s+.+$/gm;
+        nextHeadingRe.lastIndex = headerLineEnd;
+        let nextHeadingMatch: RegExpExecArray | null = null;
+        while ((nextHeadingMatch = nextHeadingRe.exec(normalized)) !== null) {
+          // Skip the Bot Log header itself.
+          if (nextHeadingMatch.index === headerLineStart) continue;
+          break;
+        }
+        const insertAt = nextHeadingMatch ? nextHeadingMatch.index : normalized.length;
+        const prefix = normalized.slice(0, insertAt).replace(/\s*$/, '');
+        const suffix = normalized.slice(insertAt);
+        return `${prefix}\n${entry}\n\n${suffix.replace(/^\n+/, '')}`;
       };
 
       return ({
@@ -671,6 +721,48 @@ export const useTodoStore = create<TodoState>()(
     await persistCurrentFile(newMarkdown, newTasks);
   },
 
+  answerBotQuestion: async (taskId, comment, answer, opts) => {
+    const commentTrim = String(comment ?? '').trim();
+    const answerTrim = String(answer ?? '').trim();
+    if (!commentTrim) throw new Error('Missing bot comment.');
+    if (!answerTrim) throw new Error('Missing answer.');
+
+    const { markdown, tasks } = get();
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) throw new Error('Task not found.');
+
+    const desc = String(task.description ?? '').replace(/\r\n/g, '\n');
+    const lines = desc.split('\n');
+    const targetIndex = lines.findIndex(l => l.includes(commentTrim) || l.trim() === commentTrim);
+    if (targetIndex === -1) {
+      throw new Error('Could not find that bot question in the task description. Try reloading the file.');
+    }
+
+    // 1) Write/update inline Answer on the same line.
+    lines[targetIndex] = upsertInlineAnswerOnLine(lines[targetIndex], commentTrim, answerTrim);
+
+    // 2) Optionally archive in-place (keep line count stable) and append to Bot Log.
+    let nextDescription = lines.join('\n');
+    let nextMarkdown = updateTaskDescriptionInMarkdown(markdown, taskId, nextDescription);
+
+    if (opts?.archive) {
+      const timestamp = new Date().toISOString();
+      const questionText = extractBotCommentText(commentTrim);
+      const entry = `- ${timestamp} ${task.text} | Q: ${questionText} | A: ${answerTrim}`;
+
+      // Replace the question line with a short archived marker (same line count).
+      const archivedLines = nextDescription.split('\n');
+      archivedLines[targetIndex] = `<!-- bot: Archived: moved to Bot Log (answered) -->`;
+      nextDescription = archivedLines.join('\n');
+      nextMarkdown = updateTaskDescriptionInMarkdown(nextMarkdown, taskId, nextDescription);
+      nextMarkdown = appendToBotLog(nextMarkdown, entry);
+    }
+
+    const newTasks = parseTasks(nextMarkdown);
+    set({ markdown: nextMarkdown, tasks: newTasks });
+    await persistCurrentFile(nextMarkdown, newTasks);
+  },
+
   renameFile: async (oldName, newName) => {
     const { storage, fileList, currentFile } = get();
     
@@ -715,9 +807,16 @@ export const useTodoStore = create<TodoState>()(
     }
 
     set({ fileList: sortFiles(files) });
-    get().selectFile(filename);
+    await get().selectFile(filename);
   },
   restoreSession: async () => {
+    set({
+      isLoading: true,
+      requiresPermission: false,
+      restorableName: '',
+      googleAuthRequired: false,
+    });
+
     // Warm Google Drive scripts/token client in the background.
     // This improves the chance that user-initiated auth popups are allowed in iOS A2HS PWAs
     // because requestAccessToken() can run immediately on tap without awaiting init.
@@ -731,87 +830,93 @@ export const useTodoStore = create<TodoState>()(
       }
     }
 
-    // Try to restore Google Drive session first
-    const activeStorage = localStorage.getItem('active-storage');
-    if (activeStorage === 'google') {
-      const config = adapters.google.getConfig();
-      if (config) {
-        set({ 
-          storage: adapters.google, 
-          configService: new ConfigService(adapters.google),
-          isFolderMode: true,
-          googleAuthRequired: false,
-        });
-        get().syncConfig();
-        try {
-          await adapters.google.init();
-          const files = await adapters.google.list('');
-          set({ fileList: sortFiles(files) });
-          
-          const lastFile = localStorage.getItem('lastOpenedFile');
-          if (lastFile && files.includes(lastFile)) {
-            get().selectFile(lastFile);
-          } else if (files.length > 0) {
-            get().selectFile(files[0]);
-          }
-          return; // Successfully restored Google session
-        } catch (e) {
-          console.error('Failed to restore Google Drive session', e);
-          if (isGoogleAuthRequiredError(e)) {
-            set({ fileList: [], googleAuthRequired: true, isFolderMode: true });
-            return;
-          }
-          // Fall through to FS restore if Google fails for non-auth reasons
-        }
-      }
-    }
-
-    const fsAdapter = adapters.fs;
-    const mode = await fsAdapter.restore();
-    
-    if (mode) {
-      const status = await fsAdapter.checkPermissionStatus();
-      
-      if (status === 'granted') {
-        set({ 
-          storage: fsAdapter, 
-          configService: new ConfigService(fsAdapter),
-          isFolderMode: mode === 'folder' 
-        });
-        get().syncConfig();
-        if (mode === 'folder') {
+    try {
+      // Try to restore Google Drive session first
+      const activeStorage = localStorage.getItem('active-storage');
+      if (activeStorage === 'google') {
+        const config = adapters.google.getConfig();
+        if (config) {
+          set({
+            storage: adapters.google,
+            configService: new ConfigService(adapters.google),
+            isFolderMode: true,
+            googleAuthRequired: false,
+          });
+          get().syncConfig();
           try {
-            const files = await fsAdapter.list('');
+            await adapters.google.init();
+            const files = await adapters.google.list('');
             set({ fileList: sortFiles(files) });
-            
+
             const lastFile = localStorage.getItem('lastOpenedFile');
             if (lastFile && files.includes(lastFile)) {
-              get().selectFile(lastFile);
+              await get().selectFile(lastFile);
             } else if (files.length > 0) {
-              get().selectFile(files[0]);
+              await get().selectFile(files[0]);
             } else {
-              set({ markdown: '', tasks: [] });
+              set({ markdown: '', tasks: [], currentFile: '' });
             }
+            return; // Successfully restored Google session
           } catch (e) {
-            console.error('Failed to restore folder session', e);
+            console.error('Failed to restore Google Drive session', e);
+            if (isGoogleAuthRequiredError(e)) {
+              set({ fileList: [], googleAuthRequired: true, isFolderMode: true });
+              return;
+            }
+            // Fall through to FS restore if Google fails for non-auth reasons
+          }
+        }
+      }
+
+      const fsAdapter = adapters.fs;
+      const mode = await fsAdapter.restore();
+
+      if (mode) {
+        const status = await fsAdapter.checkPermissionStatus();
+
+        if (status === 'granted') {
+          set({
+            storage: fsAdapter,
+            configService: new ConfigService(fsAdapter),
+            isFolderMode: mode === 'folder'
+          });
+          get().syncConfig();
+          if (mode === 'folder') {
+            try {
+              const files = await fsAdapter.list('');
+              set({ fileList: sortFiles(files) });
+
+              const lastFile = localStorage.getItem('lastOpenedFile');
+              if (lastFile && files.includes(lastFile)) {
+                await get().selectFile(lastFile);
+              } else if (files.length > 0) {
+                await get().selectFile(files[0]);
+              } else {
+                set({ markdown: '', tasks: [], currentFile: '' });
+              }
+            } catch (e) {
+              console.error('Failed to restore folder session', e);
+            }
+          } else {
+            await get().loadTodos();
           }
         } else {
-          get().loadTodos();
+          // Need permission
+          set({
+            requiresPermission: true,
+            restorableName: fsAdapter.getHandleName(),
+            storage: fsAdapter, // Set storage so we can use it later
+            configService: new ConfigService(fsAdapter),
+            isFolderMode: mode === 'folder'
+          });
         }
       } else {
-        // Need permission
-        set({ 
-          requiresPermission: true, 
-          restorableName: fsAdapter.getHandleName(),
-          storage: fsAdapter, // Set storage so we can use it later
-          configService: new ConfigService(fsAdapter),
-          isFolderMode: mode === 'folder'
-        });
+        localStorage.setItem('active-storage', 'local');
+        get().syncConfig();
+        await get().loadTodos();
       }
-    } else {
-      localStorage.setItem('active-storage', 'local');
-      get().syncConfig();
-      get().loadTodos();
+    } finally {
+      set({ isLoading: false });
     }
   },
 
@@ -850,7 +955,7 @@ export const useTodoStore = create<TodoState>()(
         const files = await adapter.list('');
         set({ fileList: sortFiles(files) });
         if (files.length > 0) {
-          get().selectFile(files[0]);
+          await get().selectFile(files[0]);
         }
       }
       return success;
@@ -861,7 +966,7 @@ export const useTodoStore = create<TodoState>()(
         const files = await adapter.list('');
         if (files.length > 0) {
           set({ currentFile: files[0] });
-          get().loadTodos();
+          await get().loadTodos();
         }
       }
       return success;
