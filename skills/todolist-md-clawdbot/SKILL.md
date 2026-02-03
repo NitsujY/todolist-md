@@ -110,7 +110,46 @@ Append entries like:
 <!-- bot: digest --> Top 3 next actions: 1) … 2) … 3) …
 ```
 
-## References
+## Worked example (end-to-end)
 
-- Full worked example: [../../texture/bot-full-example.md](../../texture/bot-full-example.md)
-- Integration notes/spec: [../../specs/integrations/clawdbot.md](../../specs/integrations/clawdbot.md)
+Start state:
+
+```md
+## Work
+
+- [ ] Deploy v2.0 to production #backend due:2026-02-05
+  > Runbook: docs/deploy.md
+
+## Tasks (bot-suggested)
+<!-- bot: suggested -->
+- [ ] (suggested) Add a “Bot Log” section
+```
+
+Bot asks a clarifying question (in-file):
+
+```md
+- [ ] Deploy v2.0 to production #backend due:2026-02-05
+  > Runbook: docs/deploy.md
+  > <!-- bot: question --> Question: Which CI job is failing? Options: unit / integration / e2e
+```
+
+User answers by editing the same line (line-stable):
+
+```md
+  > <!-- bot: question --> Question: Which CI job is failing? Options: unit / integration / e2e Answer: integration
+```
+
+After the bot consumes the answer, archive it (preferred):
+
+```md
+  > <!-- bot: question --> (archived to Bot Log)
+
+## Bot Log
+- 2026-02-04 Task: Deploy v2.0 to production | Q: Which CI job is failing? | A: integration
+```
+
+## Integration notes (minimal)
+
+- Always mark bot-written content with `<!-- bot: ... -->`.
+- Never delete/add lines inside an existing task item or description block.
+- Never mark tasks complete unless the user explicitly confirms.
