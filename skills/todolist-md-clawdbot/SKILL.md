@@ -16,12 +16,16 @@ Operate on **todolist-md**: a Markdown-first todo viewer/editor. The app does no
 - `<!-- bot: ... -->`
 - Do not introduce other syntaxes (no `Question[id=...]`, no custom metadata blocks).
 
-3) Keep write-back edits line-stable.
+3) Preserve task identity.
 - todolist-md derives task IDs from Markdown line positions.
+- Some storage backends also have a stable identity key (e.g. Drive `fileId`, local `path`, S3 `bucket+key`).
+- Do not “replace” a file in a way that changes its identity key unless the user explicitly accepts it.
+
+4) Keep write-back edits line-stable.
 - Avoid adding/removing lines inside an existing task item or its description blockquote.
 - Prefer single-line, in-place edits (edit text on an existing line).
 
-4) Never complete tasks without explicit user confirmation.
+5) Never complete tasks without explicit user confirmation.
 
 ## Markdown conventions (what todolist-md expects)
 
@@ -29,6 +33,20 @@ Operate on **todolist-md**: a Markdown-first todo viewer/editor. The app does no
 - Optional tags: `#tag`
 - Optional due date: `due:YYYY-MM-DD`
 - Optional description: a blockquote directly under the task
+
+## Storage Q/A (first run)
+Ask once, then persist the answers (in memory/config) for future runs.
+
+- Q: `storageKind`?
+  - A: `google-drive` | `local-folder` | `s3` | `other`
+- Q: What is the stable identity key for files?
+  - Drive: `fileId`
+  - Local: `path`
+  - S3: `bucket+key`
+- Q: Where is the root?
+  - Drive: `rootFolderId`
+  - Local: root directory path
+  - S3: `bucket` + optional prefix
 
 Example:
 ```md
