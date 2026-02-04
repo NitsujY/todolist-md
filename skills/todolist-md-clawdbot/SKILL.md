@@ -55,10 +55,28 @@ Ask once, then persist the answers (in memory/config) for future runs.
   - Local: root directory path
   - S3: `bucket` + optional prefix
 
-## Review cadence + stamping
-- Periodically scan the root for recently modified `.md` files and generate a digest.
+## Review cadence + stamping (save credits)
+**Do not call an LLM unless a file changed.** Use code-first change detection.
+
+### Step 0: Detect changes (code-first)
+- For each `.md` under root, compare `modifiedTime`/`size` (or `etag` when available) against a local state file.
+- If unchanged since last scan: **skip** (no download, no LLM).
+
+### Step 1: Review only changed files
+- Only for changed files:
+  - Download the file
+  - Extract open tasks (`- [ ]`) and relevant context
+  - (Optional) call the LLM on the extracted subset, not the full document
+
+### Step 2: Write-back only if content changed
+- Before writing back, compute a hash; if no changes, do not write.
+
+### Step 3: Stamp last review (Option B)
 - For each reviewed file, update (not append) the top-of-file header line:
   - `<!-- bot: last_review --> <ISO_UTC> root=<rootFolderId> model=<model>`
+
+### Reference script
+- See: `scripts/todolist_review_drive.py` (lists Drive folder, detects changed files, maintains state)
 
 Example:
 ```md
