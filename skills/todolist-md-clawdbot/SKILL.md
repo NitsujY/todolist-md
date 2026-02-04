@@ -25,7 +25,14 @@ Operate on **todolist-md**: a Markdown-first todo viewer/editor. The app does no
 - Avoid adding/removing lines inside an existing task item or its description blockquote.
 - Prefer single-line, in-place edits (edit text on an existing line).
 
-5) Never complete tasks without explicit user confirmation.
+5) Last review stamp (Option B: top-of-file header line)
+- Goal: a single line near the top recording last bot review time.
+- Rule: **never insert a new line** once the header exists. Only update the existing header line.
+- If the header does not exist, you may insert it at the very top **only if the user explicitly opted into Option B**.
+- Canonical format:
+  - `<!-- bot: last_review --> 2026-02-04T15:39Z root=<rootFolderId> model=<model>`
+
+6) Never complete tasks without explicit user confirmation.
 
 ## Markdown conventions (what todolist-md expects)
 
@@ -47,6 +54,11 @@ Ask once, then persist the answers (in memory/config) for future runs.
   - Drive: `rootFolderId`
   - Local: root directory path
   - S3: `bucket` + optional prefix
+
+## Review cadence + stamping
+- Periodically scan the root for recently modified `.md` files and generate a digest.
+- For each reviewed file, update (not append) the top-of-file header line:
+  - `<!-- bot: last_review --> <ISO_UTC> root=<rootFolderId> model=<model>`
 
 Example:
 ```md
