@@ -75,8 +75,15 @@ Ask once, then persist the answers (in memory/config) for future runs.
 - For each reviewed file, update (not append) the top-of-file header line:
   - `<!-- bot: last_review --> <ISO_UTC> root=<rootFolderId> model=<model>`
 
-### Reference script
-- See: `scripts/todolist_review_drive.py` (lists Drive folder, detects changed files, maintains state)
+### Reference script (Google Drive + gog)
+If you use **Google Drive** as storage, gog CLI flags matter. In gog v0.9.0+:
+- list folder: `gog drive ls --parent <folderId> --json`
+- download: `gog drive download <fileId> --out <path>`
+- run gog as `ubuntu` and download to `/tmp` (because `/root` is typically `700`)
+
+Included helper script:
+- `skills/todolist-md-clawdbot/scripts/todolist_review_drive.py`
+  - lists Drive folder, detects changed files, maintains state
 
 Example:
 ```md
