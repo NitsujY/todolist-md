@@ -81,6 +81,11 @@ This app is designed to be **AI agent-friendly**. Because the data format is pla
    - Top 3 recommended next actions
 3. **Execute** well-defined tasks autonomously (with user confirmation)
 
+UI handling for bot questions:
+- Tasks with bot questions show a bot indicator next to the task title.
+- Bot question blocks are clickable to open an inline answer box without entering description edit mode.
+- Users can remove a bot question from the description with a delete control.
+
 #### Requirements for Bot Compatibility
 
 **MUST:**

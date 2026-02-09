@@ -129,6 +129,14 @@ function FileChangeController() {
 
         // Detect change
         if (currentMtime > lastKnownMtimeRef.current) {
+          const cached = fileCache[targetFile];
+          const recentLocalWrite = cached?.fetchedAt && Date.now() - cached.fetchedAt < 4000;
+
+          if (recentLocalWrite) {
+            lastKnownMtimeRef.current = currentMtime;
+            return;
+          }
+
           console.log('[FileChangeDetection] External change detected', {
             file: targetFile,
             old: new Date(lastKnownMtimeRef.current),

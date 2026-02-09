@@ -33,6 +33,7 @@ export default defineConfig({
   base: '/',
   server: {
     host: true,
+    port: 5173,
   },
   build: {
     // Use esbuild for CSS minification to avoid LightningCSS warnings

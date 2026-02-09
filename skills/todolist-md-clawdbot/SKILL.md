@@ -16,12 +16,23 @@ Operate on **todolist-md**: a Markdown-first todo viewer/editor. The app does no
 - `<!-- bot: ... -->`
 - Do not introduce other syntaxes (no `Question[id=...]`, no custom metadata blocks).
 
-3) Keep write-back edits line-stable.
+3) Preserve task identity.
 - todolist-md derives task IDs from Markdown line positions.
+- Some storage backends also have a stable identity key (e.g. Drive `fileId`, local `path`, S3 `bucket+key`).
+- Do not “replace” a file in a way that changes its identity key unless the user explicitly accepts it.
+
+4) Keep write-back edits line-stable.
 - Avoid adding/removing lines inside an existing task item or its description blockquote.
 - Prefer single-line, in-place edits (edit text on an existing line).
 
-4) Never complete tasks without explicit user confirmation.
+5) Last review stamp (Option B: top-of-file header line)
+- Goal: a single line near the top recording last bot review time.
+- Rule: **never insert a new line** once the header exists. Only update the existing header line.
+- If the header does not exist, you may insert it at the very top **only if the user explicitly opted into Option B**.
+- Canonical format:
+  - `<!-- bot: last_review --> 2026-02-04T15:39Z root=<rootFolderId> model=<model>`
+
+6) Never complete tasks without explicit user confirmation.
 
 ## Markdown conventions (what todolist-md expects)
 
@@ -29,6 +40,50 @@ Operate on **todolist-md**: a Markdown-first todo viewer/editor. The app does no
 - Optional tags: `#tag`
 - Optional due date: `due:YYYY-MM-DD`
 - Optional description: a blockquote directly under the task
+
+## Storage Q/A (first run)
+Ask once, then persist the answers (in memory/config) for future runs.
+
+- Q: `storageKind`?
+  - A: `google-drive` | `local-folder` | `s3` | `other`
+- Q: What is the stable identity key for files?
+  - Drive: `fileId`
+  - Local: `path`
+  - S3: `bucket+key`
+- Q: Where is the root?
+  - Drive: `rootFolderId`
+  - Local: root directory path
+  - S3: `bucket` + optional prefix
+
+## Review cadence + stamping (save credits)
+**Do not call an LLM unless a file changed.** Use code-first change detection.
+
+### Step 0: Detect changes (code-first)
+- For each `.md` under root, compare `modifiedTime`/`size` (or `etag` when available) against a local state file.
+- If unchanged since last scan: **skip** (no download, no LLM).
+
+### Step 1: Review only changed files
+- Only for changed files:
+  - Download the file
+  - Extract open tasks (`- [ ]`) and relevant context
+  - (Optional) call the LLM on the extracted subset, not the full document
+
+### Step 2: Write-back only if content changed
+- Before writing back, compute a hash; if no changes, do not write.
+
+### Step 3: Stamp last review (Option B)
+- For each reviewed file, update (not append) the top-of-file header line:
+  - `<!-- bot: last_review --> <ISO_UTC> root=<rootFolderId> model=<model>`
+
+### Reference script (Google Drive + gog)
+If you use **Google Drive** as storage, gog CLI flags matter. In gog v0.9.0+:
+- list folder: `gog drive ls --parent <folderId> --json`
+- download: `gog drive download <fileId> --out <path>`
+- run gog as `ubuntu` and download to `/tmp` (because `/root` is typically `700`)
+
+Included helper script:
+- `skills/todolist-md-clawdbot/scripts/todolist_review_drive.py`
+  - lists Drive folder, detects changed files, maintains state
 
 Example:
 ```md
@@ -56,25 +111,26 @@ Put bot-generated tasks under a dedicated section so humans can review before ad
 - [ ] (suggested) Add a “Bot Log” section
 ```
 
-### In-file Q/A (canonical, line-stable)
+### In-file Q/A (detail blockquote, line-stable)
 
-Ask a question by adding (or reusing) a single comment line under the task:
+Ask a question using the detail blockquote line under the task:
 
 ```md
 - [ ] Deploy v2.0 to production #backend
-  > <!-- bot: question --> Question: Which CI job is failing? Options: unit / integration / e2e
+  > <!-- bot: question --> Which CI job is failing? Options: unit / integration / e2e
 ```
 
-Answer by editing that same line to include `Answer:` (no new lines):
+Answer by adding an inline answer on the same line to keep line-stable:
 
 ```md
 - [ ] Deploy v2.0 to production #backend
-  > <!-- bot: question --> Question: Which CI job is failing? Options: unit / integration / e2e Answer: integration
+  > <!-- bot: question --> Which CI job is failing? Options: unit / integration / e2e Answer: integration
 ```
 
 Rules:
 - Prefer one active Q/A per task at a time.
-- Do not start multi-line threads inside the task block.
+- Keep the Q/A inside the blockquote detail area.
+- Do not start multi-line threads beyond the single question and optional answer line.
 
 ### Archive Q/A to Bot Log (preferred once answered)
 
@@ -130,13 +186,13 @@ Bot asks a clarifying question (in-file):
 ```md
 - [ ] Deploy v2.0 to production #backend due:2026-02-05
   > Runbook: docs/deploy.md
-  > <!-- bot: question --> Question: Which CI job is failing? Options: unit / integration / e2e
+  > <!-- bot: question --> Which CI job is failing? Options: unit / integration / e2e
 ```
 
 User answers by editing the same line (line-stable):
 
 ```md
-  > <!-- bot: question --> Question: Which CI job is failing? Options: unit / integration / e2e Answer: integration
+  > <!-- bot: question --> Which CI job is failing? Options: unit / integration / e2e Answer: integration
 ```
 
 After the bot consumes the answer, archive it (preferred):
