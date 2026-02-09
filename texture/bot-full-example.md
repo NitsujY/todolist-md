@@ -14,7 +14,7 @@ Markers used:
 - [ ] Plan Q1 roadmap <!-- bot: Consider splitting into milestones (2026-02-02T10:15Z) --> #planning
   > Draft an outline and propose owners.
   >
-  > <!-- bot: Question: what is the success metric for Q1? (2026-02-02T10:16Z) --> Answer: Increase weekly active users by 15%.
+  > <!-- bot: question --> What is the success metric for Q1? (2026-02-02T10:16Z) Answer: Increase weekly active users by 15%.
   > <!-- bot: Suggestion: add a “Risks” subsection. (2026-02-02T10:17Z) -->
 
 - [ ] Fix login bug #frontend

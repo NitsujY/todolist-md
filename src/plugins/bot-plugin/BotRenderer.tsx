@@ -1,8 +1,11 @@
+import type { ReactNode } from 'react';
 import { Bot, CheckCircle, XCircle, Clock } from 'lucide-react';
 
 export interface BotComment {
   content: string;
   timestamp?: string;
+  source?: 'html' | 'blockquote' | 'inline';
+  lineIndex?: number;
 }
 
 export interface BotSuggestedTask {
@@ -28,7 +31,7 @@ export function parseBotComments(text: string): BotComment[] {
     const timestamp = timestampMatch ? timestampMatch[1] : undefined;
     const cleanContent = timestamp ? content.replace(/\s*\([^)]+\)\s*$/, '') : content;
     
-    comments.push({ content: cleanContent, timestamp });
+    comments.push({ content: cleanContent, timestamp, source: 'html' });
   }
 
   return comments;
@@ -55,7 +58,7 @@ export function extractInlineBotComment(text: string): {
       const timestampMatch = content.match(/\((\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2})?(?:Z)?)\)/);
       const timestamp = timestampMatch ? timestampMatch[1] : undefined;
       const cleanContent = timestamp ? content.replace(/\s*\([^)]+\)\s*$/, '') : content;
-      comments.push({ content: cleanContent, timestamp });
+      comments.push({ content: cleanContent, timestamp, source: 'inline' });
       // Preserve spacing where the comment was.
       return ' ';
     })
@@ -99,13 +102,56 @@ function formatRelativeTime(timestamp: string): string {
 /**
  * Renders a bot comment with icon and styling
  */
-export function BotCommentView({ comment }: { comment: BotComment }) {
+export function BotCommentView({
+  comment,
+  onClick,
+  actions,
+  className,
+  variant = 'default',
+}: {
+  comment: BotComment;
+  onClick?: () => void;
+  actions?: ReactNode;
+  className?: string;
+  variant?: 'default' | 'compact';
+}) {
+  const formatLabel = (content: string) => {
+    const trimmed = String(content ?? '').trim();
+    if (/^question$/i.test(trimmed)) return 'Question';
+    return content;
+  };
+  const displayContent = formatLabel(comment.content);
+  const baseClasses =
+    variant === 'compact'
+      ? 'flex items-start gap-2 py-1 my-1 rounded'
+      : 'flex items-start gap-2 p-3 my-2 bg-blue-50 dark:bg-blue-950 border-l-4 border-blue-400 dark:border-blue-600 rounded-r';
+  const hoverClasses = onClick
+    ? variant === 'compact'
+      ? 'cursor-pointer hover:bg-base-200/40 dark:hover:bg-base-300/20'
+      : 'cursor-pointer hover:bg-blue-100/60 dark:hover:bg-blue-900/40'
+    : '';
+
   return (
-    <div className="flex items-start gap-2 p-3 my-2 bg-blue-50 dark:bg-blue-950 border-l-4 border-blue-400 dark:border-blue-600 rounded-r">
+    <div
+      className={`${baseClasses} ${hoverClasses} ${className ?? ''}`}
+      onClick={onClick}
+      onMouseDown={(e) => {
+        if (onClick) e.stopPropagation();
+      }}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (!onClick) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+    >
       <Bot className="w-4 h-4 mt-0.5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <div className="text-sm text-blue-900 dark:text-blue-100">
-          {comment.content}
+          {displayContent}
         </div>
         {comment.timestamp && (
           <div className="flex items-center gap-1 mt-1 text-xs text-blue-600 dark:text-blue-400 opacity-70">
@@ -114,6 +160,7 @@ export function BotCommentView({ comment }: { comment: BotComment }) {
           </div>
         )}
       </div>
+      {actions && <div className="flex-shrink-0 ml-2">{actions}</div>}
     </div>
   );
 }
@@ -253,12 +300,43 @@ export function enhanceDescriptionWithBot(description: string): {
   comments: BotComment[];
   cleanDescription: string;
 } {
-  const comments = parseBotComments(description);
-  
-  // Remove bot HTML comments from visible description
-  // so they don't render as raw HTML
-  const cleanDescription = description.replace(/<!--\s*bot:.*?-->/gi, '').trim();
-  
+  const htmlComments = parseBotComments(description);
+  const strippedBotHtml = description.replace(/<!--\s*bot:.*?-->/gi, '');
+  const lines = strippedBotHtml.split('\n');
+
+  const questionLineRegex = /^\s*>\s*(?:\*\*(Question|Suggestion|Follow-up|Clarification|Comment|Reminder):\*\*|(Question|Suggestion|Follow-up|Clarification|Comment|Reminder):|Q:)\s*(.+)$/i;
+  const answerLineRegex = /^\s*>\s*(?:\*\*Answer:\*\*|Answer:)\s*(.*)$/i;
+
+  const blockquoteComments: BotComment[] = [];
+  const removeLineIndexes = new Set<number>();
+
+  lines.forEach((line, index) => {
+    const match = line.match(questionLineRegex);
+    if (!match) return;
+    const label = (match[1] || match[2] || 'Question').trim();
+    const questionText = (match[3] || '').trim();
+    if (questionText) {
+      blockquoteComments.push({
+        content: `${label}: ${questionText}`,
+        source: 'blockquote',
+        lineIndex: index,
+      });
+    }
+    removeLineIndexes.add(index);
+    const nextLine = lines[index + 1];
+    if (nextLine && answerLineRegex.test(nextLine)) {
+      removeLineIndexes.add(index + 1);
+    }
+  });
+
+  const cleanLines = lines.filter((_line, index) => !removeLineIndexes.has(index));
+  const cleanDescription = cleanLines
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  const comments = [...htmlComments, ...blockquoteComments];
+
   return {
     hasBotComments: comments.length > 0,
     comments,

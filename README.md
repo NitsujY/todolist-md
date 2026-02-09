@@ -162,6 +162,7 @@ Full test fixture (markers + conventions): `texture/bot-full-example.md`.
 - **Undo/Redo**: Mistakes are fine with full history support.
 - **Search**: Quickly find tasks across your list.
 - **Expand/Collapse Details**: One-click expand/collapse of all task descriptions from the top toolbar.
+- **Bot Questions**: Tasks with bot questions show a bot indicator; questions open an inline answer box and can be dismissed.
 - **Focus Mode**: Dim distractions and focus on one task at a time (via Plugin).
 - **Google Drive Integration**: Open and edit Markdown files directly from your Google Drive.
 - **Fast File Switching (SWR Cache)**: Recently opened files load instantly from cache, then refresh in the background.

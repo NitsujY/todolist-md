@@ -111,25 +111,26 @@ Put bot-generated tasks under a dedicated section so humans can review before ad
 - [ ] (suggested) Add a “Bot Log” section
 ```
 
-### In-file Q/A (canonical, line-stable)
+### In-file Q/A (detail blockquote, line-stable)
 
-Ask a question by adding (or reusing) a single comment line under the task:
+Ask a question using the detail blockquote line under the task:
 
 ```md
 - [ ] Deploy v2.0 to production #backend
-  > <!-- bot: question --> Question: Which CI job is failing? Options: unit / integration / e2e
+  > <!-- bot: question --> Which CI job is failing? Options: unit / integration / e2e
 ```
 
-Answer by editing that same line to include `Answer:` (no new lines):
+Answer by adding an inline answer on the same line to keep line-stable:
 
 ```md
 - [ ] Deploy v2.0 to production #backend
-  > <!-- bot: question --> Question: Which CI job is failing? Options: unit / integration / e2e Answer: integration
+  > <!-- bot: question --> Which CI job is failing? Options: unit / integration / e2e Answer: integration
 ```
 
 Rules:
 - Prefer one active Q/A per task at a time.
-- Do not start multi-line threads inside the task block.
+- Keep the Q/A inside the blockquote detail area.
+- Do not start multi-line threads beyond the single question and optional answer line.
 
 ### Archive Q/A to Bot Log (preferred once answered)
 
@@ -185,13 +186,13 @@ Bot asks a clarifying question (in-file):
 ```md
 - [ ] Deploy v2.0 to production #backend due:2026-02-05
   > Runbook: docs/deploy.md
-  > <!-- bot: question --> Question: Which CI job is failing? Options: unit / integration / e2e
+  > <!-- bot: question --> Which CI job is failing? Options: unit / integration / e2e
 ```
 
 User answers by editing the same line (line-stable):
 
 ```md
-  > <!-- bot: question --> Question: Which CI job is failing? Options: unit / integration / e2e Answer: integration
+  > <!-- bot: question --> Which CI job is failing? Options: unit / integration / e2e Answer: integration
 ```
 
 After the bot consumes the answer, archive it (preferred):

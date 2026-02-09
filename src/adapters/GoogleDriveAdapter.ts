@@ -26,6 +26,8 @@ export class GoogleDriveAdapter implements StorageProvider {
   private tokenClient: any;
   private accessToken: string | null = null;
   private tokenExpiration: number = 0;
+  private lastInteractiveAuthAttemptAt = 0;
+  private readonly interactiveAuthCooldownMs = 10 * 60 * 1000;
   private isInitialized = false;
   private inFlightInit: Promise<void> | null = null;
   private fileCache: Map<string, { id: string; name: string }> = new Map();
@@ -534,9 +536,16 @@ export class GoogleDriveAdapter implements StorageProvider {
           await this.signIn({ interactive: false });
         } catch (e: any) {
           if (this.isConsentOrInteractionRequired(e)) {
-            // Option B UX: the user prefers not to click a reconnect banner.
+            // Avoid repeatedly prompting the user; show reconnect banner within cooldown.
+            const now = Date.now();
+            const withinCooldown = now - this.lastInteractiveAuthAttemptAt < this.interactiveAuthCooldownMs;
+            if (withinCooldown) {
+              throw this.createAuthRequiredError('Google Drive session expired. Please reconnect.');
+            }
+
             // Escalate to an interactive sign-in (popup/redirect) automatically.
             try {
+              this.lastInteractiveAuthAttemptAt = now;
               await this.signIn({ interactive: true });
             } catch {
               // If the interactive flow fails (popup blocked/closed/etc), fall back
