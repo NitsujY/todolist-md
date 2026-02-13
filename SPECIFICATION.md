@@ -86,6 +86,11 @@ UI handling for bot questions:
 - Bot question blocks are clickable to open an inline answer box without entering description edit mode.
 - Users can remove a bot question from the description with a delete control.
 
+Supported bot marker comments:
+- `<!-- bot: question -->` in task descriptions (with optional same-line prompt/answer text).
+- `<!-- bot: suggested -->` as the marker line under `## Tasks (bot-suggested)`.
+- `<!-- bot: digest -->` and `<!-- bot: note -->` render as bot callouts in task descriptions.
+
 #### Requirements for Bot Compatibility
 
 **MUST:**
