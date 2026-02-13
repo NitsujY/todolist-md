@@ -163,6 +163,7 @@ Full test fixture (markers + conventions): `texture/bot-full-example.md`.
 - **Search**: Quickly find tasks across your list.
 - **Expand/Collapse Details**: One-click expand/collapse of all task descriptions from the top toolbar.
 - **Bot Questions**: Tasks with bot questions show a bot indicator; questions open an inline answer box and can be dismissed.
+- **Skill Marker Compatibility**: Supports `<!-- bot: question -->`, `<!-- bot: suggested -->`, `<!-- bot: digest -->`, and `<!-- bot: note -->` markers (including `## Tasks (bot-suggested)` sections).
 - **Focus Mode**: Dim distractions and focus on one task at a time (via Plugin).
 - **Google Drive Integration**: Open and edit Markdown files directly from your Google Drive.
 - **Fast File Switching (SWR Cache)**: Recently opened files load instantly from cache, then refresh in the background.
@@ -206,6 +207,9 @@ The app parses standard Markdown to generate the task list. Here is how it works
     - `# Section Name` or `## Section Name`
 - **Descriptions**: Use blockquotes immediately after a task to add a description.
     - `> This is a note about the task`
+- **Bot Markers in descriptions**:
+    - `> <!-- bot: question --> Which CI job is failing?`
+    - `> <!-- bot: note --> Keep this line-stable for IDs`
 - **Tags**: Use hash symbols to tag tasks.
     - `- [ ] Buy milk #groceries #urgent`
     - Use `\#` to escape a hash symbol if you don't want a tag (e.g. `\#1`).

@@ -6,6 +6,7 @@ export interface BotComment {
   timestamp?: string;
   source?: 'html' | 'blockquote' | 'inline';
   lineIndex?: number;
+  markerType?: 'suggested' | 'question' | 'digest' | 'note' | 'last_review' | 'generic';
 }
 
 export interface BotSuggestedTask {
@@ -14,24 +15,54 @@ export interface BotSuggestedTask {
   generated: string;
 }
 
+const BOT_TIMESTAMP_RE = /(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2})?(?:Z)?)/;
+
+const stripInlineAnswerSuffix = (text: string) => {
+  return String(text ?? '').replace(/\s+Answer\s*:\s*[^\n]*$/i, '').trim();
+};
+
+const parseBotMarkerPayload = (raw: string) => {
+  const content = String(raw ?? '').trim();
+  const timestampMatch = content.match(new RegExp(`\\(${BOT_TIMESTAMP_RE.source}\\)\\s*$`));
+  const timestamp = timestampMatch ? timestampMatch[1] : undefined;
+  const withoutTimestamp = timestamp ? content.replace(/\s*\([^)]+\)\s*$/, '').trim() : content;
+
+  const typed = withoutTimestamp.match(/^(suggested|question|digest|note|last_review)\b\s*(?::\s*(.*))?$/i);
+  if (typed) {
+    const markerType = typed[1].toLowerCase() as BotComment['markerType'];
+    const rest = String(typed[2] ?? '').trim();
+    const normalizedContent = markerType === 'question' ? stripInlineAnswerSuffix(rest || markerType) : (rest || markerType);
+    return {
+      content: normalizedContent,
+      markerType,
+      timestamp,
+    };
+  }
+
+  return {
+    content: withoutTimestamp,
+    markerType: 'generic' as const,
+    timestamp,
+  };
+};
+
 /**
  * Parses bot HTML comments from text
  * Format: <!-- bot: Your insight here -->
  */
 export function parseBotComments(text: string): BotComment[] {
-  const regex = /<!--\s*bot:\s*(.*?)\s*-->/gi;
+  const regex = /<!--\s*bot:\s*([\s\S]*?)\s*-->/gi;
   const comments: BotComment[] = [];
   let match;
 
   while ((match = regex.exec(text)) !== null) {
-    const content = match[1].trim();
-    
-    // Try to extract timestamp if present
-    const timestampMatch = content.match(/\((\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2})?(?:Z)?)\)/);
-    const timestamp = timestampMatch ? timestampMatch[1] : undefined;
-    const cleanContent = timestamp ? content.replace(/\s*\([^)]+\)\s*$/, '') : content;
-    
-    comments.push({ content: cleanContent, timestamp, source: 'html' });
+    const parsed = parseBotMarkerPayload(match[1]);
+    comments.push({
+      content: String(parsed.content ?? ''),
+      timestamp: parsed.timestamp,
+      markerType: parsed.markerType,
+      source: 'html',
+    });
   }
 
   return comments;
@@ -54,11 +85,13 @@ export function extractInlineBotComment(text: string): {
 
   const cleanText = text
     .replace(regexGlobal, (_m, rawContent: string) => {
-      const content = String(rawContent ?? '').trim();
-      const timestampMatch = content.match(/\((\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2})?(?:Z)?)\)/);
-      const timestamp = timestampMatch ? timestampMatch[1] : undefined;
-      const cleanContent = timestamp ? content.replace(/\s*\([^)]+\)\s*$/, '') : content;
-      comments.push({ content: cleanContent, timestamp, source: 'inline' });
+      const parsed = parseBotMarkerPayload(rawContent);
+      comments.push({
+        content: String(parsed.content ?? ''),
+        timestamp: parsed.timestamp,
+        markerType: parsed.markerType,
+        source: 'inline',
+      });
       // Preserve spacing where the comment was.
       return ' ';
     })
@@ -115,20 +148,108 @@ export function BotCommentView({
   className?: string;
   variant?: 'default' | 'compact';
 }) {
+  const markerType = comment.markerType ?? 'generic';
+
+  const markerTone = (() => {
+    switch (markerType) {
+      case 'question':
+        return {
+          chip: 'border-amber-300/70 bg-amber-100/70 text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+          accent: 'border-l-amber-400 dark:border-l-amber-700',
+          text: 'text-amber-900 dark:text-amber-100',
+          icon: 'text-amber-600 dark:text-amber-400',
+          hover: 'hover:bg-amber-50/60 dark:hover:bg-amber-950/20',
+        };
+      case 'suggested':
+        return {
+          chip: 'border-violet-300/70 bg-violet-100/70 text-violet-800 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
+          accent: 'border-l-violet-400 dark:border-l-violet-700',
+          text: 'text-violet-900 dark:text-violet-100',
+          icon: 'text-violet-600 dark:text-violet-400',
+          hover: 'hover:bg-violet-50/60 dark:hover:bg-violet-950/20',
+        };
+      case 'digest':
+        return {
+          chip: 'border-cyan-300/70 bg-cyan-100/70 text-cyan-800 dark:border-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300',
+          accent: 'border-l-cyan-400 dark:border-l-cyan-700',
+          text: 'text-cyan-900 dark:text-cyan-100',
+          icon: 'text-cyan-600 dark:text-cyan-400',
+          hover: 'hover:bg-cyan-50/60 dark:hover:bg-cyan-950/20',
+        };
+      case 'note':
+        return {
+          chip: 'border-slate-300/70 bg-slate-100/70 text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300',
+          accent: 'border-l-slate-400 dark:border-l-slate-700',
+          text: 'text-slate-700 dark:text-slate-200',
+          icon: 'text-slate-500 dark:text-slate-400',
+          hover: 'hover:bg-slate-100/70 dark:hover:bg-slate-800/40',
+        };
+      case 'last_review':
+        return {
+          chip: 'border-emerald-300/70 bg-emerald-100/70 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+          accent: 'border-l-emerald-400 dark:border-l-emerald-700',
+          text: 'text-emerald-900 dark:text-emerald-100',
+          icon: 'text-emerald-600 dark:text-emerald-400',
+          hover: 'hover:bg-emerald-50/60 dark:hover:bg-emerald-950/20',
+        };
+      default:
+        return {
+          chip: 'border-blue-300/70 bg-blue-100/70 text-blue-800 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
+          accent: 'border-l-blue-400 dark:border-l-blue-700',
+          text: 'text-blue-900 dark:text-blue-100',
+          icon: 'text-blue-600 dark:text-blue-400',
+          hover: 'hover:bg-blue-50/60 dark:hover:bg-blue-950/20',
+        };
+    }
+  })();
+
   const formatLabel = (content: string) => {
     const trimmed = String(content ?? '').trim();
+    const stripPrefix = (prefix: string) => trimmed.replace(new RegExp(`^${prefix}\\s*:\\s*`, 'i'), '').trim();
+
+    if (comment.markerType === 'question') {
+      if (/^question$/i.test(trimmed)) return 'Question';
+      return stripPrefix('question');
+    }
+    if (comment.markerType === 'suggested') {
+      if (/^suggested$/i.test(trimmed)) return 'Suggested';
+      return stripPrefix('suggested');
+    }
+    if (comment.markerType === 'digest') {
+      if (/^digest$/i.test(trimmed)) return 'Digest';
+      return stripPrefix('digest');
+    }
+    if (comment.markerType === 'note') {
+      if (/^note$/i.test(trimmed)) return 'Note';
+      return stripPrefix('note');
+    }
+    if (comment.markerType === 'last_review') {
+      if (/^last_review$/i.test(trimmed)) return 'Last review';
+      return stripPrefix('last_review');
+    }
     if (/^question$/i.test(trimmed)) return 'Question';
-    return content;
+    return trimmed;
   };
   const displayContent = formatLabel(comment.content);
+  const markerLabel = (() => {
+    switch (markerType) {
+      case 'question': return 'Question';
+      case 'suggested': return 'Suggested';
+      case 'digest': return 'Digest';
+      case 'note': return 'Note';
+      case 'last_review': return 'Last review';
+      default: return 'Bot';
+    }
+  })();
+
   const baseClasses =
     variant === 'compact'
-      ? 'flex items-start gap-2 py-1 my-1 rounded'
-      : 'flex items-start gap-2 p-3 my-2 bg-blue-50 dark:bg-blue-950 border-l-4 border-blue-400 dark:border-blue-600 rounded-r';
+      ? `flex items-start gap-2 py-1.5 px-1.5 my-1 rounded border-l-2 ${markerTone.accent}`
+      : `flex items-start gap-2 p-2 my-2 border-l-2 rounded-r ${markerTone.accent}`;
   const hoverClasses = onClick
     ? variant === 'compact'
-      ? 'cursor-pointer hover:bg-base-200/40 dark:hover:bg-base-300/20'
-      : 'cursor-pointer hover:bg-blue-100/60 dark:hover:bg-blue-900/40'
+      ? `cursor-pointer ${markerTone.hover}`
+      : `cursor-pointer ${markerTone.hover}`
     : '';
 
   return (
@@ -148,13 +269,18 @@ export function BotCommentView({
         }
       }}
     >
-      <Bot className="w-4 h-4 mt-0.5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+      <Bot className={`w-4 h-4 mt-0.5 flex-shrink-0 ${markerTone.icon}`} />
       <div className="flex-1 min-w-0">
-        <div className="text-sm text-blue-900 dark:text-blue-100">
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide ${markerTone.chip}`}>
+            {markerLabel}
+          </span>
+        </div>
+        <div className={`text-sm ${markerTone.text}`}>
           {displayContent}
         </div>
         {comment.timestamp && (
-          <div className="flex items-center gap-1 mt-1 text-xs text-blue-600 dark:text-blue-400 opacity-70">
+          <div className={`flex items-center gap-1 mt-1 text-xs opacity-70 ${markerTone.icon}`}>
             <Clock className="w-3 h-3" />
             {formatRelativeTime(comment.timestamp)}
           </div>
@@ -169,9 +295,21 @@ export function BotCommentView({
  * Renders a compact inline bot badge (icon only, with tooltip)
  */
 export function BotInlineBadge({ comment }: { comment: BotComment }) {
+  const markerType = comment.markerType ?? 'generic';
+  const toneClass = (() => {
+    switch (markerType) {
+      case 'question': return 'text-amber-500 dark:text-amber-400';
+      case 'suggested': return 'text-violet-500 dark:text-violet-400';
+      case 'digest': return 'text-cyan-500 dark:text-cyan-400';
+      case 'note': return 'text-slate-500 dark:text-slate-400';
+      case 'last_review': return 'text-emerald-500 dark:text-emerald-400';
+      default: return 'text-blue-500 dark:text-blue-400';
+    }
+  })();
+
   return (
     <span 
-      className="inline-flex items-center ml-1 p-0.5 text-blue-500 dark:text-blue-400 opacity-70 hover:opacity-100"
+      className={`inline-flex items-center ml-1 p-0.5 ${toneClass} opacity-70 hover:opacity-100`}
       title={comment.timestamp ? `🤖 ${comment.content} (${formatRelativeTime(comment.timestamp)})` : `🤖 ${comment.content}`}
     >
       <Bot className="w-3.5 h-3.5" />
@@ -192,22 +330,22 @@ export function BotSuggestedSection({
   onReject: (task: BotSuggestedTask) => void;
 }) {
   return (
-    <div className="p-4 my-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+    <div className="p-3 my-3 bg-base-100 border border-violet-200/80 dark:border-violet-900 rounded-lg">
       <div className="flex items-center gap-2 mb-3">
-        <Bot className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-        <h3 className="font-semibold text-blue-900 dark:text-blue-100">
+        <Bot className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+        <h3 className="font-medium text-violet-900 dark:text-violet-100">
           Bot Suggestions
         </h3>
-        <span className="text-xs px-2 py-0.5 bg-blue-200 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full">
+        <span className="text-[11px] px-2 py-0.5 border border-violet-300 dark:border-violet-700 bg-violet-100/70 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 rounded-full">
           {tasks.length}
         </span>
       </div>
       
-      <div className="space-y-3">
+      <div className="space-y-2">
         {tasks.map((task, index) => (
           <div 
             key={index}
-            className="p-3 bg-white dark:bg-gray-900 border border-blue-100 dark:border-blue-900 rounded"
+            className="p-2 bg-base-100 border border-base-300/70 rounded"
           >
             <div className="flex items-start gap-2">
               <div className="flex-1 min-w-0">
@@ -254,12 +392,12 @@ export function BotSuggestedSection({
  * Parses suggested tasks from "Tasks (bot-suggested)" section
  */
 export function parseBotSuggestedSection(markdown: string): BotSuggestedTask[] {
-  const sectionRegex = /##\s*Tasks\s*\(bot-suggested\)\s*\n<!--\s*Generated\s*(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2})?(?:Z)?)\s*-->\s*\n([\s\S]*?)(?=\n##\s|\n#\s|$)/i;
+  const sectionRegex = /##\s*Tasks\s*\(bot-suggested\)\s*\n(?:<!--\s*bot:\s*suggested\s*-->|<!--\s*Generated\s*(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2})?(?:Z)?)\s*-->)?\s*\n([\s\S]*?)(?=\n##\s|\n#\s|$)/i;
   const match = markdown.match(sectionRegex);
   
   if (!match) return [];
   
-  const generatedTime = match[1];
+  const generatedTime = match[1] || new Date().toISOString();
   const sectionContent = match[2];
   
   // Parse tasks from section
@@ -300,24 +438,59 @@ export function enhanceDescriptionWithBot(description: string): {
   comments: BotComment[];
   cleanDescription: string;
 } {
-  const htmlComments = parseBotComments(description);
-  const strippedBotHtml = description.replace(/<!--\s*bot:.*?-->/gi, '');
-  const lines = strippedBotHtml.split('\n');
+  const normalized = String(description ?? '').replace(/\r\n/g, '\n');
+  const lines = normalized.split('\n');
 
   const questionLineRegex = /^\s*>\s*(?:\*\*(Question|Suggestion|Follow-up|Clarification|Comment|Reminder):\*\*|(Question|Suggestion|Follow-up|Clarification|Comment|Reminder):|Q:)\s*(.+)$/i;
   const answerLineRegex = /^\s*>\s*(?:\*\*Answer:\*\*|Answer:)\s*(.*)$/i;
+  const blockquoteBotRegex = /^\s*>\s*<!--\s*bot:\s*([\s\S]*?)\s*-->\s*(.*)$/i;
 
   const blockquoteComments: BotComment[] = [];
   const removeLineIndexes = new Set<number>();
 
   lines.forEach((line, index) => {
-    const match = line.match(questionLineRegex);
-    if (!match) return;
-    const label = (match[1] || match[2] || 'Question').trim();
-    const questionText = (match[3] || '').trim();
+    const botMatch = line.match(blockquoteBotRegex);
+    if (botMatch) {
+      const parsed = parseBotMarkerPayload(botMatch[1]);
+      const trailing = String(botMatch[2] ?? '').trim();
+      const trailingQuestionText = stripInlineAnswerSuffix(trailing);
+      const baseContent = String(parsed.content ?? '').trim();
+
+      let combined = baseContent;
+      if (trailing) {
+        if (/^question$/i.test(baseContent) || parsed.markerType === 'question') {
+          combined = trailingQuestionText ? `Question: ${trailingQuestionText}` : 'Question';
+        } else if (/^(digest|note|suggested|last_review)$/i.test(baseContent) || parsed.markerType !== 'generic') {
+          combined = `${baseContent}: ${trailing}`;
+        } else {
+          combined = [baseContent, trailing].filter(Boolean).join(' ').trim();
+        }
+      }
+
+      blockquoteComments.push({
+        content: combined || baseContent,
+        timestamp: parsed.timestamp,
+        markerType: parsed.markerType,
+        source: 'blockquote',
+        lineIndex: index,
+      });
+      removeLineIndexes.add(index);
+
+      const nextLine = lines[index + 1];
+      if (nextLine && answerLineRegex.test(nextLine)) {
+        removeLineIndexes.add(index + 1);
+      }
+      return;
+    }
+
+    const legacyMatch = line.match(questionLineRegex);
+    if (!legacyMatch) return;
+    const label = (legacyMatch[1] || legacyMatch[2] || 'Question').trim();
+    const questionText = (legacyMatch[3] || '').trim();
     if (questionText) {
       blockquoteComments.push({
         content: `${label}: ${questionText}`,
+        markerType: 'question',
         source: 'blockquote',
         lineIndex: index,
       });
@@ -329,9 +502,11 @@ export function enhanceDescriptionWithBot(description: string): {
     }
   });
 
-  const cleanLines = lines.filter((_line, index) => !removeLineIndexes.has(index));
-  const cleanDescription = cleanLines
-    .join('\n')
+  const retainedLines = lines.filter((_line, index) => !removeLineIndexes.has(index));
+  const retainedText = retainedLines.join('\n');
+  const htmlComments = parseBotComments(retainedText);
+  const cleanDescription = retainedText
+    .replace(/<!--\s*bot:[\s\S]*?-->/gi, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 

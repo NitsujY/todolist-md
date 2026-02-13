@@ -1,21 +1,27 @@
 # Bot Integration Test Fixture
 
-This file is a **reference Markdown** for testing Todolist-MD’s bot marker rendering.
+<!-- bot: last_review --> 2026-02-14T10:10Z root=demo-root model=gpt-5.3-codex
 
-Markers used:
-- Inline markers inside task text: `<!-- bot: ... -->`
-- Description markers inside a task blockquote
-- Bot-suggested section: `## Tasks (bot-suggested)` + `<!-- Generated ... -->`
+This file is a **reference Markdown** for testing all supported bot markers.
+
+Canonical markers covered:
+- `<!-- bot: question -->`
+- `<!-- bot: suggested -->`
+- `<!-- bot: digest -->`
+- `<!-- bot: note -->`
+- `<!-- bot: last_review -->`
 
 ---
 
+<!-- bot: digest --> Top 3 next actions: 1) Unblock login fix 2) Add API validation 3) Finalize rollout checklist
+
 ## Inbox
 
-- [ ] Plan Q1 roadmap <!-- bot: Consider splitting into milestones (2026-02-02T10:15Z) --> #planning
+- [ ] Plan Q1 roadmap #planning
   > Draft an outline and propose owners.
   >
-  > <!-- bot: question --> What is the success metric for Q1? (2026-02-02T10:16Z) Answer: Increase weekly active users by 15%.
-  > <!-- bot: Suggestion: add a “Risks” subsection. (2026-02-02T10:17Z) -->
+  > <!-- bot: question --> What is the success metric for Q1? Options: WAU / MRR / retention Answer: Increase weekly active users by 15%.
+  > <!-- bot: note --> Keep this line-stable for ID safety.
 
 - [ ] Fix login bug #frontend
   > Repro:
@@ -23,9 +29,10 @@ Markers used:
   > 2) Click “Sign in”
   > 3) Observe blank screen
   >
-  > <!-- bot: Ask for console logs + network HAR. (2026-02-02T11:01Z) -->
+  > <!-- bot: question --> Which browser/version reproduces this most consistently?
+  > <!-- bot: note --> Ask for console log + HAR file.
 
-- [x] Buy groceries @done(2026-02-01)
+- [ ] Design empty state copy <!-- bot: note: avoid passive voice --> #ux
 
 ---
 
@@ -36,31 +43,26 @@ Markers used:
   > - Create
   > - Update
   > - List
+  > <!-- bot: note --> Add request id logging for traceability.
 
-  - [ ] Add request validation <!-- bot: Use zod schema (2026-02-02T09:05Z) -->
-    > <!-- bot: Consider rate limiting if public. (2026-02-02T09:06Z) -->
-
+  - [ ] Add request validation <!-- bot: note: use zod schema -->
   - [ ] Add integration tests
 
 - [ ] Update UI for new endpoint #frontend
-  > <!-- bot: Suggest adding a loading skeleton. (2026-02-02T09:30Z) -->
+  > <!-- bot: note --> Add loading skeleton and retry state.
 
 ---
 
 ## Tasks (bot-suggested)
-<!-- Generated 2026-02-02T12:00Z -->
+<!-- bot: suggested -->
 
-- [ ] Write a short rollout plan
-  > <!-- bot: Include a rollback checklist + monitoring links. -->
+- [ ] (suggested) Write a short rollout plan
+  > <!-- bot: note --> Include rollback checklist + monitoring links.
 
-- [ ] Add a “Definition of Done” section to this file
+- [ ] (suggested) Add a “Definition of Done” section
 
 ---
 
-## Notes
-
-- You can add more `<!-- bot: ... -->` markers anywhere; the app should render them as bot callouts/badges and hide the raw HTML comment markers in edit mode.
-
 ## Bot Log
 
-- 2026-02-02T12:30Z Plan Q1 roadmap | Archived Q/A after answer captured.
+- 2026-02-14T10:12Z Task: Plan Q1 roadmap | Q: What is the success metric for Q1? | A: Increase weekly active users by 15%

@@ -259,7 +259,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
 
   const isBotQuestion = (comment: { content: string }) => {
     const c = String(comment.content || '').trim();
-    return /^(question|suggestion|follow-up|clarification|comment|reminder)\s*:/i.test(c) || /^q\s*:/i.test(c) || c.endsWith('?');
+    return /^(question|suggestion|follow-up|clarification|comment|reminder)(\s*:|\s*$)/i.test(c) || /^q\s*:/i.test(c) || c.endsWith('?');
   };
 
   const isBlockquoteComment = (comment: BotComment | null) => {
@@ -268,8 +268,39 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
 
   const formatBotMarker = (comment: BotComment) => {
     if (comment.source === 'blockquote') return null;
-    const inner = comment.timestamp ? `${comment.content} (${comment.timestamp})` : comment.content;
+    const markerType = comment.markerType && comment.markerType !== 'generic' ? comment.markerType : null;
+    const base = markerType
+      ? (() => {
+          const content = String(comment.content || '').trim();
+          if (!content || content.toLowerCase() === markerType) return markerType;
+          return `${markerType}: ${content}`;
+        })()
+      : comment.content;
+    const inner = comment.timestamp ? `${base} (${comment.timestamp})` : base;
     return `<!-- bot: ${inner} -->`;
+  };
+
+  const normalizeMarkerContent = (rawContent: string) => {
+    const content = String(rawContent ?? '').trim();
+    const timestampMatch = content.match(/\((\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2})?(?:Z)?)\)\s*$/);
+    const timestamp = timestampMatch ? timestampMatch[1] : undefined;
+    const withoutTimestamp = timestamp ? content.replace(/\s*\([^)]+\)\s*$/, '').trim() : content;
+    const typed = withoutTimestamp.match(/^(suggested|question|digest|note|last_review)\b\s*(?::\s*(.*))?$/i);
+    if (typed) {
+      const markerType = typed[1].toLowerCase();
+      const rest = String(typed[2] ?? '').trim();
+      return {
+        cleanContent: rest || markerType,
+        timestamp,
+        markerType,
+      };
+    }
+
+    return {
+      cleanContent: withoutTimestamp.trim(),
+      timestamp,
+      markerType: 'generic',
+    };
   };
 
   const findInlineAnswerForTaskText = (taskText: string, comment: BotComment) => {
@@ -356,14 +387,6 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
     const botRe = /<!--\s*bot:\s*([\s\S]*?)\s*-->/gi;
     let match: RegExpExecArray | null;
 
-    const normalizeMarkerContent = (rawContent: string) => {
-      const content = String(rawContent ?? '').trim();
-      const timestampMatch = content.match(/\((\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2})?(?:Z)?)\)/);
-      const timestamp = timestampMatch ? timestampMatch[1] : undefined;
-      const cleanContent = timestamp ? content.replace(/\s*\([^)]+\)\s*$/, '') : content;
-      return { cleanContent: cleanContent.trim(), timestamp };
-    };
-
     while ((match = botRe.exec(raw)) !== null) {
       const markerContent = match[1];
       const start = match.index;
@@ -372,8 +395,13 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
       const normalized = normalizeMarkerContent(markerContent);
       const targetContent = String(comment.content || '').trim();
       const targetTimestamp = comment.timestamp;
+      const targetType = String(comment.markerType || 'generic').toLowerCase();
 
-      if (normalized.cleanContent === targetContent && normalized.timestamp === targetTimestamp) {
+      if (
+        normalized.cleanContent === targetContent &&
+        normalized.timestamp === targetTimestamp &&
+        normalized.markerType === targetType
+      ) {
         // Keep the answer on the SAME LINE as the marker so we don't change
         // line counts (task IDs are line-number derived).
         const lineEnd = raw.indexOf('\n', end);
@@ -409,14 +437,6 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
     const botRe = /<!--\s*bot:\s*([\s\S]*?)\s*-->/gi;
     let match: RegExpExecArray | null;
 
-    const normalizeMarkerContent = (rawContent: string) => {
-      const content = String(rawContent ?? '').trim();
-      const timestampMatch = content.match(/\((\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2})?(?:Z)?)\)/);
-      const timestamp = timestampMatch ? timestampMatch[1] : undefined;
-      const cleanContent = timestamp ? content.replace(/\s*\([^)]+\)\s*$/, '') : content;
-      return { cleanContent: cleanContent.trim(), timestamp };
-    };
-
     while ((match = botRe.exec(raw)) !== null) {
       const markerContent = match[1];
       const start = match.index;
@@ -425,8 +445,13 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
       const normalized = normalizeMarkerContent(markerContent);
       const targetContent = String(comment.content || '').trim();
       const targetTimestamp = comment.timestamp;
+      const targetType = String(comment.markerType || 'generic').toLowerCase();
 
-      if (normalized.cleanContent === targetContent && normalized.timestamp === targetTimestamp) {
+      if (
+        normalized.cleanContent === targetContent &&
+        normalized.timestamp === targetTimestamp &&
+        normalized.markerType === targetType
+      ) {
         const lineEnd = raw.indexOf('\n', end);
         const actualLineEnd = lineEnd === -1 ? raw.length : lineEnd;
         const tail = raw.slice(end, actualLineEnd);
@@ -482,14 +507,6 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
     const botRe = /<!--\s*bot:\s*([\s\S]*?)\s*-->/gi;
     let match: RegExpExecArray | null;
 
-    const normalizeMarkerContent = (rawContent: string) => {
-      const content = String(rawContent ?? '').trim();
-      const timestampMatch = content.match(/\((\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2})?(?:Z)?)\)/);
-      const timestamp = timestampMatch ? timestampMatch[1] : undefined;
-      const cleanContent = timestamp ? content.replace(/\s*\([^)]+\)\s*$/, '') : content;
-      return { cleanContent: cleanContent.trim(), timestamp };
-    };
-
     while ((match = botRe.exec(raw)) !== null) {
       const markerContent = match[1];
       const markerStart = match.index;
@@ -497,8 +514,13 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
       const normalized = normalizeMarkerContent(markerContent);
       const targetContent = String(comment.content || '').trim();
       const targetTimestamp = comment.timestamp;
+      const targetType = String(comment.markerType || 'generic').toLowerCase();
 
-      if (normalized.cleanContent === targetContent && normalized.timestamp === targetTimestamp) {
+      if (
+        normalized.cleanContent === targetContent &&
+        normalized.timestamp === targetTimestamp &&
+        normalized.markerType === targetType
+      ) {
         const lineStart = raw.lastIndexOf('\n', markerStart - 1);
         const actualLineStart = lineStart === -1 ? 0 : lineStart + 1;
         const lineEnd = raw.indexOf('\n', markerEnd);
@@ -551,6 +573,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
 
   const enhancedDescription = enhanceDescriptionWithBot(task.description || '');
   const inlineBotComment = extractInlineBotComment(task.text).comment;
+  const rowBotBadgeComment = inlineBotComment || enhancedDescription.comments[0] || null;
   const inlineQuestionComment = inlineBotComment && isBotQuestion(inlineBotComment) ? inlineBotComment : null;
   const hasBotQuestion =
     enhancedDescription.comments.some((comment) => isBotQuestion(comment)) ||
@@ -633,6 +656,9 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
 
   const handleDescriptionBlur = (e: React.FocusEvent) => {
     if (autoCloseGuard) return;
+    // When switching to another app/window, relatedTarget is often null and
+    // document loses focus. Keep the editor open in that case.
+    if (!document.hasFocus()) return;
     // Check if focus is moving to the title input
     if (e.relatedTarget && (e.relatedTarget === inputRef.current || e.relatedTarget === headerInputRef.current)) {
       return;
@@ -693,6 +719,9 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
 
   const handleBlur = (e: React.FocusEvent) => {
     if (autoCloseGuard) return;
+    // When switching to another app/window, relatedTarget is often null and
+    // document loses focus. Keep the editor open in that case.
+    if (!document.hasFocus()) return;
     // Check if focus is moving to the description input
     if (e.relatedTarget && e.relatedTarget === descriptionRef.current) {
       return;
@@ -1056,18 +1085,8 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
                 </ReactMarkdown>
               </span>
               {(() => {
-                const { comment } = extractInlineBotComment(task.text);
-                return comment ? <BotInlineBadge comment={comment} /> : null;
+                return rowBotBadgeComment ? <BotInlineBadge comment={rowBotBadgeComment} /> : null;
               })()}
-              {hasBotQuestion && !inlineBotComment && (
-                <span
-                  className="inline-flex items-center ml-1 text-blue-500 dark:text-blue-400 opacity-80"
-                  title="Bot question"
-                  aria-label="Bot question"
-                >
-                  <Bot className="w-3.5 h-3.5" />
-                </span>
-              )}
             </div>
           )}
 
@@ -1170,6 +1189,38 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
                       ) : null
                     }
                   />
+
+                  <div
+                    className="ml-7 mt-1 bot-qa"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center gap-2">
+                      {existingAnswer ? (
+                        <span className="text-xs text-base-content/60 truncate max-w-[28rem]">
+                          <span className="badge badge-outline badge-success mr-2">Answered</span>
+                          <span className="opacity-80">{existingAnswer}</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-base-content/50">No answer yet</span>
+                      )}
+
+                      <button
+                        className="btn btn-ghost btn-xs"
+                        title={existingAnswer ? 'Edit answer' : 'Add answer'}
+                        onClick={() =>
+                          openBotAnswerModal(
+                            key,
+                            formatBotMarker(inlineQuestionComment),
+                            inlineQuestionComment,
+                            existingAnswer
+                          )
+                        }
+                      >
+                        {existingAnswer ? 'Edit answer' : 'Answer'}
+                      </button>
+                    </div>
+                  </div>
 
                   {isActiveQuestion && (
                     <div className="ml-7 mt-1">
@@ -1350,8 +1401,16 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
                                       <span className="opacity-80">{existingAnswer}</span>
                                     </span>
                                   ) : (
-                                    <span className="text-xs text-base-content/50">Needs an answer</span>
+                                    <span className="text-xs text-base-content/50">No answer yet</span>
                                   )}
+
+                                  <button
+                                    className="btn btn-ghost btn-xs"
+                                    title={existingAnswer ? 'Edit answer' : 'Add answer'}
+                                    onClick={() => openBotAnswerModal(key, formatBotMarker(comment), comment, existingAnswer)}
+                                  >
+                                    {existingAnswer ? 'Edit answer' : 'Answer'}
+                                  </button>
                                 </div>
 
                                 {isActiveQuestion && (
