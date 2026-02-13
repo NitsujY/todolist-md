@@ -55,6 +55,40 @@ Ask once, then persist the answers (in memory/config) for future runs.
   - Local: root directory path
   - S3: `bucket` + optional prefix
 
+## Chrome app integration: enable/disable per-file
+When a Drive folder contains many `.md` files, not all of them should necessarily be AI-reviewed.
+
+**Recommendation (simple + app-controlled):**
+- The Chrome app should write a small per-file config key/marker so the agent can know whether a file is opted-in.
+
+Two easy options:
+
+### Option 1: a dedicated Drive config file (preferred)
+Create a config file in the same folder:
+- `.todolist-md.config.json`
+
+Example:
+```json
+{
+  "ai": {
+    "enabled": true,
+    "include": ["*.md"],
+    "exclude": ["todoapp.md"],
+    "botSuggestedSectionTitle": "Tasks (bot-suggested)"
+  }
+}
+```
+
+The agent should:
+- Download `.todolist-md.config.json` when it changes.
+- Only review files that match include/exclude rules.
+
+### Option 2: an in-file marker (works without JSON)
+Add a single line near the top of the markdown file:
+- `<!-- bot: ai_enabled --> true`
+
+The agent should only review files containing that marker.
+
 ## Review cadence + stamping (save credits)
 **Do not call an LLM unless a file changed.** Use code-first change detection.
 
@@ -81,9 +115,16 @@ If you use **Google Drive** as storage, gog CLI flags matter. In gog v0.9.0+:
 - download: `gog drive download <fileId> --out <path>`
 - run gog as `ubuntu` and download to `/tmp` (because `/root` is typically `700`)
 
-Included helper script:
-- `skills/todolist-md-clawdbot/scripts/todolist_review_drive.py`
-  - lists Drive folder, detects changed files, maintains state
+Included helper scripts:
+- `skills/todolist-md-clawdbot/scripts/todolist_drive_folder_agent.mjs`
+  - **single script for everything** (Drive folder runner): lists all `.md` under a folder, detects changes via state file, downloads only changed files, and writes back a `<!-- bot: suggested -->` block under a dedicated section title.
+  - uses Drive API `files.update` to overwrite-update the same `fileId` (no duplicates).
+  - includes a revision gate (headRevisionId) to avoid overwriting while you edit in Chrome.
+  - Managed OAuth mode (recommended): stores its own refresh token file; first run prints an auth URL, you approve in browser, then rerun with `--authCode <CODE>`.
+  - **minimum-token design**: does not call LLM unless a file changed, and should send only extracted open tasks (not full file).
+
+- `skills/todolist-md-clawdbot/scripts/todolist_agent_entrypoint.mjs`
+  - single-file helper (useful for debugging): download by fileId + overwrite-update
 
 Example:
 ```md
@@ -98,6 +139,67 @@ Example:
 - `<!-- bot: digest -->` for summaries/digests
 - `<!-- bot: note -->` for short audit notes (optional)
 
+## LLM handoff (prepare/apply) — minimum-token workflow
+
+When you want LLM help but must keep Drive as the source of truth (and keep costs low), use the **two-stage** flow:
+
+### Stage 1: prepare
+Goal: generate a compact JSON request for the OpenClaw agent runtime (LLM), without calling any LLM from the Node script.
+
+What happens:
+1) List folder files (cheap; no downloads)
+2) Compare each file's `modifiedTime/size` against a local state file
+3) Download only changed `.md`
+4) Extract only open tasks (`- [ ] ...`, max N lines)
+5) Write `llm_request.json`
+
+Command example (single file):
+```bash
+node skills/todolist-md-clawdbot/scripts/todolist_drive_folder_agent.mjs \
+  --folderId <rootFolderId> \
+  --onlyName vyond.md \
+  --mode prepare \
+  --requestOut outputs/todolist-md/vyond_llm_request.json
+```
+
+### Stage 2: apply
+Goal: take a suggestions JSON (produced by the agent runtime) and write it back **only** to a dedicated bot section.
+
+Rules:
+- Update only under:
+  - `## Tasks (bot-suggested)`
+  - `<!-- bot: suggested -->`
+- Never mark tasks complete.
+- Use Drive API overwrite update by `fileId` (no duplicates).
+- Use a revision gate (`headRevisionId`) to avoid overwriting while you edit in Chrome.
+
+Suggestions JSON shape:
+```json
+{
+  "schema": "todolist-md.llm_suggestions.v1",
+  "items": [
+    {
+      "fileId": "...",
+      "name": "vyond.md",
+      "suggested_markdown": "- [ ] ...\n  > <!-- bot: note --> ..."
+    }
+  ]
+}
+```
+
+Command example:
+```bash
+node skills/todolist-md-clawdbot/scripts/todolist_drive_folder_agent.mjs \
+  --folderId <rootFolderId> \
+  --mode apply \
+  --suggestionsIn outputs/todolist-md/vyond_llm_suggestions.json
+```
+
+### Why this saves tokens
+Example: if a folder has 50 Markdown files, but only 1 changed:
+- LLM is called **only for that 1 file**.
+- The prompt includes only extracted open tasks (`- [ ] ...`), not the entire Markdown.
+
 ## Write-back patterns
 
 ### Bot-suggested tasks
@@ -108,7 +210,7 @@ Put bot-generated tasks under a dedicated section so humans can review before ad
 ## Tasks (bot-suggested)
 
 <!-- bot: suggested -->
-- [ ] (suggested) Add a “Bot Log” section
+- [ ] Add a “Bot Log” section
 ```
 
 ### In-file Q/A (detail blockquote, line-stable)

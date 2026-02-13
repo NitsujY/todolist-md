@@ -257,8 +257,9 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
     return `${comment.source ?? ''}|${comment.timestamp ?? ''}|${comment.lineIndex ?? ''}|${comment.content}`;
   };
 
-  const isBotQuestion = (comment: { content: string }) => {
+  const isBotQuestion = (comment: { content: string; markerType?: string }) => {
     const c = String(comment.content || '').trim();
+    if (String(comment.markerType || '').toLowerCase() === 'question') return true;
     return /^(question|suggestion|follow-up|clarification|comment|reminder)(\s*:|\s*$)/i.test(c) || /^q\s*:/i.test(c) || c.endsWith('?');
   };
 
@@ -1142,7 +1143,10 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
         {inlineQuestionComment && (
           <div
             className="mt-2 ml-1 bot-qa"
-            onMouseDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             {(() => {
@@ -1165,59 +1169,57 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
                     className="bot-comment"
                     variant="compact"
                     actions={
-                      onUpdate ? (
+                      <div className="flex items-center gap-1.5">
+                        {existingAnswer ? (
+                          <span className="text-xs text-base-content/60 truncate max-w-[16rem]" title={existingAnswer}>
+                            <span className="badge badge-outline badge-success mr-1">Answered</span>
+                            <span className="opacity-80">{existingAnswer}</span>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-base-content/50">No answer yet</span>
+                        )}
+
                         <button
-                          className="btn btn-xs btn-square btn-ghost"
-                          title="Remove question"
-                          aria-label="Remove question"
+                          className="btn btn-ghost btn-xs"
+                          title={existingAnswer ? 'Edit answer' : 'Add answer'}
                           onMouseDown={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
                           }}
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            const nextText = removeInlineBotMarkerFromText(task.text, inlineQuestionComment);
-                            await Promise.resolve(onUpdate(task.id, nextText));
-                            if (activeBotQuestionKey === key) closeBotAnswerModal();
-                          }}
+                          onClick={() =>
+                            openBotAnswerModal(
+                              key,
+                              formatBotMarker(inlineQuestionComment),
+                              inlineQuestionComment,
+                              existingAnswer
+                            )
+                          }
                         >
-                          <X className="w-3.5 h-3.5" />
+                          {existingAnswer ? 'Edit answer' : 'Answer'}
                         </button>
-                      ) : null
+
+                        {onUpdate ? (
+                          <button
+                            className="btn btn-xs btn-square btn-ghost"
+                            title="Remove question"
+                            aria-label="Remove question"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const nextText = removeInlineBotMarkerFromText(task.text, inlineQuestionComment);
+                              await Promise.resolve(onUpdate(task.id, nextText));
+                              if (activeBotQuestionKey === key) closeBotAnswerModal();
+                            }}
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        ) : null}
+                      </div>
                     }
                   />
-
-                  <div
-                    className="ml-7 mt-1 bot-qa"
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex items-center gap-2">
-                      {existingAnswer ? (
-                        <span className="text-xs text-base-content/60 truncate max-w-[28rem]">
-                          <span className="badge badge-outline badge-success mr-2">Answered</span>
-                          <span className="opacity-80">{existingAnswer}</span>
-                        </span>
-                      ) : (
-                        <span className="text-xs text-base-content/50">No answer yet</span>
-                      )}
-
-                      <button
-                        className="btn btn-ghost btn-xs"
-                        title={existingAnswer ? 'Edit answer' : 'Add answer'}
-                        onClick={() =>
-                          openBotAnswerModal(
-                            key,
-                            formatBotMarker(inlineQuestionComment),
-                            inlineQuestionComment,
-                            existingAnswer
-                          )
-                        }
-                      >
-                        {existingAnswer ? 'Edit answer' : 'Answer'}
-                      </button>
-                    </div>
-                  </div>
 
                   {isActiveQuestion && (
                     <div className="ml-7 mt-1">
@@ -1275,7 +1277,7 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
                                 : undefined
                             }
                             className={question ? 'bot-comment' : undefined}
-                            variant={question ? 'compact' : 'default'}
+                            variant="compact"
                           />
                         </div>
                       );
@@ -1360,27 +1362,52 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
                                   : undefined
                               }
                               className={question ? 'bot-comment' : undefined}
-                              variant={question ? 'compact' : 'default'}
+                              variant="compact"
                               actions={
-                                question && onUpdateDescription ? (
-                                  <button
-                                    className="btn btn-xs btn-square btn-ghost"
-                                    title="Remove question"
-                                    aria-label="Remove question"
-                                    onMouseDown={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                    }}
-                                    onClick={async (e) => {
-                                      e.stopPropagation();
-                                      const originalDesc = task.description || '';
-                                      const nextDesc = removeBotCommentFromDescription(originalDesc, comment);
-                                      await Promise.resolve(onUpdateDescription(task.id, nextDesc));
-                                      if (activeBotQuestionKey === key) closeBotAnswerModal();
-                                    }}
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                  </button>
+                                question ? (
+                                  <div className="flex items-center gap-1.5">
+                                    {existingAnswer ? (
+                                      <span className="text-xs text-base-content/60 truncate max-w-[16rem]" title={existingAnswer}>
+                                        <span className="badge badge-outline badge-success mr-1">Answered</span>
+                                        <span className="opacity-80">{existingAnswer}</span>
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs text-base-content/50">No answer yet</span>
+                                    )}
+
+                                    <button
+                                      className="btn btn-ghost btn-xs"
+                                      title={existingAnswer ? 'Edit answer' : 'Add answer'}
+                                      onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                      }}
+                                      onClick={() => openBotAnswerModal(key, formatBotMarker(comment), comment, existingAnswer)}
+                                    >
+                                      {existingAnswer ? 'Edit answer' : 'Answer'}
+                                    </button>
+
+                                    {onUpdateDescription ? (
+                                      <button
+                                        className="btn btn-xs btn-square btn-ghost"
+                                        title="Remove question"
+                                        aria-label="Remove question"
+                                        onMouseDown={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                        }}
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          const originalDesc = task.description || '';
+                                          const nextDesc = removeBotCommentFromDescription(originalDesc, comment);
+                                          await Promise.resolve(onUpdateDescription(task.id, nextDesc));
+                                          if (activeBotQuestionKey === key) closeBotAnswerModal();
+                                        }}
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    ) : null}
+                                  </div>
                                 ) : null
                               }
                             />
@@ -1388,28 +1415,12 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
                             {question && (onUpdateDescription || onAnswerBotQuestion) && (
                               <div
                                 className="ml-7 mt-1 bot-qa"
-                                onMouseDown={(e) => e.stopPropagation()}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }}
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                <div className="flex items-center gap-2">
-                                  {existingAnswer ? (
-                                    <span className="text-xs text-base-content/60 truncate max-w-[28rem]">
-                                      <span className="badge badge-outline badge-success mr-2">Answered</span>
-                                      <span className="opacity-80">{existingAnswer}</span>
-                                    </span>
-                                  ) : (
-                                    <span className="text-xs text-base-content/50">No answer yet</span>
-                                  )}
-
-                                  <button
-                                    className="btn btn-ghost btn-xs"
-                                    title={existingAnswer ? 'Edit answer' : 'Add answer'}
-                                    onClick={() => openBotAnswerModal(key, formatBotMarker(comment), comment, existingAnswer)}
-                                  >
-                                    {existingAnswer ? 'Edit answer' : 'Answer'}
-                                  </button>
-                                </div>
-
                                 {isActiveQuestion && (
                                   <div className="mt-1 bg-base-200/50 rounded p-2">
                                     <textarea

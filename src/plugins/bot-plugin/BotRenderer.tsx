@@ -241,10 +241,13 @@ export function BotCommentView({
       default: return 'Bot';
     }
   })();
+  const shouldHideBodyText =
+    String(displayContent || '').trim().toLowerCase() ===
+    String(markerLabel || '').trim().toLowerCase();
 
   const baseClasses =
     variant === 'compact'
-      ? `flex items-start gap-2 py-1.5 px-1.5 my-1 rounded border-l-2 ${markerTone.accent}`
+      ? `flex items-start gap-2 py-1.5 px-1.5 my-1 rounded border-l-2 overflow-hidden ${markerTone.accent}`
       : `flex items-start gap-2 p-2 my-2 border-l-2 rounded-r ${markerTone.accent}`;
   const hoverClasses = onClick
     ? variant === 'compact'
@@ -257,7 +260,10 @@ export function BotCommentView({
       className={`${baseClasses} ${hoverClasses} ${className ?? ''}`}
       onClick={onClick}
       onMouseDown={(e) => {
-        if (onClick) e.stopPropagation();
+        if (onClick) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
       }}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
@@ -271,22 +277,45 @@ export function BotCommentView({
     >
       <Bot className={`w-4 h-4 mt-0.5 flex-shrink-0 ${markerTone.icon}`} />
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
-          <span className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide ${markerTone.chip}`}>
-            {markerLabel}
-          </span>
-        </div>
-        <div className={`text-sm ${markerTone.text}`}>
-          {displayContent}
-        </div>
-        {comment.timestamp && (
-          <div className={`flex items-center gap-1 mt-1 text-xs opacity-70 ${markerTone.icon}`}>
-            <Clock className="w-3 h-3" />
-            {formatRelativeTime(comment.timestamp)}
+        {variant === 'compact' ? (
+          <div className="flex items-center gap-2 min-w-0 w-full">
+            <span className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide flex-shrink-0 max-[640px]:hidden ${markerTone.chip}`}>
+              {markerLabel}
+            </span>
+            {!shouldHideBodyText && (
+              <span className={`text-sm ${markerTone.text} truncate`} title={displayContent}>
+                {displayContent}
+              </span>
+            )}
+            {comment.timestamp && (
+              <span className={`inline-flex items-center gap-1 text-[11px] opacity-70 flex-shrink-0 ${markerTone.icon}`}>
+                <Clock className="w-3 h-3" />
+                {formatRelativeTime(comment.timestamp)}
+              </span>
+            )}
           </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 mb-0.5">
+              <span className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide ${markerTone.chip}`}>
+                {markerLabel}
+              </span>
+            </div>
+            {!shouldHideBodyText && (
+              <div className={`text-sm ${markerTone.text}`}>
+                {displayContent}
+              </div>
+            )}
+            {comment.timestamp && (
+              <div className={`flex items-center gap-1 mt-1 text-xs opacity-70 ${markerTone.icon}`}>
+                <Clock className="w-3 h-3" />
+                {formatRelativeTime(comment.timestamp)}
+              </div>
+            )}
+          </>
         )}
       </div>
-      {actions && <div className="flex-shrink-0 ml-2">{actions}</div>}
+      {actions && <div className="flex-shrink-0 min-w-0 ml-2">{actions}</div>}
     </div>
   );
 }
@@ -459,7 +488,7 @@ export function enhanceDescriptionWithBot(description: string): {
       let combined = baseContent;
       if (trailing) {
         if (/^question$/i.test(baseContent) || parsed.markerType === 'question') {
-          combined = trailingQuestionText ? `Question: ${trailingQuestionText}` : 'Question';
+          combined = trailingQuestionText || 'Question';
         } else if (/^(digest|note|suggested|last_review)$/i.test(baseContent) || parsed.markerType !== 'generic') {
           combined = `${baseContent}: ${trailing}`;
         } else {
@@ -485,11 +514,10 @@ export function enhanceDescriptionWithBot(description: string): {
 
     const legacyMatch = line.match(questionLineRegex);
     if (!legacyMatch) return;
-    const label = (legacyMatch[1] || legacyMatch[2] || 'Question').trim();
     const questionText = (legacyMatch[3] || '').trim();
     if (questionText) {
       blockquoteComments.push({
-        content: `${label}: ${questionText}`,
+        content: questionText,
         markerType: 'question',
         source: 'blockquote',
         lineIndex: index,
