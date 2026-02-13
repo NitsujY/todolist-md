@@ -5,7 +5,7 @@ import remarkBreaks from 'remark-breaks';
 import { useSortable } from '@dnd-kit/sortable';
 import { useDndContext } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Plus, ChevronDown, ChevronRight, Calendar, AlignLeft, Copy, Check, Link2, Trash2, Bot, X } from 'lucide-react';
+import { GripVertical, Plus, ChevronDown, ChevronRight, Calendar, AlignLeft, Copy, Check, Link2, Trash2, X } from 'lucide-react';
 import { pluginRegistry } from '../plugins/pluginEngine.tsx';
 import type { TaskItemContext } from '../plugins/pluginEngine.tsx';
 import type { Task } from '../lib/MarkdownParser';
@@ -575,9 +575,6 @@ export function TaskItem({ task, onToggle, onUpdate, onUpdateDescription, onAnsw
   const inlineBotComment = extractInlineBotComment(task.text).comment;
   const rowBotBadgeComment = inlineBotComment || enhancedDescription.comments[0] || null;
   const inlineQuestionComment = inlineBotComment && isBotQuestion(inlineBotComment) ? inlineBotComment : null;
-  const hasBotQuestion =
-    enhancedDescription.comments.some((comment) => isBotQuestion(comment)) ||
-    (inlineBotComment ? isBotQuestion(inlineBotComment) : false);
 
   const handleCopy = async () => {
     const checkbox = task.completed ? '- [x] ' : '- [ ] ';
