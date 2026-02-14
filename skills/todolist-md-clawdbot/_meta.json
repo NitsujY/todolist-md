@@ -1,0 +1,8 @@
+{
+  "name": "todolist-md-clawdbot",
+  "description": "Operate on todolist-md Markdown todo files (Drive).",
+  "homepage": "https://github.com/NitsujY/todolist-md",
+  "openclaw": {
+    "emoji": "📝"
+  }
+}
