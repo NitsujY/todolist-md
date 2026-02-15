@@ -329,3 +329,27 @@ When the runner writes a `<!-- bot: last_review -->` line it will now include th
 `<!-- bot: last_review --> 2026-02-15T16:50Z root=<rootId> model=gpt-5-mini hash=be2b...`
 
 This makes it easy to see when a file was last updated by the bot and which model produced the suggestions. The runner only updates an existing `last_review` line; it will not add a new top-of-file header unless you explicitly allow that.
+
+
+## Authorization & required credentials
+
+Required environment variables (or equivalent files):
+
+- CLIENT_ID and CLIENT_SECRET — OAuth client credentials (from Google Cloud / gog client secret JSON).
+- REFRESH_TOKEN_FILE (or --authFile) — path to the saved OAuth refresh token JSON (default: /home/openclaw/.openclaw/.secrets/todolist_drive_oauth.json).
+
+First-run (one-time) authorization flow:
+
+1. Ensure the client secret JSON is present at `/home/openclaw/.openclaw/credentials/gog-client-secret.json` and is readable (chmod 600).
+2. Run the prepare command which will print an authorization URL (or follow the script's instructions):
+
+```bash
+node skills/todolist-md-clawdbot/scripts/todolist_drive_folder_agent.mjs   --folderId <rootFolderId>   --mode prepare   --requestOut /home/openclaw/.openclaw/workspace/outputs/todolist-md/llm_request.json   --authFile /home/openclaw/.openclaw/.secrets/todolist_drive_oauth.json
+```
+
+3. Open the printed URL in a browser, sign in with the Google account that owns the Drive folder, and approve scopes (the script requires the Drive scope: `https://www.googleapis.com/auth/drive`).
+4. The script will complete and save a refresh token to the `--authFile` path; ensure this file is moved to `/home/openclaw/.openclaw/.secrets/todolist_drive_oauth.json` and set `chmod 600`.
+
+Notes:
+- The runner uses the refresh token to obtain short-lived access tokens each run; do not store access tokens permanently. Keep the refresh token in `.secrets` and out of version control.
+- If you manage cron/systemd, inject CLIENT_ID/CLIENT_SECRET (or ensure the script reads the credentials file) into the job environment so automated runs can refresh tokens.
