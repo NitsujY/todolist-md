@@ -311,3 +311,13 @@ After the bot consumes the answer, archive it (preferred):
 - Always mark bot-written content with `<!-- bot: ... -->`.
 - Never delete/add lines inside an existing task item or description block.
 - Never mark tasks complete unless the user explicitly confirms.
+
+### Applied suggestions hashing
+
+To avoid re-processing files immediately after the bot writes suggestions, the runner now
+records a short SHA256 hash of the bot-suggested block it wrote (state.files[<fileId>].lastAppliedHash).
+On subsequent runs the prepare step will skip files whose current bot block hash matches the stored hash —
+only files with real content changes will be selected for re-analysis.
+
+This keeps the workflow simple: after you review and the bot applies suggestions, the file is considered
+up-to-date until a human edits it or the file metadata indicates an external change.
