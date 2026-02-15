@@ -88,7 +88,6 @@ function driveListFiles(folderId, accessToken) {
 }
 
 function syncFetch(url, opts) {
-  const { execFileSync } = require('node:child_process');
   const cmd = ['curl','-sS','-H', `Authorization: ${opts.headers.authorization}`, url];
   const out = execFileSync(cmd[0], cmd.slice(1), { encoding: 'utf8' });
   return out;
