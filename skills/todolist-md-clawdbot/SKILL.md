@@ -353,3 +353,8 @@ node skills/todolist-md-clawdbot/scripts/todolist_drive_folder_agent.mjs   --fol
 Notes:
 - The runner uses the refresh token to obtain short-lived access tokens each run; do not store access tokens permanently. Keep the refresh token in `.secrets` and out of version control.
 - If you manage cron/systemd, inject CLIENT_ID/CLIENT_SECRET (or ensure the script reads the credentials file) into the job environment so automated runs can refresh tokens.
+
+
+## Implementation note: upload method
+
+During development we found some environments reject certain Drive upload flows (multipart/resumable) while permitting direct file overwrite via PATCH to the upload endpoint. The runner now prefers a files.update PATCH with `uploadType=media&supportsAllDrives=true` when writing file content; this preserves the original fileId and avoids creating duplicates. The script still uses revision gating and compare-before-write before any upload.
