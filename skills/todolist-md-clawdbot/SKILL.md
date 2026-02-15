@@ -321,3 +321,11 @@ only files with real content changes will be selected for re-analysis.
 
 This keeps the workflow simple: after you review and the bot applies suggestions, the file is considered
 up-to-date until a human edits it or the file metadata indicates an external change.
+
+### last_review includes model & hash
+
+When the runner writes a `<!-- bot: last_review -->` line it will now include the model and a short SHA256 hash of the bot-suggested block, for example:
+
+`<!-- bot: last_review --> 2026-02-15T16:50Z root=<rootId> model=gpt-5-mini hash=be2b...`
+
+This makes it easy to see when a file was last updated by the bot and which model produced the suggestions. The runner only updates an existing `last_review` line; it will not add a new top-of-file header unless you explicitly allow that.
