@@ -77,6 +77,22 @@ function buildAuthUrl({ clientId, scopes }) {
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
+function driveListFiles(folderId, accessToken) {
+  const url = new URL('https://www.googleapis.com/drive/v3/files');
+  url.searchParams.set('q', `'${folderId}' in parents and trashed=false`);
+  url.searchParams.set('fields', 'files(id,name,mimeType,modifiedTime,headRevisionId,size)');
+  url.searchParams.set('pageSize','1000');
+  const res = syncFetch(url.toString(), { headers: { authorization: `Bearer ${accessToken}` } });
+  const json = JSON.parse(res);
+  return { files: json.files || [] };
+}
+
+function syncFetch(url, opts) {
+  const { execFileSync } = require('node:child_process');
+  const cmd = ['curl','-sS','-H', `Authorization: ${opts.headers.authorization}`, url];
+  const out = execFileSync(cmd[0], cmd.slice(1), { encoding: 'utf8' });
+  return out;
+}
 
 async function exchangeAuthCodeForTokens({ clientId, clientSecret, code }) {
   const res = await fetch('https://oauth2.googleapis.com/token', {
@@ -175,36 +191,6 @@ async function driveUpdateText({ fileId, accessToken, name, mimeType, text }) {
   return out;
 }
 
-function gogDriveLs(folderId) {
-  const gogBin = process.env.GOG_BIN || '/home/linuxbrew/.linuxbrew/bin/gog';
-  const envFile = process.env.GOG_ENV_FILE || '/home/openclaw/.openclaw/.secrets/gog.env';
-
-  let account = process.env.GOG_ACCOUNT || '';
-  let pw = process.env.GOG_KEYRING_PASSWORD || '';
-
-  if ((!account || !pw) && fs.existsSync(envFile)) {
-    const text = fs.readFileSync(envFile, 'utf8');
-    for (const line of text.split(/\r?\n/)) {
-      const m = line.match(/^\s*([A-Z0-9_]+)=(.*)\s*$/);
-      if (!m) continue;
-      const k = m[1];
-      let v = m[2];
-      v = v.replace(/^"|"$/g, '');
-      if (k === 'GOG_ACCOUNT' && !account) account = v;
-      if (k === 'GOG_KEYRING_PASSWORD' && !pw) pw = v;
-      if (k === 'GOG_BIN' && !process.env.GOG_BIN) process.env.GOG_BIN = v;
-    }
-  }
-
-  if (!account) throw new Error('missing GOG_ACCOUNT (or set default via gog auth manage, or provide /home/openclaw/.openclaw/.secrets/gog.env)');
-
-  const cmd = [
-    gogBin,
-    'drive','ls','--parent', folderId,'--json'
-  ];
-  const raw = execFileSync(cmd[0], cmd.slice(1), { encoding: 'utf8', env: Object.assign({}, process.env, { GOG_ACCOUNT: account, GOG_KEYRING_PASSWORD: pw }) });
-  return JSON.parse(raw);
-}
 
 function loadJsonOrDefault(p, def) {
   try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return def; }
@@ -325,7 +311,7 @@ async function main() {
     accessToken = await oauthAccessTokenFromRefresh({ refreshToken: managed.refresh_token, clientId, clientSecret });
   }
 
-  const listing = gogDriveLs(folderId);
+  const listing = driveListFiles(folderId, accessToken);
   const files = listing.files || listing.items || [];
 
   const state = loadJsonOrDefault(statePath, { files: {}, lastRunAtUtc: null });
