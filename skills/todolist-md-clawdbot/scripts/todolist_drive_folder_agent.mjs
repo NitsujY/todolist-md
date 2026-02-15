@@ -177,7 +177,7 @@ async function driveUpdateText({ fileId, accessToken, name, mimeType, text }) {
 
 function gogDriveLs(folderId) {
   const gogBin = process.env.GOG_BIN || '/home/linuxbrew/.linuxbrew/bin/gog';
-  const envFile = '/root/clawd/.secrets/gog.env';
+  const envFile = process.env.GOG_ENV_FILE || '/home/openclaw/.openclaw/.secrets/gog.env';
 
   let account = process.env.GOG_ACCOUNT || '';
   let pw = process.env.GOG_KEYRING_PASSWORD || '';
@@ -196,16 +196,13 @@ function gogDriveLs(folderId) {
     }
   }
 
-  if (!account) throw new Error('missing GOG_ACCOUNT (or set default via gog auth manage, or provide /root/clawd/.secrets/gog.env)');
+  if (!account) throw new Error('missing GOG_ACCOUNT (or set default via gog auth manage, or provide /home/openclaw/.openclaw/.secrets/gog.env)');
 
   const cmd = [
-    'sudo','-u','ubuntu','-H','env',
-    `GOG_ACCOUNT=${account}`,
-    `GOG_KEYRING_PASSWORD=${pw}`,
     gogBin,
     'drive','ls','--parent', folderId,'--json'
   ];
-  const raw = execFileSync(cmd[0], cmd.slice(1), { encoding: 'utf8' });
+  const raw = execFileSync(cmd[0], cmd.slice(1), { encoding: 'utf8', env: Object.assign({}, process.env, { GOG_ACCOUNT: account, GOG_KEYRING_PASSWORD: pw }) });
   return JSON.parse(raw);
 }
 
@@ -310,7 +307,7 @@ async function main() {
 
   const mode = args.mode || process.env.MODE || (suggestionsIn ? 'apply' : 'prepare');
 
-  const refreshTokenFile = args.refreshTokenFile || process.env.REFRESH_TOKEN_FILE || '/root/clawd/.secrets/todolist_drive_oauth.json';
+  const refreshTokenFile = args.refreshTokenFile || process.env.REFRESH_TOKEN_FILE || process.env.REFRESH_TOKEN_PATH || '/home/openclaw/.openclaw/.secrets/todolist_drive_oauth.json';
   const clientId = args.clientId || process.env.CLIENT_ID;
   const clientSecret = args.clientSecret || process.env.CLIENT_SECRET;
   const authCode = args.authCode || process.env.AUTH_CODE;
