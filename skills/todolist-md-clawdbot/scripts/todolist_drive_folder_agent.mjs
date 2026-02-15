@@ -378,7 +378,7 @@ async function main() {
       folderId,
       createdAtUtc: new Date().toISOString(),
       instructions: {
-        model: 'gpt4o',
+        model: 'gpt-5-mini',
         outputFormat: 'markdown_list_only',
         rules: [
           'Return ONLY Markdown list items and optional indented blockquotes.',
