@@ -358,3 +358,8 @@ Notes:
 ## Implementation note: upload method
 
 During development we found some environments reject certain Drive upload flows (multipart/resumable) while permitting direct file overwrite via PATCH to the upload endpoint. The runner now prefers a files.update PATCH with `uploadType=media&supportsAllDrives=true` when writing file content; this preserves the original fileId and avoids creating duplicates. The script still uses revision gating and compare-before-write before any upload.
+
+
+## Notes about last_review
+- Runner writes a `<!-- bot: last_review -->` header containing `model` and a `suggestions_sha256` after successful apply.
+- The runner will compare the generated suggestions SHA256 to the file's `last_review` hash and skip apply when they match to avoid redundant writes.
