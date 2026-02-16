@@ -224,8 +224,17 @@ function ensureBotSuggestedSection(mdText, sectionTitle, botBlock) {
     for (let i = 0; i < lines.length; i++) {
       out.push(lines[i]);
       if (lines[i] === titleLine) {
-        // insert only human-readable lines (preserve any existing content structure)
-        out.push(...botLines);
+        // insert human-readable lines; for each checklist line, also append a single-line machine comment
+        for (const ln of botLines) {
+          out.push(ln);
+          const m = ln.trim();
+          if (m.startsWith('- ')) {
+            // create an inline subtask marker with minimal fields
+            const id = 'sub:' + Math.random().toString(36).slice(2,10);
+            const obj = { id, original_line: m.replace(/^[-\s]+/, ''), title: '', estimate_hours: null, assignee: null, createdAtUtc: new Date().toISOString(), source_model: process.env.SUGGEST_MODEL || 'gpt-5-mini', status: 'suggested' };
+            out.push(`<!-- bot: subtask ${JSON.stringify(obj)} -->`);
+          }
+        }
       }
     }
     return out.join('\n') + (mdText.endsWith('\n') ? '\n' : '');
@@ -233,7 +242,17 @@ function ensureBotSuggestedSection(mdText, sectionTitle, botBlock) {
 
   // If the section title doesn't exist, append the botLines at the end (no header/marker)
   const sep = mdText.endsWith('\n') ? '' : '\n';
-  return mdText + sep + botLines.join('\n') + (botLines.length ? '\n' : '');
+  const appended = [];
+  for (const ln of botLines) {
+    appended.push(ln);
+    const m = ln.trim();
+    if (m.startsWith('- ')) {
+      const id = 'sub:' + Math.random().toString(36).slice(2,10);
+      const obj = { id, original_line: m.replace(/^[-\s]+/, ''), title: '', estimate_hours: null, assignee: null, createdAtUtc: new Date().toISOString(), source_model: process.env.SUGGEST_MODEL || 'gpt-5-mini', status: 'suggested' };
+      appended.push(`<!-- bot: subtask ${JSON.stringify(obj)} -->`);
+    }
+  }
+  return mdText + sep + appended.join('\n') + (appended.length ? '\n' : '');
 }
 
 function sanitizeBotBlock(text, maxChars = 1200) {
