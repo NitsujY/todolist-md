@@ -211,47 +211,29 @@ function extractOpenTasks(mdText, maxLines = 120) {
 }
 
 function ensureBotSuggestedSection(mdText, sectionTitle, botBlock) {
-  const marker = '<!-- bot: suggested -->';
+  // Modified: do NOT insert a dedicated <!-- bot: suggested --> block or section header.
+  // Instead, append only the human-readable botBlock (as quoted lines) at the end of the file
+  // or under the sectionTitle if it exists — without any machine-readable markers.
   const titleLine = `## ${sectionTitle}`;
+  const botLines = botBlock.split(/\r?\n/).filter(Boolean);
 
   if (mdText.includes(titleLine)) {
-    const idx = mdText.indexOf(titleLine);
-    const after = mdText.slice(idx);
-
-    if (after.includes(marker)) {
-      const start = mdText.indexOf(marker, idx);
-      const before = mdText.slice(0, start);
-      const rest = mdText.slice(start);
-      const restLines = rest.split(/\r?\n/);
-
-      const kept = [];
-      kept.push(marker);
-      const botLines = botBlock.split(/\r?\n/).filter(Boolean);
-      kept.push(...botLines);
-
-      let i = 1;
-      for (; i < restLines.length; i++) {
-        const ln = restLines[i];
-        if (ln.startsWith('## ')) break;
-      }
-      const tail = restLines.slice(i).join('\n');
-      return before + kept.join('\n') + (tail ? '\n' + tail : '') + (mdText.endsWith('\n') ? '\n' : '');
-    }
-
+    // find the title and insert the botLines directly after it (no marker)
     const lines = mdText.split(/\r?\n/);
     const out = [];
     for (let i = 0; i < lines.length; i++) {
       out.push(lines[i]);
       if (lines[i] === titleLine) {
-        out.push(marker);
-        out.push(...botBlock.split(/\r?\n/).filter(Boolean));
+        // insert only human-readable lines (preserve any existing content structure)
+        out.push(...botLines);
       }
     }
     return out.join('\n') + (mdText.endsWith('\n') ? '\n' : '');
   }
 
+  // If the section title doesn't exist, append the botLines at the end (no header/marker)
   const sep = mdText.endsWith('\n') ? '' : '\n';
-  return mdText + sep + `\n${titleLine}\n${marker}\n${botBlock.trim()}\n`;
+  return mdText + sep + botLines.join('\n') + (botLines.length ? '\n' : '');
 }
 
 function sanitizeBotBlock(text, maxChars = 1200) {
