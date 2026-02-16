@@ -339,6 +339,24 @@ Implementation steps (high level):
 4. Reject flow: mark or remove the marker and record the decision in outputs.
 5. Tests: run end-to-end on a sample file (e.g., vyond.md) with dry-run preview and user approval before enabling automated scheduling.
 
+### Auto‑apply policy (OPTIONAL: enable at your own risk)
+
+You can configure the runner to automatically apply suggested changes to Drive files without manual approval. This is optional and should be used only after you trust the prompt templates, model behaviour, and have robust revision gating and backups in place.
+
+Rules when auto‑apply is enabled:
+- Auto‑apply must be explicitly enabled with an environment flag or command‑line switch (e.g. `--autoApply` or env AUTO_APPLY=true). The default remains manual approval required.
+- The runner will only auto‑apply suggestions that meet a strict confidence threshold (default: 0.90). Only items with action_recommendation in {"note","follow_up","breakdown"} and confidence >= threshold are eligible. Items marked as "qa" or "refine" (clarifying questions) are never auto‑applied.
+- Subtask insertion will use `<!-- bot: subtask ... -->` markers by default; the runner may expand to checklist lines only when `--expandSubtasks` is explicitly set and the item confidence >= 0.95.
+- Auto‑apply will always perform revision gating (headRevisionId) and compare‑before‑write. If the remote file changed since download, the auto‑apply will abort for that file and log a conflict entry.
+- A complete backup snapshot of the file will be created under `outputs/todolist-md/backups/` before any auto write; snapshots are named `<fileId>.<timestamp>.md`.
+- All auto actions are logged to `/home/openclaw/.openclaw/logs/todolist-md-job.log` with one-line entries: `<UTC-ISO> fileId action result details`.
+- Auto‑apply can be limited to specific file patterns (via `.todolist-md.config.json` include/exclude) and to files opted‑in with `<!-- bot: ai_enabled --> true` per file.
+
+Safety notes:
+- Never enable auto‑apply for high‑risk repositories or files that contain production scripts, credentials, or legal text without manual review.
+- Keep refresh token and client credentials secure; cron jobs that auto‑apply should run under a dedicated service account with least privilege.
+- If you enable auto‑apply, monitor logs for the first few runs and consider running in a staging folder first.
+
 ## Summaries
 
 - Summarize in chat for fast feedback.
