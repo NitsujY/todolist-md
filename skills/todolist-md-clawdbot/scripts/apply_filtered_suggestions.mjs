@@ -51,9 +51,21 @@ async function main(){
     process.exit(1)
   }
   const sugg = JSON.parse(fs.readFileSync(SUGGESTIONS_PATH,'utf8'))
-  const fsug = sugg.fileSuggestions[0]
-  const items = fsug.suggestions || []
-  const fileId = fsug.fileId
+  let items = []
+  let fileId = null
+  if(sugg.fileSuggestions && sugg.fileSuggestions[0]){
+    const fsug = sugg.fileSuggestions[0]
+    items = fsug.suggestions || fsug.filtered_and_normalized_suggestions || []
+    fileId = fsug.fileId || fsug.fileId
+  } else if(sugg.suggestions || sugg.filtered_and_normalized_suggestions){
+    items = sugg.suggestions || sugg.filtered_and_normalized_suggestions || []
+    fileId = sugg.fileId || (items[0] && items[0].fileId) || null
+  } else if(sugg.fileId && sugg.suggestions){
+    items = sugg.suggestions; fileId = sugg.fileId
+  } else {
+    console.error('unrecognized suggestions schema')
+    process.exit(1)
+  }
   const access = await getAccessToken()
   const headers = {authorization:`Bearer ${access}`}
   const metaR = await request(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,modifiedTime,headRevisionId`,{headers})

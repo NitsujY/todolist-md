@@ -282,6 +282,14 @@ function sanitizeBotBlock(text, maxChars = 1200) {
       kept.push(commentLines.join('\n'));
       continue;
     }
+    // Preserve plain human-readable suggestion lines (single-line sentences) so short notes are not stripped.
+    // Accept lines that start with an alphanumeric character and contain at least one space (simple heuristic for sentences),
+    // and are not HTML comments or other markup.
+    if (/^[A-Za-z0-9].*/.test(ln) && /\s+/.test(ln) && !/^<!--/.test(ln) && ln.length <= 1000) {
+      kept.push(ln);
+      i++;
+      continue;
+    }
     i++;
   }
   const out = kept.join('\n').trim();
