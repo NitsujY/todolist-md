@@ -255,11 +255,34 @@ function ensureBotSuggestedSection(mdText, sectionTitle, botBlock) {
 }
 
 function sanitizeBotBlock(text, maxChars = 1200) {
-  // Ensure we only write markdown list items / blockquotes; keep it short.
-  const lines = String(text || '').split(/\r?\n/);
+  // Ensure we only write safe markdown list items / blockquotes, but also
+  // preserve a machine-readable bot analysis comment block if present.
+  const src = String(text || '');
+  const lines = src.split(/\r?\n/);
   const kept = [];
-  for (const ln of lines) {
-    if (ln.startsWith('- ') || ln.startsWith('  >') || ln.startsWith('> ')) kept.push(ln);
+  let i = 0;
+  while (i < lines.length) {
+    const ln = lines[i];
+    // Preserve checklist items and blockquotes
+    if (ln.startsWith('- ') || ln.startsWith('  >') || ln.startsWith('> ')) {
+      kept.push(ln);
+      i++;
+      continue;
+    }
+    // Preserve a <!-- bot: analysis ... --> HTML comment block (single-line or multi-line until -->)
+    if (/^<!--\s*bot:\s*analysis\b/.test(ln)) {
+      // collect the whole comment block
+      const commentLines = [ln];
+      i++;
+      while (i < lines.length && !/-->\s*$/.test(lines[i])) {
+        commentLines.push(lines[i]);
+        i++;
+      }
+      if (i < lines.length) { commentLines.push(lines[i]); i++; }
+      kept.push(commentLines.join('\n'));
+      continue;
+    }
+    i++;
   }
   const out = kept.join('\n').trim();
   return out.slice(0, maxChars);
