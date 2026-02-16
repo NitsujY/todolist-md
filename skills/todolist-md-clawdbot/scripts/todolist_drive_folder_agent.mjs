@@ -224,15 +224,17 @@ function ensureBotSuggestedSection(mdText, sectionTitle, botBlock) {
     for (let i = 0; i < lines.length; i++) {
       out.push(lines[i]);
       if (lines[i] === titleLine) {
-        // insert human-readable lines; for each checklist line, also append a single-line machine comment
+        // insert human-readable lines as blockquotes; for each checklist line, also append a blockquote machine comment
         for (const ln of botLines) {
-          out.push(ln);
           const m = ln.trim();
           if (m.startsWith('- ')) {
-            // create an inline subtask marker with minimal fields
+            // insert checklist as blockquote so it is not an actionable task
+            out.push('> ' + ln);
             const id = 'sub:' + Math.random().toString(36).slice(2,10);
             const obj = { id, original_line: m.replace(/^[-\s]+/, ''), title: '', estimate_hours: null, assignee: null, createdAtUtc: new Date().toISOString(), source_model: process.env.SUGGEST_MODEL || 'gpt-5-mini', status: 'suggested' };
-            out.push(`<!-- bot: subtask ${JSON.stringify(obj)} -->`);
+            out.push('> ' + `<!-- bot: subtask ${JSON.stringify(obj)} -->`);
+          } else {
+            out.push('> ' + ln);
           }
         }
       }
