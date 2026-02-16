@@ -259,6 +259,86 @@ Append entries like:
   A: integration
 ```
 
+### Inline bot annotations
+
+When the agent inserts inline suggestions near specific tasks we use a small human-facing blockquote followed by a machine-readable HTML comment. Example:
+
+```md
+- [ ] Fix login bug
+  > <!-- bot: note --> Suggestion: reproduce locally and attach logs
+<!-- bot: analysis-item {"original_line":"Fix login bug","suggestion":"Reproduce, collect logs","priority":"high","assignee":"frontend"} -->
+```
+
+Guidelines:
+- Do not modify the original task line (no auto-complete or content replacement of the task itself).
+- Prefer a short blockquote human hint (one line) and a single-line machine comment for parsing.
+- Use `<!-- bot:note -->` (or `<!-- bot: question -->`) for human-facing hints and `<!-- bot: analysis-item ... -->` for machine parsing.
+- Use headRevisionId gating and compare-before-write to avoid overwriting concurrent edits.
+- Keep human notes short; store full structured analysis in outputs/ or Drive file metadata if you need larger payloads.
+
+This pattern balances human readability with machine-readability while minimising file churn.
+
+### Bot-subtask marker (inline, actionable suggestions)
+
+To make bot-suggested subtasks actionable in a UI (Approve / Reject / Edit) we introduce a compact, machine-readable inline marker `<!-- bot: subtask {...} -->` which the runner and UI can parse without polluting task text.
+
+Marker intent and rules:
+- Purpose: represent a bot-suggested subtask that the UI can present to users as an actionable suggestion. The original task line is never modified by suggestion creation; subtasks are proposed via the comment marker.
+- Visibility: include a short human-facing hint as a single-line blockquote above the marker (use `<!-- bot: note -->` for hints). Keep the human hint concise (one line).
+- Machine marker: a single-line HTML comment containing a small JSON object. Keep the JSON compact to minimise file noise.
+
+Required fields (minimal):
+- id: unique id for the suggestion (e.g. `sub:6ad9b3e9` or a UUID)
+- original_line: the exact or representative task text the suggestion references
+- title: short subtask title
+- createdAtUtc: ISO timestamp
+- source_model: model name that produced the suggestion (e.g. `gpt-5-mini`)
+- status: `suggested` | `approved` | `rejected` (default `suggested`)
+
+Optional fields:
+- estimate_hours
+- assignee
+- parent_fileId
+- parent_line_hash (to detect moved/changed parent)
+- suggestions_sha (reference to the overall suggestions SHA)
+
+Example written embedding (human hint + machine marker):
+
+```md
+- [ ] dead letter queue for deep video copy #ben
+  > <!-- bot: note --> Suggestion: design DLQ and alerting; approve to add subtask.
+<!-- bot: subtask {"id":"sub:6ad9b3e9","original_line":"dead letter queue for deep video copy #ben","title":"Document DLQ failure scenarios","estimate_hours":1.0,"assignee":"Ben","createdAtUtc":"2026-02-16T06:02:37Z","source_model":"gpt-5-mini","status":"suggested"} -->
+```
+
+Recommended runner & UI behaviour:
+- Discovery: UI or agent scans for `<!-- bot: subtask ... -->` markers and lists them in a "Bot suggestions" panel with surrounding context (task line and any human hint blockquote).
+- Actions:
+  - Approve: the runner inserts a real checklist subtask under the parent task (line-stable insertion), updates the subtask marker's `status` to `approved` and sets `approvedBy` / `approvedAtUtc` in the marker, and updates `last_review` / outputs state. Use headRevisionId gating and compare-before-write.
+  - Reject: the runner marks `status` = `rejected` (or removes the marker) and records the action in outputs for audit.
+  - Edit: the UI can modify the subtask marker before approve; the runner should accept updated marker content and then apply on Approve.
+- Idempotency: subtask `id` prevents duplicate insertion; runner should check state or file content to avoid re-adding an already-approved subtask.
+- Storage: persist a copy of the full suggested subtask JSON in `outputs/todolist-md/subtasks/<id>.json` for auditing and UI history. Optionally store accepted ids in Drive file.appProperties to avoid file noise.
+
+Safety & UX notes:
+- Never auto-approve suggestions unless a policy explicitly allows it (e.g., very high confidence threshold). Default: human approval required.
+- Keep the human hint short to avoid visual clutter; keep the machine marker minimal and single-line.
+- For trivial reminder-style tasks (e.g., "Call Alice at 3pm" or short reminders with no actionable breakdown), it's acceptable for the runner to leave no comment or machine analysis — treat these as "no-comment" items to avoid noise. The runner may still record them in outputs/state for auditing, but should not insert bot markers unless there is added value (clarifying question, subtasks, or follow-up).
+- Only split a task into subtasks when doing so meaningfully reduces human work or when the subtasks are independently actionable (can be executed or assigned individually). Avoid aggressive pre-emptive splitting. Criteria the runner should use before splitting:
+  - The suggestion contains multiple distinct actionable steps with separate owners/effort estimates, or
+  - The runner's confidence >= 0.90 that the subtasks are correct and require no human clarification, or
+  - The subtasks are automatable by an agent (e.g., create ticket, provision resource) and the auto-action is permitted by policy.
+  If none of the above hold, prefer to emit a short human hint (<!-- bot: note -->) or a clarifying question (<!-- bot: question -->) rather than creating subtasks.
+- When generating subtasks, prefer creating `<!-- bot: subtask ... -->` markers (not expanded checklist) so the UI can present them for approval before insertion. Do not auto-insert expanded checklists unless explicitly approved.
+- Always perform revision gating (headRevisionId) before any write; if the file changed, abort the apply and report back for manual reconciliation.
+- Provide a rollback path: keep snapshots of removed/changed markers in `outputs/` to ease reverting.
+
+Implementation steps (high level):
+1. Parser: extend the runner to parse `<!-- bot: subtask ... -->` markers during prepare/apply and export them to `outputs/`.
+2. UI: present the suggestions, allow Approve/Reject/Edit and send commands back to the agent (sessions_send or an API endpoint).
+3. Approve flow: the agent downloads the current file, checks headRevisionId, inserts approved checklist lines under the parent task, updates the subtask marker to `approved` (or adds approved metadata), writes outputs and updates `last_review`.
+4. Reject flow: mark or remove the marker and record the decision in outputs.
+5. Tests: run end-to-end on a sample file (e.g., vyond.md) with dry-run preview and user approval before enabling automated scheduling.
+
 ## Summaries
 
 - Summarize in chat for fast feedback.
