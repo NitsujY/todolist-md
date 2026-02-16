@@ -328,6 +328,10 @@ Safety & UX notes:
   - The runner's confidence >= 0.90 that the subtasks are correct and require no human clarification, or
   - The subtasks are automatable by an agent (e.g., create ticket, provision resource) and the auto-action is permitted by policy.
   If none of the above hold, prefer to emit a short human hint (<!-- bot: note -->) or a clarifying question (<!-- bot: question -->) rather than creating subtasks.
+- Filter policy (applied before creating subtask markers):
+  - Similarity check: compute normalized similarity between original line and suggested title (default threshold = 0.85). If similarity >= threshold, do not create a subtask (record as skip_similar) — emit a short human hint or record in outputs/state instead.
+  - Actionability check: require the suggested title to look actionable (contain/ start with verbs like create, implement, open, contact, draft, request, schedule, setup, configure, test, verify, follow). If not actionable, do not create a subtask (record as skip_not_actionable) and instead emit a clarifying question or note.
+  - Configurable: threshold and verb list are configurable via environment variables (SUGGEST_SIM_THRESHOLD, SUGGEST_ACTION_VERBS) so you can fine-tune behaviour.
 - When generating subtasks, prefer creating `<!-- bot: subtask ... -->` markers (not expanded checklist) so the UI can present them for approval before insertion. Do not auto-insert expanded checklists unless explicitly approved.
 - Always perform revision gating (headRevisionId) before any write; if the file changed, abort the apply and report back for manual reconciliation.
 - Provide a rollback path: keep snapshots of removed/changed markers in `outputs/` to ease reverting.
