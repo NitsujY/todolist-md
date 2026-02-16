@@ -1,0 +1,36 @@
+{
+  "schema": "todolist-md.llm_request.v1",
+  "stage": "plan",
+  "runId": "<dynamic-iso-time>",
+  "folderId": "fixture",
+  "instructions": {
+    "model": "gpt-5-mini",
+    "outputFormat": "markdown_list_only",
+    "rules": [
+      "Return only markdown checklist lines and optional blockquotes.",
+      "Do not mark tasks complete."
+    ]
+  },
+  "items": [
+    {
+      "fileId": "f1",
+      "name": "vyond.md",
+      "sectionTitle": "Tasks (bot-suggested)",
+      "openTasks": "- [ ] Draft launch email #marketing due:2026-02-20\n- [ ] Prepare demo script #product",
+      "hint": {
+        "modifiedTime": "2026-02-16T10:00:00Z",
+        "size": "210"
+      }
+    },
+    {
+      "fileId": "f2",
+      "name": "meeting-notes.md",
+      "sectionTitle": "Tasks (bot-suggested)",
+      "openTasks": "- [ ] Follow up with vendor #ops",
+      "hint": {
+        "modifiedTime": "2026-02-16T09:00:00Z",
+        "size": "120"
+      }
+    }
+  ]
+}

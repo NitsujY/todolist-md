@@ -109,22 +109,18 @@ The agent should only review files containing that marker.
 - For each reviewed file, update (not append) the top-of-file header line:
   - `<!-- bot: last_review --> <ISO_UTC> root=<rootFolderId> model=<model>`
 
-### Reference script (Google Drive + gog)
-If you use **Google Drive** as storage, gog CLI flags matter. In gog v0.9.0+:
-- list folder: `gog drive ls --parent <folderId> --json`
-- download: `gog drive download <fileId> --out <path>`
-- run gog as `ubuntu` and download to `/tmp` (because `/root` is typically `700`)
+### Reference script (two-stage runner)
+Canonical runner:
+- `scripts/todolist_skill_runner.mjs`
 
-Included helper scripts:
-- `skills/todolist-md-clawdbot/scripts/todolist_drive_folder_agent.mjs`
-  - **single script for everything** (Drive folder runner): lists all `.md` under a folder, detects changes via state file, downloads only changed files, and writes back a `<!-- bot: suggested -->` block under a dedicated section title.
-  - uses Drive API `files.update` to overwrite-update the same `fileId` (no duplicates).
-  - includes a revision gate (headRevisionId) to avoid overwriting while you edit in Chrome.
-  - Managed OAuth mode (recommended): stores its own refresh token file; first run prints an auth URL, you approve in browser, then rerun with `--authCode <CODE>`.
-  - **minimum-token design**: does not call LLM unless a file changed, and should send only extracted open tasks (not full file).
+Runner scope:
+- Uses exactly 2 stages: `plan` and `write`
+- Default workflow is fixture-first local testing before any production rollout
+- Write behavior is inline under task descriptions (no dedicated bot section creation)
 
-- `skills/todolist-md-clawdbot/scripts/todolist_agent_entrypoint.mjs`
-  - single-file helper (useful for debugging): download by fileId + overwrite-update
+Current command presets:
+- `npm run skill:plan:fixture`
+- `npm run skill:write:fixture`
 
 Example:
 ```md
@@ -139,11 +135,11 @@ Example:
 - `<!-- bot: digest -->` for summaries/digests
 - `<!-- bot: note -->` for short audit notes (optional)
 
-## LLM handoff (prepare/apply) — minimum-token workflow
+## LLM handoff (plan/write) — minimum-token workflow
 
 When you want LLM help but must keep Drive as the source of truth (and keep costs low), use the **two-stage** flow:
 
-### Stage 1: prepare
+### Stage 1: plan
 Goal: generate a compact JSON request for the OpenClaw agent runtime (LLM), without calling any LLM from the Node script.
 
 What happens:
@@ -153,25 +149,22 @@ What happens:
 4) Extract only open tasks (`- [ ] ...`, max N lines)
 5) Write `llm_request.json`
 
-Command example (single file):
+Command example:
 ```bash
-node skills/todolist-md-clawdbot/scripts/todolist_drive_folder_agent.mjs \
-  --folderId <rootFolderId> \
-  --onlyName vyond.md \
-  --mode prepare \
-  --requestOut outputs/todolist-md/vyond_llm_request.json
+node scripts/todolist_skill_runner.mjs plan \
+  --source fixture \
+  --fixture fixtures/todolist-md/input \
+  --state outputs/todolist-md/folder_state.json \
+  --requestOut outputs/todolist-md/llm_request.json
 ```
 
-### Stage 2: apply
-Goal: take a suggestions JSON (produced by the agent runtime) and write it back **only** to a dedicated bot section.
+### Stage 2: write
+Goal: take a suggestions JSON (produced by the agent runtime) and write it back **inline** under the matched task.
 
 Rules:
-- Update only under:
-  - `## Tasks (bot-suggested)`
-  - `<!-- bot: suggested -->`
+- Update inline under matched task descriptions with bot markers.
 - Never mark tasks complete.
-- Use Drive API overwrite update by `fileId` (no duplicates).
-- Use a revision gate (`headRevisionId`) to avoid overwriting while you edit in Chrome.
+- Skip duplicate insertion when the same marker line already exists near the task.
 
 Suggestions JSON shape:
 ```json
@@ -181,7 +174,8 @@ Suggestions JSON shape:
     {
       "fileId": "...",
       "name": "vyond.md",
-      "suggested_markdown": "- [ ] ...\n  > <!-- bot: note --> ..."
+      "target_task": "Deploy v2.0 to production",
+      "suggested_markdown": "- [ ] ...\n> <!-- bot: note --> ...\n> <!-- bot: question --> ..."
     }
   ]
 }
@@ -189,10 +183,11 @@ Suggestions JSON shape:
 
 Command example:
 ```bash
-node skills/todolist-md-clawdbot/scripts/todolist_drive_folder_agent.mjs \
-  --folderId <rootFolderId> \
-  --mode apply \
-  --suggestionsIn outputs/todolist-md/vyond_llm_suggestions.json
+node scripts/todolist_skill_runner.mjs write \
+  --source fixture \
+  --fixture fixtures/todolist-md/input \
+  --suggestionsIn fixtures/todolist-md/input/llm_suggestions_for_apply.json \
+  --outDir outputs/todolist-md/write
 ```
 
 ### Why this saves tokens
@@ -202,15 +197,16 @@ Example: if a folder has 50 Markdown files, but only 1 changed:
 
 ## Write-back patterns
 
-### Bot-suggested tasks
+### Inline bot suggestions (current default)
 
-Put bot-generated tasks under a dedicated section so humans can review before adopting.
+Write bot-generated guidance directly under the matched task as blockquote lines.
 
 ```md
-## Tasks (bot-suggested)
-
-<!-- bot: suggested -->
-- [ ] Add a “Bot Log” section
+- [ ] Add release checklist #ops
+  > <!-- bot: suggested --> Verify staging smoke tests before prod deploy
+  > <!-- bot: note --> If staging fails, attach logs in the task details
+  > <!-- bot: question --> Who is the deploy approver today?
+  > <!-- bot: digest --> Next action: assign approver and lock deploy window
 ```
 
 ### In-file Q/A (detail blockquote, line-stable)
@@ -337,7 +333,7 @@ Safety & UX notes:
 - Provide a rollback path: keep snapshots of removed/changed markers in `outputs/` to ease reverting.
 
 Implementation steps (high level):
-1. Parser: extend the runner to parse `<!-- bot: subtask ... -->` markers during prepare/apply and export them to `outputs/`.
+1. Parser: extend the runner to parse `<!-- bot: subtask ... -->` markers during plan/write and export them to `outputs/`.
 2. UI: present the suggestions, allow Approve/Reject/Edit and send commands back to the agent (sessions_send or an API endpoint).
 3. Approve flow: the agent downloads the current file, checks headRevisionId, inserts approved checklist lines under the parent task, updates the subtask marker to `approved` (or adds approved metadata), writes outputs and updates `last_review`.
 4. Reject flow: mark or remove the marker and record the decision in outputs.
@@ -379,10 +375,6 @@ Start state:
 
 - [ ] Deploy v2.0 to production #backend due:2026-02-05
   > Runbook: docs/deploy.md
-
-## Tasks (bot-suggested)
-<!-- bot: suggested -->
-- [ ] (suggested) Add a “Bot Log” section
 ```
 
 Bot asks a clarifying question (in-file):
@@ -417,8 +409,8 @@ After the bot consumes the answer, archive it (preferred):
 ### Applied suggestions hashing
 
 To avoid re-processing files immediately after the bot writes suggestions, the runner now
-records a short SHA256 hash of the bot-suggested block it wrote (state.files[<fileId>].lastAppliedHash).
-On subsequent runs the prepare step will skip files whose current bot block hash matches the stored hash —
+records a short SHA256 hash of the bot-suggested content it wrote (state.files[<fileId>].lastAppliedHash).
+On subsequent runs the plan step will skip files whose current suggestion hash matches the stored hash —
 only files with real content changes will be selected for re-analysis.
 
 This keeps the workflow simple: after you review and the bot applies suggestions, the file is considered
@@ -433,33 +425,36 @@ When the runner writes a `<!-- bot: last_review -->` line it will now include th
 This makes it easy to see when a file was last updated by the bot and which model produced the suggestions. The runner only updates an existing `last_review` line; it will not add a new top-of-file header unless you explicitly allow that.
 
 
-## Authorization & required credentials
+## Local fixture workflow (recommended)
 
-Required environment variables (or equivalent files):
-
-- CLIENT_ID and CLIENT_SECRET — OAuth client credentials (from Google Cloud / gog client secret JSON).
-- REFRESH_TOKEN_FILE (or --authFile) — path to the saved OAuth refresh token JSON (default: /home/openclaw/.openclaw/.secrets/todolist_drive_oauth.json).
-
-First-run (one-time) authorization flow:
-
-1. Ensure the client secret JSON is present at `/home/openclaw/.openclaw/credentials/gog-client-secret.json` and is readable (chmod 600).
-2. Run the prepare command which will print an authorization URL (or follow the script's instructions):
+Use local fixtures before enabling any remote connector:
 
 ```bash
-node skills/todolist-md-clawdbot/scripts/todolist_drive_folder_agent.mjs   --folderId <rootFolderId>   --mode prepare   --requestOut /home/openclaw/.openclaw/workspace/outputs/todolist-md/llm_request.json   --authFile /home/openclaw/.openclaw/.secrets/todolist_drive_oauth.json
+node scripts/todolist_skill_runner.mjs plan \
+  --source fixture \
+  --fixture fixtures/todolist-md/input \
+  --state outputs/todolist-md/folder_state.json \
+  --requestOut outputs/todolist-md/llm_request.json
+
+node scripts/todolist_skill_runner.mjs write \
+  --source fixture \
+  --fixture fixtures/todolist-md/input \
+  --suggestionsIn fixtures/todolist-md/input/llm_suggestions_for_apply.json \
+  --outDir outputs/todolist-md/write
 ```
 
-3. Open the printed URL in a browser, sign in with the Google account that owns the Drive folder, and approve scopes (the script requires the Drive scope: `https://www.googleapis.com/auth/drive`).
-4. The script will complete and save a refresh token to the `--authFile` path; ensure this file is moved to `/home/openclaw/.openclaw/.secrets/todolist_drive_oauth.json` and set `chmod 600`.
-
-Notes:
-- The runner uses the refresh token to obtain short-lived access tokens each run; do not store access tokens permanently. Keep the refresh token in `.secrets` and out of version control.
-- If you manage cron/systemd, inject CLIENT_ID/CLIENT_SECRET (or ensure the script reads the credentials file) into the job environment so automated runs can refresh tokens.
+Expected files:
+- `outputs/todolist-md/llm_request.json`
+- `outputs/todolist-md/write/<fileId>.md`
 
 
-## Implementation note: upload method
+## Remote connector note
 
-During development we found some environments reject certain Drive upload flows (multipart/resumable) while permitting direct file overwrite via PATCH to the upload endpoint. The runner now prefers a files.update PATCH with `uploadType=media&supportsAllDrives=true` when writing file content; this preserves the original fileId and avoids creating duplicates. The script still uses revision gating and compare-before-write before any upload.
+The current canonical script is fixture-first (`--source fixture`).
+If you add a remote connector later (Drive/S3/local-folder), keep these rules:
+- preserve stable file identity keys
+- revision-gate before write
+- compare-before-write and backup snapshots
 
 
 ## Notes about last_review

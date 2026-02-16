@@ -140,6 +140,43 @@ Because tasks live in Markdown, this project is a good fit for external automati
 
 Full test fixture (markers + conventions): `texture/bot-full-example.md`.
 
+### Simplified skill workflow (2 stages)
+
+Use one runner with only two stages:
+
+1. `plan` — read changed Markdown files and emit `llm_request.json`
+2. `write` — read approved suggestions and write inline under matching tasks
+
+Local fixture test commands:
+
+```bash
+npm run skill:plan:fixture
+npm run skill:write:fixture
+```
+
+Input fixture folder:
+
+- `fixtures/todolist-md/input/drive_list.json`
+- `fixtures/todolist-md/input/files/*.md`
+- `fixtures/todolist-md/input/llm_suggestions_for_apply.json`
+
+Expected output files:
+
+- `outputs/todolist-md/llm_request.json` (from `plan`)
+- `outputs/todolist-md/write/f1.md` and `outputs/todolist-md/write/f2.md` (from `write`)
+
+Inline write behavior:
+
+- No new markdown section is created.
+- Suggestions are added as blockquote lines directly under a matched task line.
+- Marker format: `> <!-- bot: suggested --> ...`
+
+Reference expected fixtures:
+
+- `fixtures/todolist-md/expected/plan.llm_request.json`
+- `fixtures/todolist-md/expected/write_f1.md`
+- `fixtures/todolist-md/expected/write_f2.md`
+
 ### What “Clawdbot-friendly” means
 - A Clawdbot skill can **read** your todo markdown files on a schedule.
 - It can **summarize**, **prioritize**, and propose **next actions**.

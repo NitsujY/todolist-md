@@ -1,0 +1,17 @@
+{
+  "schema": "todolist-md.llm_suggestions.v1",
+  "items": [
+    {
+      "fileId": "f1",
+      "name": "vyond.md",
+      "target_task": "Draft launch email",
+      "suggested_markdown": "- [ ] Review launch timeline with design team\n> <!-- bot: note --> Keep launch checklist aligned with due date\n> <!-- bot: question --> Who owns final approval, design or marketing?\n> <!-- bot: digest --> Next action: assign owner and confirm send date"
+    },
+    {
+      "fileId": "f2",
+      "name": "meeting-notes.md",
+      "target_task": "Follow up with vendor",
+      "suggested_markdown": "- [ ] Send vendor follow-up with owner and ETA"
+    }
+  ]
+}

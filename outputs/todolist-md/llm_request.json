@@ -1,0 +1,15 @@
+{
+  "schema": "todolist-md.llm_request.v1",
+  "stage": "plan",
+  "runId": "2026-02-16T13:25:43.373Z",
+  "folderId": "fixture",
+  "instructions": {
+    "model": "gpt-5-mini",
+    "outputFormat": "markdown_list_only",
+    "rules": [
+      "Return only markdown checklist lines and optional blockquotes.",
+      "Do not mark tasks complete."
+    ]
+  },
+  "items": []
+}

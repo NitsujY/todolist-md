@@ -109,6 +109,22 @@ Supported bot marker comments:
 - Use additional metadata in descriptions (e.g., `owner:@username`, `depends-on:#123`)
 - Link to external resources (GitHub issues, PRs, docs)
 
+#### External skill execution model (simplified)
+
+External skill automation uses two stages only:
+
+1. `plan`
+  - Input: markdown files + file metadata (Drive or fixtures)
+  - Output: `todolist-md.llm_request.v1`
+  - Purpose: extract changed/open tasks for model processing
+
+2. `write`
+  - Input: `todolist-md.llm_suggestions.v1`
+  - Output: updated markdown with inline `<!-- bot: suggested -->` lines under matched tasks
+  - Purpose: apply approved suggestions safely to source markdown
+
+No additional runtime stages are required by the core skill contract.
+
 #### Safety Model
 
 - **Read-only by default**: Clawdbot analyzes and suggests without modifying files
