@@ -53,15 +53,10 @@ Canonical markers covered:
 
 ---
 
-## Tasks (bot-suggested)
-<!-- bot: suggested -->
-
-- [ ] (suggested) Write a short rollout plan
+- [ ] Plan Q1 roadmap #strategy due:2026-02-28
+  > <!-- bot: suggested --> Write a short rollout plan with a measurable success metric.
   > <!-- bot: note --> Include rollback checklist + monitoring links.
 
-- [ ] (suggested) Add a “Definition of Done” section
-
----
 
 ## Bot Log
 

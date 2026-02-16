@@ -1,7 +1,7 @@
 {
   "schema": "todolist-md.llm_request.v1",
   "stage": "plan",
-  "runId": "2026-02-16T13:25:43.373Z",
+  "runId": "2026-02-16T17:30:21.954Z",
   "folderId": "fixture",
   "instructions": {
     "model": "gpt-5-mini",

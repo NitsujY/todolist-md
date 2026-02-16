@@ -88,7 +88,7 @@ UI handling for bot questions:
 
 Supported bot marker comments:
 - `<!-- bot: question -->` in task descriptions (with optional same-line prompt/answer text).
-- `<!-- bot: suggested -->` as the marker line under `## Tasks (bot-suggested)`.
+- `<!-- bot: suggested -->` as an inline marker in task description blockquotes.
 - `<!-- bot: digest -->` and `<!-- bot: note -->` render as bot callouts in task descriptions.
 
 #### Requirements for Bot Compatibility

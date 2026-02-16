@@ -15,7 +15,6 @@
     {
       "fileId": "f1",
       "name": "vyond.md",
-      "sectionTitle": "Tasks (bot-suggested)",
       "openTasks": "- [ ] Draft launch email #marketing due:2026-02-20\n- [ ] Prepare demo script #product",
       "hint": {
         "modifiedTime": "2026-02-16T10:00:00Z",
@@ -25,7 +24,6 @@
     {
       "fileId": "f2",
       "name": "meeting-notes.md",
-      "sectionTitle": "Tasks (bot-suggested)",
       "openTasks": "- [ ] Follow up with vendor #ops",
       "hint": {
         "modifiedTime": "2026-02-16T09:00:00Z",

@@ -163,7 +163,6 @@ function runPlan(args) {
 	const fixtureDir = must(args.fixture, '--fixture');
 	const statePath = must(args.state, '--state');
 	const requestOut = must(args.requestOut, '--requestOut');
-	const sectionTitle = args.sectionTitle || 'Tasks (bot-suggested)';
 	const folderId = args.folderId || 'fixture';
 
 	const files = loadFixtureFiles(fixtureDir).filter(isMarkdown);
@@ -184,7 +183,6 @@ function runPlan(args) {
 		items.push({
 			fileId: file.id,
 			name: file.name,
-			sectionTitle,
 			openTasks: extractOpenTasks(markdown),
 			hint: {
 				modifiedTime: file.modifiedTime,
@@ -250,7 +248,6 @@ function runWrite(args) {
 		throw new Error('Invalid suggestions schema. Expected todolist-md.llm_suggestions.v1');
 	}
 
-	const sectionTitle = args.sectionTitle || 'Tasks (bot-suggested)';
 	const results = [];
 
 	for (const item of suggestions.items || []) {

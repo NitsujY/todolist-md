@@ -73,8 +73,7 @@ Example:
   "ai": {
     "enabled": true,
     "include": ["*.md"],
-    "exclude": ["todoapp.md"],
-    "botSuggestedSectionTitle": "Tasks (bot-suggested)"
+    "exclude": ["todoapp.md"]
   }
 }
 ```

@@ -418,7 +418,7 @@ export function BotSuggestedSection({
 }
 
 /**
- * Parses suggested tasks from "Tasks (bot-suggested)" section
+ * Parses suggested tasks from markdown bot suggestion markers.
  */
 export function parseBotSuggestedSection(markdown: string): BotSuggestedTask[] {
   const sectionRegex = /##\s*Tasks\s*\(bot-suggested\)\s*\n(?:<!--\s*bot:\s*suggested\s*-->|<!--\s*Generated\s*(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2})?(?:Z)?)\s*-->)?\s*\n([\s\S]*?)(?=\n##\s|\n#\s|$)/i;

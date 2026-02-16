@@ -88,16 +88,13 @@ Example:
 > <!-- bot: Cleared question (answered) -->
 ```
 
-## Bot-suggested tasks section (optional)
+## Inline suggested annotations (recommended)
 
-Bots may append a suggested section (the app can parse this header):
+Bots should write suggestions inline under the matching task as blockquote markers:
 
 ```md
-## Tasks (bot-suggested)
-<!-- Generated 2026-02-02T12:00Z -->
-
 - [ ] Write a rollout plan
-  > <!-- bot: Include rollback steps + monitoring links. -->
+  > <!-- bot: suggested --> Include rollback steps + monitoring links.
 ```
 
 ## Test fixture
