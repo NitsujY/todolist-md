@@ -1,0 +1,4 @@
+.env
+.gdrive-md-token.json
+node_modules/
+outputs/

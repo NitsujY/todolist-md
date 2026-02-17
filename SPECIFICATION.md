@@ -171,6 +171,12 @@ This repo may include optional, external utilities (outside the SPA) that operat
 
 - **macOS Reminders sync**: A CLI (`npm run reminders:sync`) that reads Markdown files from disk and mirrors tasks into macOS Reminders lists.
     - This is intentionally **out-of-browser** and does not change the app's serverless/SPA-only constraint.
+- **Google Drive markdown sync script**: A Node CLI (`skills/todolist-md-clawdbot/scripts/drive_markdown_sync.mjs`) for local automation/testing.
+  - Supports OAuth authentication from the script itself.
+  - Supports folder resolution by `--folderName` (or explicit `--folderId`).
+  - `download` writes markdown files locally and emits a manifest keyed by Drive `fileId`.
+  - `upload` updates files by Drive `fileId` (`files.update`) using the manifest, with optional `--createMissing` fallback.
+  - Purpose: reliable per-file write-back for markdown workflows where filename-only matching is insufficient.
 
 ### 4.0 Global Details Toggle
 - The top toolbar provides a single **Expand details / Collapse details** control.

@@ -1,0 +1,16 @@
+{
+  "name": "todolist-md-clawdbot-skill",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Standalone dependencies and scripts for todolist-md-clawdbot skill utilities.",
+  "scripts": {
+    "drive:md:download": "node scripts/drive_markdown_sync.mjs download",
+    "drive:md:upload": "node scripts/drive_markdown_sync.mjs upload",
+    "skill:plan:fixture": "node scripts/todolist_skill_runner.mjs plan --source fixture --fixture ../../fixtures/todolist-md/input --state ../../outputs/todolist-md/folder_state.json --requestOut ../../outputs/todolist-md/llm_request.json",
+    "skill:write:fixture": "node scripts/todolist_skill_runner.mjs write --source fixture --fixture ../../fixtures/todolist-md/input --suggestionsIn ../../fixtures/todolist-md/input/llm_suggestions_for_apply.json --outDir ../../outputs/todolist-md/write"
+  },
+  "dependencies": {
+    "googleapis": "^154.1.0"
+  }
+}

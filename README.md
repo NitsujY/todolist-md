@@ -123,6 +123,72 @@ To check logs:
 - The CLI stores the Reminders UUID in the hidden marker (no scanning/index file required).
 - It only works with **real markdown files** on disk (File System / folder mode is ideal). LocalStorage-only lists aren’t directly accessible from a CLI.
 
+## Google Drive Markdown Download/Upload Script
+
+For local testing and automation, this repo includes a Node.js script to:
+
+- authenticate the user through OAuth in terminal flow,
+- find a Drive folder by **folder name** (or folder ID),
+- download all Markdown files,
+- save a per-file mapping manifest keyed by Drive `fileId`, and
+- upload local Markdown changes back using `files.update` by `fileId`.
+
+This avoids filename-only ambiguity and supports stable write-back even when tools like `gog` cannot do your exact file-ID update workflow.
+
+### Setup
+
+1. Ensure dependencies are installed:
+
+```bash
+npm install
+```
+
+2. Provide OAuth credentials in environment variables:
+
+```bash
+export GOOGLE_CLIENT_ID="your_client_id"
+export GOOGLE_CLIENT_SECRET="your_client_secret"
+```
+
+### Test locally: download todos by folder name
+
+```bash
+npm run drive:md:download -- --folderName "todolists" --outDir ./outputs/drive-md
+```
+
+Output includes:
+
+- downloaded markdown files in `./outputs/drive-md`
+- mapping manifest `./outputs/drive-md/.drive-md-map.json`
+
+### Test locally: upload local edits back by file ID
+
+```bash
+npm run drive:md:upload -- --manifest ./outputs/drive-md/.drive-md-map.json
+```
+
+Optional: create files that no longer exist remotely:
+
+```bash
+npm run drive:md:upload -- --manifest ./outputs/drive-md/.drive-md-map.json --createMissing
+```
+
+Direct script path (same behavior):
+
+```bash
+node skills/todolist-md-clawdbot/scripts/drive_markdown_sync.mjs download --folderName "todolists" --outDir ./outputs/drive-md
+node skills/todolist-md-clawdbot/scripts/drive_markdown_sync.mjs upload --manifest ./outputs/drive-md/.drive-md-map.json
+```
+
+If you only download `skills/todolist-md-clawdbot`, run from that folder with its own `package.json`:
+
+```bash
+cd skills/todolist-md-clawdbot
+npm install
+npm run drive:md:download -- --folderName "todolists" --outDir ./outputs/drive-md
+npm run drive:md:upload -- --manifest ./outputs/drive-md/.drive-md-map.json
+```
+
 ## Bot integration (external)
 
 ### Install the Clawdbot skill (optional)
