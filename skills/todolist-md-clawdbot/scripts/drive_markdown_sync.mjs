@@ -100,16 +100,24 @@ async function fileExists(filePath) {
 }
 
 function openBrowser(url) {
+  const spawnDetached = (command, args) => {
+    const child = spawn(command, args, { stdio: 'ignore', detached: true });
+    child.on('error', (error) => {
+      console.warn(`Browser auto-open skipped (${command} unavailable: ${error.code || error.message}). Open the URL manually.`);
+    });
+    child.unref();
+  };
+
   const platform = process.platform;
   if (platform === 'darwin') {
-    spawn('open', [url], { stdio: 'ignore', detached: true }).unref();
+    spawnDetached('open', [url]);
     return;
   }
   if (platform === 'win32') {
-    spawn('cmd', ['/c', 'start', '', url], { stdio: 'ignore', detached: true }).unref();
+    spawnDetached('cmd', ['/c', 'start', '', url]);
     return;
   }
-  spawn('xdg-open', [url], { stdio: 'ignore', detached: true }).unref();
+  spawnDetached('xdg-open', [url]);
 }
 
 function tryReadClientFromEnvJson(options) {
