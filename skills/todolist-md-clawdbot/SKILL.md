@@ -51,9 +51,15 @@ Ask once, then persist the answers (in memory/config) for future runs.
   - Local: `path`
   - S3: `bucket+key`
 - Q: Where is the root?
-  - Drive: `rootFolderId`
+  - Drive: default `folderName="todolist-md"` and let the script search automatically.
   - Local: root directory path
   - S3: `bucket` + optional prefix
+
+For Google Drive, do **not** ask the user "can the script search for folder?".
+The script already supports folder search by name.
+Only ask follow-up when:
+- folder name lookup returns multiple folders (needs `folderId` or `parentId`), or
+- folder name lookup returns no match and user must confirm a different name/ID.
 
 ## Chrome app integration: enable/disable per-file
 When a Drive folder contains many `.md` files, not all of them should necessarily be AI-reviewed.
@@ -142,10 +148,17 @@ npm run drive:md:upload -- --manifest ./outputs/drive-md/.drive-md-map.json
 
 When `storageKind=google-drive`, the skill agent must use `scripts/drive_markdown_sync.mjs` for file transport:
 
+Default runtime variable:
+- `FOLDER_NAME="todolist-md"`
+
 1) **Download phase (before analysis / plan):**
 - Run:
   - `npm run drive:md:download -- --folderName "$FOLDER_NAME" --outDir ./outputs/drive-md`
-  - or `--folderId <id>` if folder name lookup is ambiguous.
+  - or `--folderId <id>` if folder lookup is ambiguous.
+- Behavior requirement:
+  - try folder-name search first (no user question needed),
+  - if multiple matches, then ask user for `folderId` (or `parentId`),
+  - if no match, ask user for corrected `folderName` or `folderId`.
 - Output files:
   - Local markdown copies in `./outputs/drive-md`
   - Manifest file `./outputs/drive-md/.drive-md-map.json`
