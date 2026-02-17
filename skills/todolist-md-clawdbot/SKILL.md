@@ -166,6 +166,13 @@ Default runtime variable:
 2) **Local processing phase (plan/write):**
 - Read and edit only local markdown files in `./outputs/drive-md`.
 - Keep bot edits inline and line-stable per this skill spec.
+- Use runner in drive mode (not fixture mode):
+  - `node scripts/todolist_skill_runner.mjs plan --source drive --manifest ./outputs/drive-md/.drive-md-map.json --state ./outputs/drive-md/folder_state.json --requestOut ./outputs/drive-md/llm_request.json`
+  - `node scripts/todolist_skill_runner.mjs write --source drive --manifest ./outputs/drive-md/.drive-md-map.json --suggestionsIn ./outputs/drive-md/llm_suggestions_for_apply.json --dryRun`
+
+Important:
+- `--source fixture` requires `--fixture` test inputs.
+- `--source drive` requires `--manifest` from `drive:md:download`.
 
 3) **Upload phase (after approved write):**
 - Run:

@@ -154,18 +154,51 @@ function writeFixtureMarkdown(outDir, fileId, markdown) {
 	return filePath;
 }
 
+function loadDriveManifest(manifestPath) {
+	const manifest = must(readJson(manifestPath, null), `drive manifest ${manifestPath}`);
+	if (!Array.isArray(manifest.files)) {
+		throw new Error(`Invalid drive manifest: missing files[] in ${manifestPath}`);
+	}
+	return manifest;
+}
+
+function loadDriveMarkdown(localPath) {
+	if (!localPath || !fs.existsSync(localPath)) {
+		throw new Error(`Drive markdown not found: ${localPath}`);
+	}
+	return fs.readFileSync(localPath, 'utf8');
+}
+
 function runPlan(args) {
 	const source = must(args.source, '--source fixture|drive');
-	if (source !== 'fixture') {
-		throw new Error('Only --source fixture is enabled in this simplified runner.');
-	}
-
-	const fixtureDir = must(args.fixture, '--fixture');
 	const statePath = must(args.state, '--state');
 	const requestOut = must(args.requestOut, '--requestOut');
-	const folderId = args.folderId || 'fixture';
+	let folderId = args.folderId || source;
+	let files = [];
+	let markdownLoader = null;
 
-	const files = loadFixtureFiles(fixtureDir).filter(isMarkdown);
+	if (source === 'fixture') {
+		const fixtureDir = must(args.fixture, '--fixture');
+		files = loadFixtureFiles(fixtureDir).filter(isMarkdown);
+		markdownLoader = (file) => loadFixtureMarkdown(fixtureDir, file.id);
+		folderId = args.folderId || 'fixture';
+	} else if (source === 'drive') {
+		const manifestPath = must(args.manifest, '--manifest');
+		const manifest = loadDriveManifest(manifestPath);
+		files = (manifest.files || []).map((file) => ({
+			id: file.fileId,
+			name: file.fileName,
+			mimeType: 'text/markdown',
+			modifiedTime: file.modifiedTime || null,
+			size: file.size || null,
+			localPath: file.localPath,
+		})).filter((file) => file.id && isMarkdown(file));
+		markdownLoader = (file) => loadDriveMarkdown(file.localPath);
+		folderId = args.folderId || manifest.folderId || 'drive';
+	} else {
+		throw new Error('Unsupported --source. Use fixture or drive.');
+	}
+
 	const state = readJson(statePath, { files: {}, lastRunAtUtc: null }) || { files: {}, lastRunAtUtc: null };
 	const previous = state.files || {};
 
@@ -179,7 +212,7 @@ function runPlan(args) {
 
 	const items = [];
 	for (const file of changed) {
-		const markdown = loadFixtureMarkdown(fixtureDir, file.id);
+		const markdown = markdownLoader(file);
 		items.push({
 			fileId: file.id,
 			name: file.name,
@@ -234,14 +267,16 @@ function runPlan(args) {
 
 function runWrite(args) {
 	const source = must(args.source, '--source fixture|drive');
-	if (source !== 'fixture') {
-		throw new Error('Only --source fixture is enabled in this simplified runner.');
-	}
-
-	const fixtureDir = must(args.fixture, '--fixture');
 	const suggestionsIn = must(args.suggestionsIn, '--suggestionsIn');
-	const outDir = must(args.outDir, '--outDir');
+	const outDir = args.outDir;
 	const dryRun = Boolean(args.dryRun);
+	let manifest = null;
+	let manifestPath = null;
+
+	if (source === 'drive') {
+		manifestPath = must(args.manifest, '--manifest');
+		manifest = loadDriveManifest(manifestPath);
+	}
 
 	const suggestions = must(readJson(suggestionsIn, null), `suggestions JSON ${suggestionsIn}`);
 	if (suggestions.schema !== 'todolist-md.llm_suggestions.v1') {
@@ -258,7 +293,23 @@ function runWrite(args) {
 			continue;
 		}
 
-		const original = loadFixtureMarkdown(fixtureDir, fileId);
+		let original;
+		let outputPath;
+		if (source === 'fixture') {
+			const fixtureDir = must(args.fixture, '--fixture');
+			original = loadFixtureMarkdown(fixtureDir, fileId);
+		} else if (source === 'drive') {
+			const mapped = (manifest.files || []).find((file) => file.fileId === fileId);
+			if (!mapped?.localPath) {
+				results.push({ fileId, name: item.name || null, action: 'skip_missing_manifest_mapping' });
+				continue;
+			}
+			outputPath = path.resolve(mapped.localPath);
+			original = loadDriveMarkdown(outputPath);
+		} else {
+			throw new Error('Unsupported --source. Use fixture or drive.');
+		}
+
 		const updated = applyInlineSuggestions(original, suggested, item.target_task || '');
 		const changed = original !== updated;
 
@@ -272,7 +323,13 @@ function runWrite(args) {
 			continue;
 		}
 
-		const outputPath = writeFixtureMarkdown(outDir, fileId, updated);
+		if (source === 'fixture') {
+			const fixtureOut = must(outDir, '--outDir');
+			outputPath = writeFixtureMarkdown(fixtureOut, fileId, updated);
+		} else {
+			fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+			fs.writeFileSync(outputPath, updated, 'utf8');
+		}
 		results.push({ fileId, name: item.name || null, action: 'updated', outputPath });
 	}
 
@@ -281,11 +338,16 @@ function runWrite(args) {
 		stage: 'write',
 		source,
 		suggestionsIn,
-		outDir,
+		outDir: outDir || null,
 		updatedCount: results.filter(r => r.action === 'updated').length,
 		skippedCount: results.filter(r => r.action !== 'updated').length,
 		results,
 	};
+
+	if (source === 'drive' && manifestPath && !dryRun) {
+		manifest.updatedAt = new Date().toISOString();
+		writeJson(manifestPath, manifest);
+	}
 
 	console.log(JSON.stringify(result, null, 2));
 }
