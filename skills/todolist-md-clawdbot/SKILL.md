@@ -190,6 +190,33 @@ It is a manifest that maps each local markdown file to its Drive metadata, inclu
 
 The upload step relies on this manifest to update the correct Drive file IDs and avoid wrong-file updates.
 
+### Best-practice prompt for OpenClaw (copy/paste)
+
+Use the following prompt when you want OpenClaw to implement an hourly Google Drive analysis workflow with this skill:
+
+```text
+I want to create an hourly todolist-md analysis with the agent skill.
+Use the skill script to download, analyze, and upload the todo list markdown.
+The todolist folder is in Google Drive with folder name "todolist-md".
+
+Requirements:
+1) Create a project-specific folder for centralized input/output management.
+2) Download markdown files from Google Drive using the skill script.
+3) Run analysis on open tasks and generate clear suggestions.
+4) Upload updated markdown back to Google Drive using fileId mapping (manifest).
+5) Set up an hourly schedule to run this workflow.
+6) After setup, run one analysis immediately and show expected output files/content.
+
+Folder convention (example):
+- ./projects/todolist-md/
+  - input/
+  - output/
+  - logs/
+  - state/
+
+Use folderName "todolist-md" by default, and only ask for folderId if folder lookup is ambiguous.
+```
+
 Example:
 ```md
 - [ ] Update README for bot workflow #docs due:2026-02-05
